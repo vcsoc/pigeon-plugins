@@ -86,7 +86,7 @@
     {
       "id": "ai-enlarge",
       "name": "AI Image Enlarger",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "category": "Image editing",
       "kind": "editor-worker",
       "description": "Offline 3x image enlargement with a sub-pixel convolutional neural network. The model is tiny (235 KB) and ships inside the plugin; only Python packages are installed once, at setup.",
@@ -119,7 +119,7 @@
         {
           "path": "plugin.json",
           "bytes": 1449,
-          "sha256": "914659fc97879bef81328574f9975d64e26dc777dae6ff2c216783b6882a610e"
+          "sha256": "049ee5af8105dfb7b1b43be999e9be195a2ec542dc1c71c4bbd2155ae45a4d91"
         },
         {
           "path": "run",
@@ -129,8 +129,8 @@
         },
         {
           "path": "plugin_runtime.py",
-          "bytes": 11733,
-          "sha256": "94a9ca9676e124a2d65fa389cf1628b89f4fb70ab8e82bd95c272d3390d5887d"
+          "bytes": 12134,
+          "sha256": "78c55e5cc3e972d3927a6d10242be1b704779b93863daf153f4af311b6dfcaf4"
         },
         {
           "path": "worker.py",

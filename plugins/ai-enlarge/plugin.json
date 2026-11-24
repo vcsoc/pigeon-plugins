@@ -1,7 +1,7 @@
 {
   "id": "ai-enlarge",
   "name": "AI Image Enlarger",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "category": "Image editing",
   "kind": "editor-worker",
   "description": "Offline 3x image enlargement with a sub-pixel convolutional neural network. The model is tiny (235 KB) and ships inside the plugin; only Python packages are installed once, at setup.",
