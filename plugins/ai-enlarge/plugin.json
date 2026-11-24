@@ -1,20 +1,61 @@
 {
   "id": "ai-enlarge",
   "name": "AI Image Enlarger",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "category": "Image editing",
   "kind": "editor-worker",
-  "description": "Offline 3x image enlargement with a sub-pixel convolutional neural network. The model is tiny (235 KB) and ships inside the plugin, so nothing is downloaded.",
+  "description": "Offline 3x image enlargement with a sub-pixel convolutional neural network. The model is tiny (235 KB) and ships inside the plugin; only Python packages are installed once, at setup.",
   "author": "Pigeon",
   "licence": "Apache-2.0",
   "source": "ONNX Model Zoo (super_resolution 10)",
-  "operations": ["enlarge"],
-  "worker": { "runtime": "python3", "entry": "worker.py", "protocol": 1, "requires": ["numpy", "Pillow", "onnxruntime"] },
+  "operations": [
+    "enlarge"
+  ],
+  "worker": {
+    "runtime": "python3",
+    "python": ">=3.10,<3.14",
+    "entry": "run",
+    "protocol": 1,
+    "standalone": true,
+    "requires": [
+      "numpy",
+      "Pillow",
+      "onnxruntime"
+    ],
+    "requirementsFile": "requirements.txt",
+    "commands": {
+      "setup": "run --setup",
+      "health": "run --health [--verify]",
+      "selfTest": "run --self-test",
+      "request": "run  (JSON on stdin)"
+    }
+  },
   "files": [
-    { "path": "worker.py" },
-    { "path": "model/super-resolution-10.onnx", "role": "model" }
+    {
+      "path": "plugin.json"
+    },
+    {
+      "path": "run",
+      "executable": true
+    },
+    {
+      "path": "plugin_runtime.py"
+    },
+    {
+      "path": "worker.py"
+    },
+    {
+      "path": "requirements.txt"
+    },
+    {
+      "path": "model/super-resolution-10.onnx",
+      "role": "model"
+    }
   ],
   "models": [],
-  "network": [],
-  "privacy": "Runs entirely on this computer. Images are never sent anywhere."
+  "network": [
+    "files.pythonhosted.org",
+    "pypi.org"
+  ],
+  "privacy": "Runs entirely on this computer. Images are never sent anywhere. Setup installs Python packages from PyPI once."
 }

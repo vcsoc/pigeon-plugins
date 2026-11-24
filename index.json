@@ -54,10 +54,10 @@
     {
       "id": "ai-enlarge",
       "name": "AI Image Enlarger",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "category": "Image editing",
       "kind": "editor-worker",
-      "description": "Offline 3x image enlargement with a sub-pixel convolutional neural network. The model is tiny (235 KB) and ships inside the plugin, so nothing is downloaded.",
+      "description": "Offline 3x image enlargement with a sub-pixel convolutional neural network. The model is tiny (235 KB) and ships inside the plugin; only Python packages are installed once, at setup.",
       "author": "Pigeon",
       "licence": "Apache-2.0",
       "source": "ONNX Model Zoo (super_resolution 10)",
@@ -66,19 +66,49 @@
       ],
       "worker": {
         "runtime": "python3",
-        "entry": "worker.py",
+        "python": ">=3.10,<3.14",
+        "entry": "run",
         "protocol": 1,
+        "standalone": true,
         "requires": [
           "numpy",
           "Pillow",
           "onnxruntime"
-        ]
+        ],
+        "requirementsFile": "requirements.txt",
+        "commands": {
+          "setup": "run --setup",
+          "health": "run --health [--verify]",
+          "selfTest": "run --self-test",
+          "request": "run  (JSON on stdin)"
+        }
       },
       "files": [
         {
+          "path": "plugin.json",
+          "bytes": 1449,
+          "sha256": "914659fc97879bef81328574f9975d64e26dc777dae6ff2c216783b6882a610e"
+        },
+        {
+          "path": "run",
+          "executable": true,
+          "bytes": 2717,
+          "sha256": "d770e0176016fac713411518ffe0d00142f59ca816f0654c766d1cef03152e0c"
+        },
+        {
+          "path": "plugin_runtime.py",
+          "bytes": 11733,
+          "sha256": "94a9ca9676e124a2d65fa389cf1628b89f4fb70ab8e82bd95c272d3390d5887d"
+        },
+        {
           "path": "worker.py",
-          "bytes": 5272,
-          "sha256": "4b6972fdcb19613e9b022c41ad53dc3b7fdfd8296099ca10b91086cd90f335d7"
+          "bytes": 3387,
+          "sha256": "12f4416db7254f1d2ef61243ba4805e7c3ca111050c6cbff60cada5a996ceb29"
+        },
+        {
+          "path": "requirements.txt",
+          "bytes": 46,
+          "sha256": "dacd4078831dd7f0d1cace128ad08d461904cadf93f65e605d95549aaea927fb"
         },
         {
           "path": "model/super-resolution-10.onnx",
@@ -88,8 +118,11 @@
         }
       ],
       "models": [],
-      "network": [],
-      "privacy": "Runs entirely on this computer. Images are never sent anywhere.",
+      "network": [
+        "files.pythonhosted.org",
+        "pypi.org"
+      ],
+      "privacy": "Runs entirely on this computer. Images are never sent anywhere. Setup installs Python packages from PyPI once.",
       "path": "plugins/ai-enlarge",
       "approved": true
     },
