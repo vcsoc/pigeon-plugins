@@ -161,7 +161,7 @@
     {
       "id": "ai-image-expand",
       "name": "AI Image Expand",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "category": "Image editing",
       "kind": "editor-worker",
       "description": "Enlarge the canvas and the model paints in the new border (outpainting). Uses MI-GAN, a 28 MB inpainting model, so it is fast on CPU. Your original pixels are never altered. The result must be accepted before it is saved as a derivative.",
@@ -173,19 +173,49 @@
       ],
       "worker": {
         "runtime": "python3",
-        "entry": "worker.py",
+        "python": ">=3.10,<3.14",
+        "entry": "run",
         "protocol": 1,
+        "standalone": true,
         "requires": [
           "numpy",
           "Pillow",
           "onnxruntime"
-        ]
+        ],
+        "requirementsFile": "requirements.txt",
+        "commands": {
+          "setup": "run --setup",
+          "health": "run --health [--verify]",
+          "selfTest": "run --self-test",
+          "request": "run  (JSON on stdin)"
+        }
       },
       "files": [
         {
+          "path": "plugin.json",
+          "bytes": 1947,
+          "sha256": "05ffa74a1b9e41961ff30615459a1f416a7cc9d1370adbcc48f99acbf700906d"
+        },
+        {
+          "path": "run",
+          "executable": true,
+          "bytes": 2717,
+          "sha256": "d770e0176016fac713411518ffe0d00142f59ca816f0654c766d1cef03152e0c"
+        },
+        {
+          "path": "plugin_runtime.py",
+          "bytes": 11733,
+          "sha256": "94a9ca9676e124a2d65fa389cf1628b89f4fb70ab8e82bd95c272d3390d5887d"
+        },
+        {
           "path": "worker.py",
-          "bytes": 7255,
-          "sha256": "8ba433e98c282fae1e4d4f9150ccb1880a06c888f71753d08fb2351db3c9ebb3"
+          "bytes": 7445,
+          "sha256": "68dad8241cba9b60f6ad696f030e4194985c486a29e9ca9d8ca8f6c6a0200fe8"
+        },
+        {
+          "path": "requirements.txt",
+          "bytes": 46,
+          "sha256": "dacd4078831dd7f0d1cace128ad08d461904cadf93f65e605d95549aaea927fb"
         }
       ],
       "models": [
@@ -200,11 +230,13 @@
         }
       ],
       "network": [
-        "huggingface.co",
+        "cas-bridge.xethub.hf.co",
         "cdn-lfs.huggingface.co",
-        "cas-bridge.xethub.hf.co"
+        "files.pythonhosted.org",
+        "huggingface.co",
+        "pypi.org"
       ],
-      "privacy": "Only the model file is downloaded, once. Images are processed locally and never sent anywhere.",
+      "privacy": "Setup downloads the Python packages and model files once. Images and prompts are processed locally and never sent anywhere.",
       "path": "plugins/ai-image-expand",
       "approved": true
     },
