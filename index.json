@@ -244,7 +244,7 @@
     {
       "id": "ai-image-expand-diffusion",
       "name": "AI Image Expand (Diffusion)",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "category": "Image editing",
       "kind": "editor-worker",
       "description": "Enlarge the canvas by any amount and Stable Diffusion 1.5 Inpainting paints in the new border at full resolution, continuing the scene. About 2.1 GB of models, runs offline on CPU and is slow (minutes to hours for large images). Your original pixels are never altered. The result must be accepted before it is saved as a derivative.",
@@ -277,7 +277,7 @@
         {
           "path": "plugin.json",
           "bytes": 4373,
-          "sha256": "ac13a8513f2352562979745b052fd9507cad73b4d1bbf6471d0d48806e4e3f56"
+          "sha256": "04de7e953bba9b010794de820c54ce4fab60011eb6680841552a987175ecda66"
         },
         {
           "path": "run",
@@ -287,8 +287,8 @@
         },
         {
           "path": "plugin_runtime.py",
-          "bytes": 11733,
-          "sha256": "94a9ca9676e124a2d65fa389cf1628b89f4fb70ab8e82bd95c272d3390d5887d"
+          "bytes": 12134,
+          "sha256": "78c55e5cc3e972d3927a6d10242be1b704779b93863daf153f4af311b6dfcaf4"
         },
         {
           "path": "worker.py",
