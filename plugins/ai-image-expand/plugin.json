@@ -1,0 +1,27 @@
+{
+  "id": "ai-image-expand",
+  "name": "AI Image Expand",
+  "version": "1.0.0",
+  "category": "Image editing",
+  "kind": "editor-worker",
+  "description": "Enlarge the canvas and the model paints in the new border (outpainting). Uses MI-GAN, a 28 MB inpainting model, so it is fast on CPU. Your original pixels are never altered. The result must be accepted before it is saved as a derivative.",
+  "author": "Pigeon",
+  "licence": "MIT",
+  "source": "MI-GAN (Picsart AI Research, ICCV 2023), ONNX pipeline export",
+  "operations": ["expand"],
+  "worker": { "runtime": "python3", "entry": "worker.py", "protocol": 1, "requires": ["numpy", "Pillow", "onnxruntime"] },
+  "files": [ { "path": "worker.py" } ],
+  "models": [
+    {
+      "id": "migan-512-places2",
+      "name": "MI-GAN 512 (Places2, ONNX pipeline v2)",
+      "file": "migan_pipeline_v2.onnx",
+      "url": "https://huggingface.co/andraniksargsyan/migan/resolve/406830d0fa60666da0071c342ad2fbc8f30c5c64/migan_pipeline_v2.onnx",
+      "bytes": 28079181,
+      "sha256": "6f1f3530a1a2324b19752018ce756088b07973cda8d7d890034ace5c8a48c40b",
+      "licence": "MIT"
+    }
+  ],
+  "network": ["huggingface.co", "cdn-lfs.huggingface.co", "cas-bridge.xethub.hf.co"],
+  "privacy": "Only the model file is downloaded, once. Images are processed locally and never sent anywhere."
+}

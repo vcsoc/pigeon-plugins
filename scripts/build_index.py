@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent
 ID = re.compile(r"^[a-z0-9][a-z0-9-]{1,40}$")
 HEX = re.compile(r"^[0-9a-f]{64}$")
 KINDS = {"editor-worker", "semantic-index"}
-OPERATIONS = {"enlarge", "remove_background", "remove_object", "embed"}
+OPERATIONS = {"enlarge", "expand", "remove_background", "remove_object", "embed"}
 REQUIRED = ["id", "name", "version", "category", "kind", "description", "author", "licence", "operations", "worker", "files", "models", "network", "privacy"]
 
 

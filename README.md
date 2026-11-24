@@ -8,6 +8,8 @@ Approved plugins for [Pigeon](https://github.com/vcsoc/pigeon-rust). Pigeon read
 | `ai-enlarge` | 3x image enlargement | ONNX Super Resolution CNN | none (bundled, 235 KB) |
 | `ai-background-removal` | Remove a background, preview before saving | U2-Net-P | 4.5 MB |
 | `ai-object-removal` | Paint over an object to inpaint it | Simple LaMa fp32 | 198 MB |
+| `ai-image-expand` | Enlarge the canvas; the model paints in the new border | MI-GAN 512 | 28 MB |
+| `ai-image-expand-diffusion` | Expand the canvas by any amount; Stable Diffusion paints the new border at full resolution (slow) | SD 1.5 Inpainting fp16 | ~2.1 GB |
 | `semantic-search` | Private multimodal similarity search (reference engine) | EmbeddingGemma 2 | ~1.5 GB |
 
 ## Trust model

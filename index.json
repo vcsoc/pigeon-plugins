@@ -94,6 +94,151 @@
       "approved": true
     },
     {
+      "id": "ai-image-expand",
+      "name": "AI Image Expand",
+      "version": "1.0.0",
+      "category": "Image editing",
+      "kind": "editor-worker",
+      "description": "Enlarge the canvas and the model paints in the new border (outpainting). Uses MI-GAN, a 28 MB inpainting model, so it is fast on CPU. Your original pixels are never altered. The result must be accepted before it is saved as a derivative.",
+      "author": "Pigeon",
+      "licence": "MIT",
+      "source": "MI-GAN (Picsart AI Research, ICCV 2023), ONNX pipeline export",
+      "operations": [
+        "expand"
+      ],
+      "worker": {
+        "runtime": "python3",
+        "entry": "worker.py",
+        "protocol": 1,
+        "requires": [
+          "numpy",
+          "Pillow",
+          "onnxruntime"
+        ]
+      },
+      "files": [
+        {
+          "path": "worker.py",
+          "bytes": 7255,
+          "sha256": "8ba433e98c282fae1e4d4f9150ccb1880a06c888f71753d08fb2351db3c9ebb3"
+        }
+      ],
+      "models": [
+        {
+          "id": "migan-512-places2",
+          "name": "MI-GAN 512 (Places2, ONNX pipeline v2)",
+          "file": "migan_pipeline_v2.onnx",
+          "url": "https://huggingface.co/andraniksargsyan/migan/resolve/406830d0fa60666da0071c342ad2fbc8f30c5c64/migan_pipeline_v2.onnx",
+          "bytes": 28079181,
+          "sha256": "6f1f3530a1a2324b19752018ce756088b07973cda8d7d890034ace5c8a48c40b",
+          "licence": "MIT"
+        }
+      ],
+      "network": [
+        "huggingface.co",
+        "cdn-lfs.huggingface.co",
+        "cas-bridge.xethub.hf.co"
+      ],
+      "privacy": "Only the model file is downloaded, once. Images are processed locally and never sent anywhere.",
+      "path": "plugins/ai-image-expand",
+      "approved": true
+    },
+    {
+      "id": "ai-image-expand-diffusion",
+      "name": "AI Image Expand (Diffusion)",
+      "version": "1.0.0",
+      "category": "Image editing",
+      "kind": "editor-worker",
+      "description": "Enlarge the canvas by any amount and Stable Diffusion 1.5 Inpainting paints in the new border at full resolution, continuing the scene. About 2.1 GB of models, runs offline on CPU and is slow (minutes to hours for large images). Your original pixels are never altered. The result must be accepted before it is saved as a derivative.",
+      "author": "Pigeon",
+      "licence": "CreativeML OpenRAIL-M",
+      "source": "Stable Diffusion 1.5 Inpainting (RunwayML / Stability AI), fp16 ONNX conversion by RanaLLC; the safety checker is intentionally not included",
+      "operations": [
+        "expand"
+      ],
+      "worker": {
+        "runtime": "python3",
+        "entry": "worker.py",
+        "protocol": 1,
+        "requires": [
+          "numpy",
+          "Pillow",
+          "onnxruntime"
+        ]
+      },
+      "files": [
+        {
+          "path": "worker.py",
+          "bytes": 16029,
+          "sha256": "d30dba1b0e1f5c52647ac2366dd0b5ec8c1a347401a42bec620a34aa64ec10c2"
+        }
+      ],
+      "models": [
+        {
+          "id": "sd15-inpaint-text-encoder",
+          "name": "Text encoder (CLIP, fp16)",
+          "file": "text_encoder.onnx",
+          "url": "https://huggingface.co/RanaLLC/stable-diffusion-v1-5-inpainting-onnx-fp16/resolve/a612b433500340de363966b9305a204e734822f6/text_encoder/model.onnx",
+          "bytes": 246368629,
+          "sha256": "8af516fb184866f8caed192ca3bf0636ef9d40d4f7799c05600cae431d18d8d1",
+          "licence": "CreativeML OpenRAIL-M"
+        },
+        {
+          "id": "sd15-inpaint-unet",
+          "name": "UNet (Stable Diffusion 1.5 Inpainting, fp16)",
+          "file": "unet.onnx",
+          "url": "https://huggingface.co/RanaLLC/stable-diffusion-v1-5-inpainting-onnx-fp16/resolve/a612b433500340de363966b9305a204e734822f6/unet/model.onnx",
+          "bytes": 1720173976,
+          "sha256": "a3726e1944ec2fbc9596096cd001520aea789367f329360ee34eb520c751de16",
+          "licence": "CreativeML OpenRAIL-M"
+        },
+        {
+          "id": "sd15-inpaint-vae-encoder",
+          "name": "VAE encoder (fp16)",
+          "file": "vae_encoder.onnx",
+          "url": "https://huggingface.co/RanaLLC/stable-diffusion-v1-5-inpainting-onnx-fp16/resolve/a612b433500340de363966b9305a204e734822f6/vae_encoder/model.onnx",
+          "bytes": 68430178,
+          "sha256": "f0da9070d007def0d6a4e7c10a21462bb6172e460ef2587c3fe91191397b4cea",
+          "licence": "CreativeML OpenRAIL-M"
+        },
+        {
+          "id": "sd15-inpaint-vae-decoder",
+          "name": "VAE decoder (fp16)",
+          "file": "vae_decoder.onnx",
+          "url": "https://huggingface.co/RanaLLC/stable-diffusion-v1-5-inpainting-onnx-fp16/resolve/a612b433500340de363966b9305a204e734822f6/vae_decoder/model.onnx",
+          "bytes": 99093889,
+          "sha256": "ce0ffca3fcfd0a2729a88d8d90dabf35c66d237404997e0461d52e46ac7a91bc",
+          "licence": "CreativeML OpenRAIL-M"
+        },
+        {
+          "id": "clip-vocab",
+          "name": "CLIP tokenizer vocabulary",
+          "file": "vocab.json",
+          "url": "https://huggingface.co/RanaLLC/stable-diffusion-v1-5-inpainting-onnx-fp16/resolve/a612b433500340de363966b9305a204e734822f6/tokenizer/vocab.json",
+          "bytes": 1059962,
+          "sha256": "e089ad92ba36837a0d31433e555c8f45fe601ab5c221d4f607ded32d9f7a4349",
+          "licence": "MIT"
+        },
+        {
+          "id": "clip-merges",
+          "name": "CLIP tokenizer merges",
+          "file": "merges.txt",
+          "url": "https://huggingface.co/RanaLLC/stable-diffusion-v1-5-inpainting-onnx-fp16/resolve/a612b433500340de363966b9305a204e734822f6/tokenizer/merges.txt",
+          "bytes": 524619,
+          "sha256": "9fd691f7c8039210e0fced15865466c65820d09b63988b0174bfe25de299051a",
+          "licence": "MIT"
+        }
+      ],
+      "network": [
+        "huggingface.co",
+        "cdn-lfs.huggingface.co",
+        "cas-bridge.xethub.hf.co"
+      ],
+      "privacy": "Only the model files are downloaded, once. Images and prompts are processed locally and never sent anywhere.",
+      "path": "plugins/ai-image-expand-diffusion",
+      "approved": true
+    },
+    {
       "id": "ai-object-removal",
       "name": "AI Object Removal",
       "version": "1.0.0",
