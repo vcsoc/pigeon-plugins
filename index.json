@@ -377,7 +377,7 @@
     {
       "id": "ai-object-removal",
       "name": "AI Object Removal",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "category": "Image editing",
       "kind": "editor-worker",
       "description": "Paint over an object and LaMa inpaints the background. Runs offline once the 198 MB model is downloaded. The result must be accepted before it is saved as a derivative.",
@@ -410,7 +410,7 @@
         {
           "path": "plugin.json",
           "bytes": 1848,
-          "sha256": "2dead37fab0986e444e437dd99cd396fc5726090cf8cd5eff606608685422a98"
+          "sha256": "4de775ec0214c65d4d1826cff8a03360f83e5efa8eddec81ffc0a82ebb3e48a4"
         },
         {
           "path": "run",
@@ -420,8 +420,8 @@
         },
         {
           "path": "plugin_runtime.py",
-          "bytes": 11733,
-          "sha256": "94a9ca9676e124a2d65fa389cf1628b89f4fb70ab8e82bd95c272d3390d5887d"
+          "bytes": 12134,
+          "sha256": "78c55e5cc3e972d3927a6d10242be1b704779b93863daf153f4af311b6dfcaf4"
         },
         {
           "path": "worker.py",

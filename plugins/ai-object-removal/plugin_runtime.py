@@ -28,7 +28,7 @@ DATA = os.environ.get('PIGEON_PLUGIN_DATA') or os.path.join(HERE, '.data')
 MODELS = os.path.join(DATA, 'models')
 BUNDLED = os.path.join(HERE, 'model')
 DEFAULT_MAX_PIXELS = 40_000_000     # Pigeon rejects larger results; a request may override it
-IMPORT_NAMES = {'Pillow': 'PIL', 'opencv-python': 'cv2'}
+IMPORT_NAMES = {'Pillow': 'PIL', 'opencv-python': 'cv2', 'sentence-transformers': 'sentence_transformers'}
 
 
 class PluginError(Exception):
@@ -98,6 +98,7 @@ class _Redirects(urllib.request.HTTPRedirectHandler):
 
 def _download(entry, hosts):
     dest = os.path.join(MODELS, entry['file'])
+    os.makedirs(os.path.dirname(dest), exist_ok=True)   # model files may live in subfolders
     part = dest + '.part'
     if not _allowed(entry['url'], hosts):
         raise PluginError(f"{entry['file']}: host is not declared in the plugin's network list")
@@ -155,6 +156,7 @@ def setup(verify=False):
             continue
         seed = os.path.join(os.environ.get('PIGEON_PLUGIN_SEED', ''), entry['file'])
         if os.environ.get('PIGEON_PLUGIN_SEED') and os.path.isfile(seed) and sha256_file(seed) == entry['sha256']:
+            os.makedirs(os.path.dirname(os.path.join(MODELS, entry['file'])), exist_ok=True)
             shutil.copyfile(seed, os.path.join(MODELS, entry['file']))
             log(f"{entry['file']}: copied from seed folder")
         else:
@@ -240,10 +242,12 @@ def main(operations, self_test=None, device=None):
             with tempfile.TemporaryDirectory(prefix='pigeon-selftest-') as tmp:
                 request = {'version': 1, **self_test(tmp)}
                 info = _dispatch(operations, request) or {}
-                from PIL import Image
-                with Image.open(request['output']) as produced:
-                    size = list(produced.size)
-            _reply({'version': 1, 'ok': True, 'self_test': 'passed', 'output_size': size,
+                size = None
+                if request.get('output'):               # image plugins: the result must be a real PNG
+                    from PIL import Image
+                    with Image.open(request['output']) as produced:
+                        size = list(produced.size)
+            _reply({'version': 1, 'ok': True, 'self_test': 'passed', **({'output_size': size} if size else {}),
                     'seconds': round(time.time() - started, 2), **info})
 
         try:
