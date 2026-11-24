@@ -4,7 +4,7 @@
     {
       "id": "ai-background-removal",
       "name": "AI Background Removal",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "category": "Image editing",
       "kind": "editor-worker",
       "description": "Remove the background from a saved image with U2-Net-P, entirely offline once the 4.5 MB model is downloaded. A preview must be accepted before anything is saved.",
@@ -16,19 +16,49 @@
       ],
       "worker": {
         "runtime": "python3",
-        "entry": "worker.py",
+        "python": ">=3.10,<3.14",
+        "entry": "run",
         "protocol": 1,
+        "standalone": true,
         "requires": [
           "numpy",
           "Pillow",
           "onnxruntime"
-        ]
+        ],
+        "requirementsFile": "requirements.txt",
+        "commands": {
+          "setup": "run --setup",
+          "health": "run --health [--verify]",
+          "selfTest": "run --self-test",
+          "request": "run  (JSON on stdin)"
+        }
       },
       "files": [
         {
+          "path": "plugin.json",
+          "bytes": 1810,
+          "sha256": "0dca8e06950cbcb593d02c66747dd229835e60ee1d2b4925f31a05fcb1774785"
+        },
+        {
+          "path": "run",
+          "executable": true,
+          "bytes": 2717,
+          "sha256": "d770e0176016fac713411518ffe0d00142f59ca816f0654c766d1cef03152e0c"
+        },
+        {
+          "path": "plugin_runtime.py",
+          "bytes": 11733,
+          "sha256": "94a9ca9676e124a2d65fa389cf1628b89f4fb70ab8e82bd95c272d3390d5887d"
+        },
+        {
           "path": "worker.py",
-          "bytes": 5272,
-          "sha256": "4b6972fdcb19613e9b022c41ad53dc3b7fdfd8296099ca10b91086cd90f335d7"
+          "bytes": 2482,
+          "sha256": "c4e0fcffb6b5fbcaf3245b73a2f15c1d72c3a8d2f561ae5c871cd61102faba2d"
+        },
+        {
+          "path": "requirements.txt",
+          "bytes": 46,
+          "sha256": "dacd4078831dd7f0d1cace128ad08d461904cadf93f65e605d95549aaea927fb"
         }
       ],
       "models": [
@@ -43,11 +73,13 @@
         }
       ],
       "network": [
+        "files.pythonhosted.org",
         "github.com",
         "objects.githubusercontent.com",
+        "pypi.org",
         "release-assets.githubusercontent.com"
       ],
-      "privacy": "Only the model file is downloaded, once. Images are processed locally and never sent anywhere.",
+      "privacy": "Setup downloads the Python packages and model files once. Images and prompts are processed locally and never sent anywhere.",
       "path": "plugins/ai-background-removal",
       "approved": true
     },
