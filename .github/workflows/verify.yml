@@ -5,4 +5,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - run: python3 scripts/sync_runtime.py --check
       - run: python3 scripts/build_index.py --check
+  standalone:
+    # Installs each editor plugin into a clean folder and runs it end to end (downloads models).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install Pillow
+      - run: python3 scripts/test_standalone.py ai-enlarge ai-background-removal ai-object-removal ai-image-expand

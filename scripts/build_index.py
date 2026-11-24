@@ -20,6 +20,29 @@ def fail(plugin, message):
     sys.exit(f"{plugin}: {message}")
 
 
+STANDALONE = ["plugin.json", "run", "plugin_runtime.py", "worker.py", "requirements.txt"]
+
+
+def check_standalone(name, folder, m):
+    """An editor plugin must run on its own: launcher, runtime, worker, requirements, all bundled."""
+    listed = {f["path"]: f for f in m["files"]}
+    for required in STANDALONE:
+        if required not in listed:
+            fail(name, f"editor plugins must bundle '{required}' (see scripts/sync_runtime.py)")
+    if m["worker"].get("entry") != "run" or not m["worker"].get("standalone"):
+        fail(name, 'worker must be {"entry": "run", "standalone": true}')
+    if not listed["run"].get("executable"):
+        fail(name, "'run' must be marked \"executable\": true in files")
+    for shared in ("run", "plugin_runtime.py"):
+        if (folder / shared).read_bytes() != (ROOT / "shared" / shared).read_bytes():
+            fail(name, f"{shared} differs from shared/{shared}: run scripts/sync_runtime.py")
+    for model in m["models"]:
+        if "/" in model.get("file", "/") or not model.get("file"):
+            fail(name, f"model {model.get('id')} needs a flat 'file' name (the plugin downloads it itself)")
+    if m["models"] and not m["network"]:
+        fail(name, "plugins that download models must declare their network hosts")
+
+
 def sha256(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -39,6 +62,8 @@ def build():
             fail(name, "unknown kind or operation")
         if not re.match(r"^\d+\.\d+\.\d+$", m["version"]):
             fail(name, "version must be x.y.z")
+        if m["kind"] == "editor-worker":
+            check_standalone(name, folder, m)
         files = []
         for f in m["files"]:
             p = (folder / f["path"]).resolve()
