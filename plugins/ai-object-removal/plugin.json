@@ -1,16 +1,53 @@
 {
   "id": "ai-object-removal",
   "name": "AI Object Removal",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "category": "Image editing",
   "kind": "editor-worker",
   "description": "Paint over an object and LaMa inpaints the background. Runs offline once the 198 MB model is downloaded. The result must be accepted before it is saved as a derivative.",
   "author": "Pigeon",
   "licence": "Apache-2.0",
   "source": "LaMa (Suvorov et al.), ONNX export by Carve",
-  "operations": ["remove_object"],
-  "worker": { "runtime": "python3", "entry": "worker.py", "protocol": 1, "requires": ["numpy", "Pillow", "onnxruntime"] },
-  "files": [ { "path": "worker.py" } ],
+  "operations": [
+    "remove_object"
+  ],
+  "worker": {
+    "runtime": "python3",
+    "python": ">=3.10,<3.14",
+    "entry": "run",
+    "protocol": 1,
+    "standalone": true,
+    "requires": [
+      "numpy",
+      "Pillow",
+      "onnxruntime"
+    ],
+    "requirementsFile": "requirements.txt",
+    "commands": {
+      "setup": "run --setup",
+      "health": "run --health [--verify]",
+      "selfTest": "run --self-test",
+      "request": "run  (JSON on stdin)"
+    }
+  },
+  "files": [
+    {
+      "path": "plugin.json"
+    },
+    {
+      "path": "run",
+      "executable": true
+    },
+    {
+      "path": "plugin_runtime.py"
+    },
+    {
+      "path": "worker.py"
+    },
+    {
+      "path": "requirements.txt"
+    }
+  ],
   "models": [
     {
       "id": "lama-fp32",
@@ -22,6 +59,12 @@
       "licence": "Apache-2.0"
     }
   ],
-  "network": ["huggingface.co", "cdn-lfs.huggingface.co", "cas-bridge.xethub.hf.co"],
-  "privacy": "Only the model file is downloaded, once. Images are processed locally and never sent anywhere."
+  "network": [
+    "cas-bridge.xethub.hf.co",
+    "cdn-lfs.huggingface.co",
+    "files.pythonhosted.org",
+    "huggingface.co",
+    "pypi.org"
+  ],
+  "privacy": "Setup downloads the Python packages and model files once. Images and prompts are processed locally and never sent anywhere."
 }

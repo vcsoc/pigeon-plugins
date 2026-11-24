@@ -306,7 +306,7 @@
     {
       "id": "ai-object-removal",
       "name": "AI Object Removal",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "category": "Image editing",
       "kind": "editor-worker",
       "description": "Paint over an object and LaMa inpaints the background. Runs offline once the 198 MB model is downloaded. The result must be accepted before it is saved as a derivative.",
@@ -318,19 +318,49 @@
       ],
       "worker": {
         "runtime": "python3",
-        "entry": "worker.py",
+        "python": ">=3.10,<3.14",
+        "entry": "run",
         "protocol": 1,
+        "standalone": true,
         "requires": [
           "numpy",
           "Pillow",
           "onnxruntime"
-        ]
+        ],
+        "requirementsFile": "requirements.txt",
+        "commands": {
+          "setup": "run --setup",
+          "health": "run --health [--verify]",
+          "selfTest": "run --self-test",
+          "request": "run  (JSON on stdin)"
+        }
       },
       "files": [
         {
+          "path": "plugin.json",
+          "bytes": 1835,
+          "sha256": "b0195f2df93df66a1ece7ac4f7656214ee66882e96d28f0b0889583c76f56e2a"
+        },
+        {
+          "path": "run",
+          "executable": true,
+          "bytes": 2717,
+          "sha256": "d770e0176016fac713411518ffe0d00142f59ca816f0654c766d1cef03152e0c"
+        },
+        {
+          "path": "plugin_runtime.py",
+          "bytes": 11733,
+          "sha256": "94a9ca9676e124a2d65fa389cf1628b89f4fb70ab8e82bd95c272d3390d5887d"
+        },
+        {
           "path": "worker.py",
-          "bytes": 5272,
-          "sha256": "4b6972fdcb19613e9b022c41ad53dc3b7fdfd8296099ca10b91086cd90f335d7"
+          "bytes": 3383,
+          "sha256": "441a76a02d2e78d3748159a4b1d47aa8d5b61e1e5dfc4459a332d1c620ff2886"
+        },
+        {
+          "path": "requirements.txt",
+          "bytes": 46,
+          "sha256": "dacd4078831dd7f0d1cace128ad08d461904cadf93f65e605d95549aaea927fb"
         }
       ],
       "models": [
@@ -345,11 +375,13 @@
         }
       ],
       "network": [
-        "huggingface.co",
+        "cas-bridge.xethub.hf.co",
         "cdn-lfs.huggingface.co",
-        "cas-bridge.xethub.hf.co"
+        "files.pythonhosted.org",
+        "huggingface.co",
+        "pypi.org"
       ],
-      "privacy": "Only the model file is downloaded, once. Images are processed locally and never sent anywhere.",
+      "privacy": "Setup downloads the Python packages and model files once. Images and prompts are processed locally and never sent anywhere.",
       "path": "plugins/ai-object-removal",
       "approved": true
     },
