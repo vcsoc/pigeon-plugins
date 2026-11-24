@@ -13,6 +13,9 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 PDF_LOCK = Lock()
 MODEL_ID = "google/embeddinggemma-2"
+MODEL_REVISION = "914f7f89142e33e77833254d9c9b90c3cef7303b"
+# The plugin downloads and verifies the pinned model into its own folder (run --setup).
+MODEL_DIR = os.environ.get("PIGEON_SEMANTIC_MODEL_DIR") or os.path.join(os.environ.get("PIGEON_PLUGIN_DATA") or os.path.join(os.path.dirname(os.path.abspath(__file__)), ".data"), "models", "embeddinggemma-2")
 MODEL_VERSION = "embeddinggemma2-768-f32-v1"
 model = None
 QUERY_CACHE = {}
@@ -41,7 +44,7 @@ def load_model():
         from sentence_transformers import SentenceTransformer
         torch.set_num_threads(int(os.environ.get('PIGEON_SEMANTIC_THREADS','1')))
         torch.set_num_interop_threads(1)
-        model=SentenceTransformer(MODEL_ID,device='cpu',local_files_only=True,revision='914f7f89142e33e77833254d9c9b90c3cef7303b',model_kwargs={'torch_dtype':torch.float32})
+        model=SentenceTransformer(MODEL_DIR,device='cpu',local_files_only=True,model_kwargs={'torch_dtype':torch.float32})
         model.max_seq_length=2048
     return model
 
@@ -337,6 +340,8 @@ def handle(req):
     if action=='index':return index_step(req['asset'],req['fingerprint'])
     if action=='index_batch':return index_batch(req.get('jobs',[]),req.get('workers',2),req.get('steps',2),int(req.get('memoryLimit',0)))
     if action=='search':return search(req)
+    if action=='embed':
+        v=vector(str(req['text'])[:4000]);return {'dimensions':len(v),'vector':[round(float(x),6) for x in v]}
     if action=='check':
         v=vector('task: search result | query: a bird flying');return {'dimensions':len(v),'finite':True}
     raise ValueError('Unknown semantic action')

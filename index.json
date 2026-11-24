@@ -460,72 +460,197 @@
     {
       "id": "semantic-search",
       "name": "Local Semantic Search",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "category": "Search",
       "kind": "semantic-index",
-      "status": "reference",
-      "description": "Private multimodal similarity search, knowledge-graph clustering and tag suggestions using EmbeddingGemma 2 (768-dim embeddings of text, images and video). This is the engine from the original Pigeon app; the Rust app does not load it yet, so it is published as a reference plugin.",
+      "description": "Private multimodal similarity search, knowledge-graph clustering and tag suggestions using EmbeddingGemma 2 (768-dim embeddings of text, images and video), computed on this computer. Setup downloads about 1.5 GB once. Runs as a standalone engine that Pigeon talks to over a simple line protocol.",
       "author": "Pigeon",
       "licence": "Apache-2.0",
-      "source": "google/embeddinggemma-2 on Hugging Face",
       "operations": [
         "embed"
       ],
       "worker": {
         "runtime": "python3",
-        "entry": "semantic-engine.py",
+        "python": ">=3.10,<3.14",
+        "entry": "run",
+        "protocol": 1,
+        "standalone": true,
+        "requires": [
+          "sentence-transformers",
+          "Pillow"
+        ],
         "requirementsFile": "requirements.txt",
-        "notes": "CPU-only torch is installed from https://download.pytorch.org/whl/cpu"
+        "commands": {
+          "setup": "run --setup",
+          "health": "run --health [--verify]",
+          "selfTest": "run --self-test",
+          "serve": "run --serve <index.db>",
+          "request": "run  (JSON on stdin)"
+        }
       },
       "files": [
         {
+          "path": "plugin.json",
+          "bytes": 7412,
+          "sha256": "044b5cbf65ca491f333b02e77b92f864f5ca9844015b5bd638d38b2e63f7b3c8"
+        },
+        {
+          "path": "run",
+          "executable": true,
+          "bytes": 2717,
+          "sha256": "d770e0176016fac713411518ffe0d00142f59ca816f0654c766d1cef03152e0c"
+        },
+        {
+          "path": "plugin_runtime.py",
+          "bytes": 12134,
+          "sha256": "78c55e5cc3e972d3927a6d10242be1b704779b93863daf153f4af311b6dfcaf4"
+        },
+        {
+          "path": "worker.py",
+          "bytes": 4034,
+          "sha256": "0e558b759f34fbc5b1a6a3709422f90ec3be3ac1ea846ec2ca4e5c4237049a5f"
+        },
+        {
           "path": "semantic-engine.py",
-          "bytes": 22082,
-          "sha256": "ea6ed9f0d302059492151cf7ec8d26a6dfced53154a9f6550bb16ff988d4ab17"
+          "bytes": 22523,
+          "sha256": "fad39b452bff834e192500332acc6b531307d032561c84ed0f0a7257724474da"
         },
         {
           "path": "requirements.txt",
-          "bytes": 244,
-          "sha256": "5d817d98645e494c5d5350426e7bd321a1313647ec44817a0a4f5c0ad0b41bc8"
+          "bytes": 353,
+          "sha256": "4f11447913465f63f399d4c3a4c76c7d544d64a97986774ebc51406926e9a53c"
         }
       ],
       "models": [
         {
-          "id": "embeddinggemma-2",
-          "name": "EmbeddingGemma 2",
-          "huggingface": {
-            "repo": "google/embeddinggemma-2",
-            "revision": "914f7f89142e33e77833254d9c9b90c3cef7303b"
-          },
-          "bytes": 1526000000,
-          "lfs": [
-            {
-              "path": "model.safetensors",
-              "bytes": 1488915288,
-              "sha256": "197a32965d4b1105faf060417baa899e193fb73cd401f42ec9295234d5553d79"
-            },
-            {
-              "path": "tokenizer.json",
-              "bytes": 32170510,
-              "sha256": "4d777ef5bdc1aa36227abdfb77c3e49e7b9c892d16e1b6bda41c393504828be4"
-            },
-            {
-              "path": "tokenizer.model",
-              "bytes": 4689013,
-              "sha256": "e594c8a90eb08d8bda498ff4747977dc827ae0c3c56b5c0d41a605a22d02ef03"
-            }
-          ],
+          "id": "gemma-1-Pooling-config-json",
+          "name": "EmbeddingGemma 2: 1_Pooling/config.json",
+          "file": "embeddinggemma-2/1_Pooling/config.json",
+          "url": "https://huggingface.co/google/embeddinggemma-2/resolve/914f7f89142e33e77833254d9c9b90c3cef7303b/1_Pooling/config.json",
+          "bytes": 90,
+          "sha256": "8759bdf7c77efc7df7723f64856a593c8943b71ee38baf2a88771fbaf78438f9",
+          "licence": "Apache-2.0"
+        },
+        {
+          "id": "gemma-2-Normalize-config-json",
+          "name": "EmbeddingGemma 2: 2_Normalize/config.json",
+          "file": "embeddinggemma-2/2_Normalize/config.json",
+          "url": "https://huggingface.co/google/embeddinggemma-2/resolve/914f7f89142e33e77833254d9c9b90c3cef7303b/2_Normalize/config.json",
+          "bytes": 97,
+          "sha256": "cdb09dfca347a56aa2d691744e38d5ad3c7cbc2834e7181272b9a15328b82524",
+          "licence": "Apache-2.0"
+        },
+        {
+          "id": "gemma-chat-template-jinja",
+          "name": "EmbeddingGemma 2: chat_template.jinja",
+          "file": "embeddinggemma-2/chat_template.jinja",
+          "url": "https://huggingface.co/google/embeddinggemma-2/resolve/914f7f89142e33e77833254d9c9b90c3cef7303b/chat_template.jinja",
+          "bytes": 1016,
+          "sha256": "4b852efc0b9960283e735363331e6f325b33bc74bdbaa076f595bc4e9b94d85e",
+          "licence": "Apache-2.0"
+        },
+        {
+          "id": "gemma-config-json",
+          "name": "EmbeddingGemma 2: config.json",
+          "file": "embeddinggemma-2/config.json",
+          "url": "https://huggingface.co/google/embeddinggemma-2/resolve/914f7f89142e33e77833254d9c9b90c3cef7303b/config.json",
+          "bytes": 4455,
+          "sha256": "b8f1e9931b57fbc054acdb445c41765d55b0074c58d145fa82839941ad1b5bb3",
+          "licence": "Apache-2.0"
+        },
+        {
+          "id": "gemma-config-sentence-transformers-json",
+          "name": "EmbeddingGemma 2: config_sentence_transformers.json",
+          "file": "embeddinggemma-2/config_sentence_transformers.json",
+          "url": "https://huggingface.co/google/embeddinggemma-2/resolve/914f7f89142e33e77833254d9c9b90c3cef7303b/config_sentence_transformers.json",
+          "bytes": 1565,
+          "sha256": "031e56a498d33c349ab489a21885bcfe25b4fcba841149dc99e1e90d4a7c28f5",
+          "licence": "Apache-2.0"
+        },
+        {
+          "id": "gemma-modules-json",
+          "name": "EmbeddingGemma 2: modules.json",
+          "file": "embeddinggemma-2/modules.json",
+          "url": "https://huggingface.co/google/embeddinggemma-2/resolve/914f7f89142e33e77833254d9c9b90c3cef7303b/modules.json",
+          "bytes": 413,
+          "sha256": "3d02572a0455b832de67fb8e63a54981bc7e8b46e337c95e917bd8122a533bfd",
+          "licence": "Apache-2.0"
+        },
+        {
+          "id": "gemma-preprocessor-config-json",
+          "name": "EmbeddingGemma 2: preprocessor_config.json",
+          "file": "embeddinggemma-2/preprocessor_config.json",
+          "url": "https://huggingface.co/google/embeddinggemma-2/resolve/914f7f89142e33e77833254d9c9b90c3cef7303b/preprocessor_config.json",
+          "bytes": 511,
+          "sha256": "ea2ae257e901064abdd98dceb19f2b0da06af600bed15e0f99f5c85c37ee9d78",
+          "licence": "Apache-2.0"
+        },
+        {
+          "id": "gemma-processor-config-json",
+          "name": "EmbeddingGemma 2: processor_config.json",
+          "file": "embeddinggemma-2/processor_config.json",
+          "url": "https://huggingface.co/google/embeddinggemma-2/resolve/914f7f89142e33e77833254d9c9b90c3cef7303b/processor_config.json",
+          "bytes": 1788,
+          "sha256": "168f6a08522f3ce5dea596d94d003af2fd691742d4f41fe1f9d8cce76bfbf69c",
+          "licence": "Apache-2.0"
+        },
+        {
+          "id": "gemma-sentence-bert-config-json",
+          "name": "EmbeddingGemma 2: sentence_bert_config.json",
+          "file": "embeddinggemma-2/sentence_bert_config.json",
+          "url": "https://huggingface.co/google/embeddinggemma-2/resolve/914f7f89142e33e77833254d9c9b90c3cef7303b/sentence_bert_config.json",
+          "bytes": 747,
+          "sha256": "b1bcd9f2dce3ae863b359e87d0710b5dbc3314a59ecb4e2f97c7778fc8e4b228",
+          "licence": "Apache-2.0"
+        },
+        {
+          "id": "gemma-tokenizer-config-json",
+          "name": "EmbeddingGemma 2: tokenizer_config.json",
+          "file": "embeddinggemma-2/tokenizer_config.json",
+          "url": "https://huggingface.co/google/embeddinggemma-2/resolve/914f7f89142e33e77833254d9c9b90c3cef7303b/tokenizer_config.json",
+          "bytes": 1599,
+          "sha256": "17bd5d6e9364ca49a534e1502076593317c298d4a663623091ed45388f004874",
+          "licence": "Apache-2.0"
+        },
+        {
+          "id": "gemma-model-safetensors",
+          "name": "EmbeddingGemma 2: model.safetensors",
+          "file": "embeddinggemma-2/model.safetensors",
+          "url": "https://huggingface.co/google/embeddinggemma-2/resolve/914f7f89142e33e77833254d9c9b90c3cef7303b/model.safetensors",
+          "bytes": 1488915288,
+          "sha256": "197a32965d4b1105faf060417baa899e193fb73cd401f42ec9295234d5553d79",
+          "licence": "Apache-2.0"
+        },
+        {
+          "id": "gemma-tokenizer-json",
+          "name": "EmbeddingGemma 2: tokenizer.json",
+          "file": "embeddinggemma-2/tokenizer.json",
+          "url": "https://huggingface.co/google/embeddinggemma-2/resolve/914f7f89142e33e77833254d9c9b90c3cef7303b/tokenizer.json",
+          "bytes": 32170510,
+          "sha256": "4d777ef5bdc1aa36227abdfb77c3e49e7b9c892d16e1b6bda41c393504828be4",
+          "licence": "Apache-2.0"
+        },
+        {
+          "id": "gemma-tokenizer-model",
+          "name": "EmbeddingGemma 2: tokenizer.model",
+          "file": "embeddinggemma-2/tokenizer.model",
+          "url": "https://huggingface.co/google/embeddinggemma-2/resolve/914f7f89142e33e77833254d9c9b90c3cef7303b/tokenizer.model",
+          "bytes": 4689013,
+          "sha256": "e594c8a90eb08d8bda498ff4747977dc827ae0c3c56b5c0d41a605a22d02ef03",
           "licence": "Apache-2.0"
         }
       ],
       "network": [
         "huggingface.co",
         "cas-bridge.xethub.hf.co",
+        "us.aws.cdn.hf.co",
+        "cdn-lfs.huggingface.co",
         "download.pytorch.org",
         "pypi.org",
         "files.pythonhosted.org"
       ],
-      "privacy": "Files stay on this computer. Not a generative chatbot.",
+      "privacy": "Setup downloads the Python packages and the model once. Your files and queries stay on this computer; nothing is sent anywhere. Not a generative chatbot.",
+      "source": "google/embeddinggemma-2 on Hugging Face (Apache-2.0), pinned to a commit",
       "path": "plugins/semantic-search",
       "approved": true
     }

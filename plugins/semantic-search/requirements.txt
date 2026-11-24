@@ -1,4 +1,7 @@
-# CPU-only torch/torchvision installed from https://download.pytorch.org/whl/cpu
+# CPU-only torch: on Linux/Windows this index avoids a multi-GB CUDA download (macOS wheels on PyPI are fine).
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+torchvision
 sentence-transformers==6.1.0
 transformers==5.19.0
 pillow==12.3.0
@@ -8,3 +11,4 @@ pypdf==6.19.0
 pypdfium2==5.9.0
 python-docx==1.2.0
 openpyxl==3.1.5
+numpy
