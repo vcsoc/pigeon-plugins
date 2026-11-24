@@ -193,8 +193,8 @@
       "files": [
         {
           "path": "plugin.json",
-          "bytes": 1947,
-          "sha256": "05ffa74a1b9e41961ff30615459a1f416a7cc9d1370adbcc48f99acbf700906d"
+          "bytes": 1960,
+          "sha256": "b123228ebdb93a450e13204a27fa6e32feb4324c85333ab916511519dcd7929d"
         },
         {
           "path": "run",
@@ -233,6 +233,7 @@
         "cas-bridge.xethub.hf.co",
         "cdn-lfs.huggingface.co",
         "files.pythonhosted.org",
+        "hf.co",
         "huggingface.co",
         "pypi.org"
       ],
@@ -275,8 +276,8 @@
       "files": [
         {
           "path": "plugin.json",
-          "bytes": 4360,
-          "sha256": "2f0f99cbde0ba50ccee4270b5e44da4f6d3d247645b6846652b22b913e6f318d"
+          "bytes": 4373,
+          "sha256": "ac13a8513f2352562979745b052fd9507cad73b4d1bbf6471d0d48806e4e3f56"
         },
         {
           "path": "run",
@@ -365,6 +366,7 @@
         "cas-bridge.xethub.hf.co",
         "cdn-lfs.huggingface.co",
         "files.pythonhosted.org",
+        "hf.co",
         "huggingface.co",
         "pypi.org"
       ],
@@ -407,8 +409,8 @@
       "files": [
         {
           "path": "plugin.json",
-          "bytes": 1835,
-          "sha256": "b0195f2df93df66a1ece7ac4f7656214ee66882e96d28f0b0889583c76f56e2a"
+          "bytes": 1848,
+          "sha256": "2dead37fab0986e444e437dd99cd396fc5726090cf8cd5eff606608685422a98"
         },
         {
           "path": "run",
@@ -447,6 +449,7 @@
         "cas-bridge.xethub.hf.co",
         "cdn-lfs.huggingface.co",
         "files.pythonhosted.org",
+        "hf.co",
         "huggingface.co",
         "pypi.org"
       ],
