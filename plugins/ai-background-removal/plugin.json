@@ -1,7 +1,7 @@
 {
   "id": "ai-background-removal",
   "name": "AI Background Removal",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "category": "Image editing",
   "kind": "editor-worker",
   "description": "Remove the background from a saved image with U2-Net-P, entirely offline once the 4.5 MB model is downloaded. A preview must be accepted before anything is saved.",

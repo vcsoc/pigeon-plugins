@@ -4,7 +4,7 @@
     {
       "id": "ai-background-removal",
       "name": "AI Background Removal",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "category": "Image editing",
       "kind": "editor-worker",
       "description": "Remove the background from a saved image with U2-Net-P, entirely offline once the 4.5 MB model is downloaded. A preview must be accepted before anything is saved.",
@@ -37,7 +37,7 @@
         {
           "path": "plugin.json",
           "bytes": 1810,
-          "sha256": "0dca8e06950cbcb593d02c66747dd229835e60ee1d2b4925f31a05fcb1774785"
+          "sha256": "8b083a17b1ac7c21b38d55f81fc0db60b60707652772e046b168385421c8cceb"
         },
         {
           "path": "run",
@@ -47,8 +47,8 @@
         },
         {
           "path": "plugin_runtime.py",
-          "bytes": 11733,
-          "sha256": "94a9ca9676e124a2d65fa389cf1628b89f4fb70ab8e82bd95c272d3390d5887d"
+          "bytes": 12134,
+          "sha256": "78c55e5cc3e972d3927a6d10242be1b704779b93863daf153f4af311b6dfcaf4"
         },
         {
           "path": "worker.py",
