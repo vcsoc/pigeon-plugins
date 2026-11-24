@@ -1,7 +1,7 @@
 {
   "id": "ai-image-expand",
   "name": "AI Image Expand",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "category": "Image editing",
   "kind": "editor-worker",
   "description": "Enlarge the canvas and the model paints in the new border (outpainting). Uses MI-GAN, a 28 MB inpainting model, so it is fast on CPU. Your original pixels are never altered. The result must be accepted before it is saved as a derivative.",

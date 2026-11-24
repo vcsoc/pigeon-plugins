@@ -161,7 +161,7 @@
     {
       "id": "ai-image-expand",
       "name": "AI Image Expand",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "category": "Image editing",
       "kind": "editor-worker",
       "description": "Enlarge the canvas and the model paints in the new border (outpainting). Uses MI-GAN, a 28 MB inpainting model, so it is fast on CPU. Your original pixels are never altered. The result must be accepted before it is saved as a derivative.",
@@ -194,7 +194,7 @@
         {
           "path": "plugin.json",
           "bytes": 1960,
-          "sha256": "b123228ebdb93a450e13204a27fa6e32feb4324c85333ab916511519dcd7929d"
+          "sha256": "cbe7fff275e78bf00bcf516e175532b4d43ed27816cbba5ae6a78909f13e0121"
         },
         {
           "path": "run",
@@ -204,8 +204,8 @@
         },
         {
           "path": "plugin_runtime.py",
-          "bytes": 11733,
-          "sha256": "94a9ca9676e124a2d65fa389cf1628b89f4fb70ab8e82bd95c272d3390d5887d"
+          "bytes": 12134,
+          "sha256": "78c55e5cc3e972d3927a6d10242be1b704779b93863daf153f4af311b6dfcaf4"
         },
         {
           "path": "worker.py",
