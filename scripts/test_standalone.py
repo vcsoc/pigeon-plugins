@@ -29,7 +29,68 @@ REQUESTS = {
     "ai-image-expand": lambda img, out: {"operation": "expand", "expand": {"top": 128, "bottom": 128}},
     "ai-image-expand-diffusion": lambda img, out: {"operation": "expand", "expand": {"top": 128, "bottom": 128},
                                                    "steps": 6, "guidance": 1, "time_budget": 0, "seed": 1},
+    "semantic-search": lambda img, out: {"operation": "embed", "text": "a bird flying"},   # no image output
 }
+
+
+def serve_test(plugin, env, scratch):
+    """Drive the long-running engine the way Pigeon does: sync, index, search, check the ranking."""
+    from PIL import Image, ImageDraw
+    files = {}
+    red = Image.new("RGB", (256, 256), (240, 240, 240))
+    ImageDraw.Draw(red).ellipse((60, 60, 196, 196), fill=(220, 20, 20))
+    blue = Image.new("RGB", (256, 256), (240, 240, 240))
+    ImageDraw.Draw(blue).rectangle((60, 60, 196, 196), fill=(20, 40, 220))
+    for name, image in (("red-circle.png", red), ("blue-square.png", blue)):
+        image.save(scratch / name)
+        files[name] = ("image", scratch / name)
+    (scratch / "recipe.txt").write_text("Preheat the oven. Whisk eggs and flour into a smooth batter for pancakes.")
+    files["recipe.txt"] = ("document", scratch / "recipe.txt")
+    records, assets = [], {}
+    for name, (kind, path) in files.items():
+        stat = path.stat()
+        fingerprint = f"{path}|{stat.st_size}|{stat.st_mtime_ns}"
+        asset = {"id": name, "path": str(path), "kind": kind, "name": name, "tags": [], "note": "",
+                 "modified": stat.st_mtime * 1000, "size": stat.st_size}
+        records.append({"asset": asset, "fingerprint": fingerprint, "contentFingerprint": fingerprint})
+        assets[name] = fingerprint
+    full_env = {"PATH": "/usr/bin:/bin", **env}
+    child = subprocess.Popen(["sh", str(plugin / "run"), "--serve", str(scratch / "index.db")], stdin=subprocess.PIPE,
+                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, env=full_env,
+                             cwd=tempfile.gettempdir())
+    counter = [0]
+
+    def call(action, **fields):
+        counter[0] += 1
+        child.stdin.write(json.dumps({"id": counter[0], "action": action, **fields}) + "\n")
+        child.stdin.flush()
+        while True:
+            reply = json.loads(child.stdout.readline())
+            if reply.get("id") == counter[0] and "progress" not in reply:
+                if "error" in reply:
+                    raise RuntimeError(reply["error"])
+                return reply["result"]
+
+    try:
+        if not json.loads(child.stdout.readline()).get("ready"):
+            raise RuntimeError("engine did not report ready")
+        call("sync-assets", records=records)
+        for _ in range(6):                                  # parts are indexed in rounds
+            pending = call("plan")["pending"]
+            if not pending:
+                break
+            call("index_batch", jobs=[{"asset": r["asset"], "fingerprint": r["fingerprint"]} for r in records
+                                     if r["asset"]["id"] in pending], workers=1, steps=2)
+        indexed = call("info")["indexed"]
+        ranking = {}
+        for query in ("a red circle", "a blue square", "pancake batter recipe"):
+            hits = call("search", query=query, assets=assets, minimum=-1, limit=5)["results"]
+            ranking[query] = hits[0]["id"] if hits else None
+    finally:
+        child.kill()
+        child.wait()
+    expected = {"a red circle": "red-circle.png", "a blue square": "blue-square.png", "pancake batter recipe": "recipe.txt"}
+    return indexed == 3 and ranking == expected, {"indexed": indexed, "top_hit": ranking}
 
 
 def run(args, plugin, stdin=None, env_extra=None, timeout=3600):
@@ -88,9 +149,16 @@ def main():
         output = scratch / "output.png"
         request = {"version": 1, "input": str(image), "output": str(output), **REQUESTS[pid](image, scratch)}
         good, _ = step("real request", [], json.dumps(request))
-        if good:
+        if good and pid != "semantic-search":
             produced = Image.open(output)
             steps.append(("output is a valid PNG", True, 0, {"size": list(produced.size)}))
+        if pid == "semantic-search":
+            started = time.time()
+            try:
+                good, info = serve_test(plugin, env, scratch)
+            except Exception as error:      # report, keep going
+                good, info = False, {"error": str(error)[:300]}
+            steps.append(("engine: index + search", good, time.time() - started, info))
         step("bad request fails cleanly", [], json.dumps({"version": 1, "operation": "nonsense"}), expect_ok=False)
         results.append((pid, steps))
         failed |= not all(s[1] for s in steps)

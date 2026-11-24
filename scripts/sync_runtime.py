@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Copy shared/run and shared/plugin_runtime.py into every editor-worker plugin.
+"""Copy shared/run and shared/plugin_runtime.py into every standalone plugin.
 
 Each plugin folder must be self-contained (Pigeon installs one plugin at a time), so the shared
 launcher/runtime are duplicated, not imported. Edit shared/, run this script, commit the result.
@@ -17,7 +17,8 @@ SHARED = ("run", "plugin_runtime.py")
 
 def editor_plugins():
     for manifest in sorted((ROOT / "plugins").glob("*/plugin.json")):
-        if json.loads(manifest.read_text()).get("kind") == "editor-worker":
+        m = json.loads(manifest.read_text())
+        if m.get("kind") == "editor-worker" or m.get("worker", {}).get("standalone"):
             yield manifest.parent
 
 

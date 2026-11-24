@@ -37,8 +37,9 @@ def check_standalone(name, folder, m):
         if (folder / shared).read_bytes() != (ROOT / "shared" / shared).read_bytes():
             fail(name, f"{shared} differs from shared/{shared}: run scripts/sync_runtime.py")
     for model in m["models"]:
-        if "/" in model.get("file", "/") or not model.get("file"):
-            fail(name, f"model {model.get('id')} needs a flat 'file' name (the plugin downloads it itself)")
+        parts = model.get("file", "").split("/")
+        if not model.get("file") or any(p in ("", ".", "..") or p.startswith(".") for p in parts):
+            fail(name, f"model {model.get('id')} needs a safe relative 'file' path (the plugin downloads it itself)")
     if m["models"] and not m["network"]:
         fail(name, "plugins that download models must declare their network hosts")
 
@@ -62,7 +63,7 @@ def build():
             fail(name, "unknown kind or operation")
         if not re.match(r"^\d+\.\d+\.\d+$", m["version"]):
             fail(name, "version must be x.y.z")
-        if m["kind"] == "editor-worker":
+        if m["kind"] == "editor-worker" or m["worker"].get("standalone"):
             check_standalone(name, folder, m)
         files = []
         for f in m["files"]:
