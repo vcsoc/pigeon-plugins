@@ -1,0 +1,31 @@
+{
+  "id": "semantic-search",
+  "name": "Local Semantic Search",
+  "version": "1.0.0",
+  "category": "Search",
+  "kind": "semantic-index",
+  "status": "reference",
+  "description": "Private multimodal similarity search, knowledge-graph clustering and tag suggestions using EmbeddingGemma 2 (768-dim embeddings of text, images and video). This is the engine from the original Pigeon app; the Rust app does not load it yet, so it is published as a reference plugin.",
+  "author": "Pigeon",
+  "licence": "Apache-2.0",
+  "source": "google/embeddinggemma-2 on Hugging Face",
+  "operations": ["embed"],
+  "worker": { "runtime": "python3", "entry": "semantic-engine.py", "requirementsFile": "requirements.txt", "notes": "CPU-only torch is installed from https://download.pytorch.org/whl/cpu" },
+  "files": [ { "path": "semantic-engine.py" }, { "path": "requirements.txt" } ],
+  "models": [
+    {
+      "id": "embeddinggemma-2",
+      "name": "EmbeddingGemma 2",
+      "huggingface": { "repo": "google/embeddinggemma-2", "revision": "914f7f89142e33e77833254d9c9b90c3cef7303b" },
+      "bytes": 1526000000,
+      "lfs": [
+        { "path": "model.safetensors", "bytes": 1488915288, "sha256": "197a32965d4b1105faf060417baa899e193fb73cd401f42ec9295234d5553d79" },
+        { "path": "tokenizer.json", "bytes": 32170510, "sha256": "4d777ef5bdc1aa36227abdfb77c3e49e7b9c892d16e1b6bda41c393504828be4" },
+        { "path": "tokenizer.model", "bytes": 4689013, "sha256": "e594c8a90eb08d8bda498ff4747977dc827ae0c3c56b5c0d41a605a22d02ef03" }
+      ],
+      "licence": "Apache-2.0"
+    }
+  ],
+  "network": ["huggingface.co", "cas-bridge.xethub.hf.co", "download.pytorch.org", "pypi.org", "files.pythonhosted.org"],
+  "privacy": "Files stay on this computer. Not a generative chatbot."
+}

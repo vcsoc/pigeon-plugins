@@ -1,0 +1,27 @@
+{
+  "id": "ai-object-removal",
+  "name": "AI Object Removal",
+  "version": "1.0.0",
+  "category": "Image editing",
+  "kind": "editor-worker",
+  "description": "Paint over an object and LaMa inpaints the background. Runs offline once the 198 MB model is downloaded. The result must be accepted before it is saved as a derivative.",
+  "author": "Pigeon",
+  "licence": "Apache-2.0",
+  "source": "LaMa (Suvorov et al.), ONNX export by Carve",
+  "operations": ["remove_object"],
+  "worker": { "runtime": "python3", "entry": "worker.py", "protocol": 1, "requires": ["numpy", "Pillow", "onnxruntime"] },
+  "files": [ { "path": "worker.py" } ],
+  "models": [
+    {
+      "id": "lama-fp32",
+      "name": "Simple LaMa (fp32)",
+      "file": "lama_fp32.onnx",
+      "url": "https://huggingface.co/Carve/LaMa-ONNX/resolve/c3c0c9e468934d62e79c329e35d82dd09ff8c444/lama_fp32.onnx",
+      "bytes": 208044816,
+      "sha256": "1faef5301d78db7dda502fe59966957ec4b79dd64e16f03ed96913c7a4eb68d6",
+      "licence": "Apache-2.0"
+    }
+  ],
+  "network": ["huggingface.co", "cdn-lfs.huggingface.co", "cas-bridge.xethub.hf.co"],
+  "privacy": "Only the model file is downloaded, once. Images are processed locally and never sent anywhere."
+}

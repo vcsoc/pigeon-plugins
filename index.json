@@ -1,0 +1,219 @@
+{
+  "schema": 1,
+  "plugins": [
+    {
+      "id": "ai-background-removal",
+      "name": "AI Background Removal",
+      "version": "1.0.0",
+      "category": "Image editing",
+      "kind": "editor-worker",
+      "description": "Remove the background from a saved image with U2-Net-P, entirely offline once the 4.5 MB model is downloaded. A preview must be accepted before anything is saved.",
+      "author": "Pigeon",
+      "licence": "Apache-2.0",
+      "source": "U2-Net (Qin et al.) as distributed by rembg",
+      "operations": [
+        "remove_background"
+      ],
+      "worker": {
+        "runtime": "python3",
+        "entry": "worker.py",
+        "protocol": 1,
+        "requires": [
+          "numpy",
+          "Pillow",
+          "onnxruntime"
+        ]
+      },
+      "files": [
+        {
+          "path": "worker.py",
+          "bytes": 5272,
+          "sha256": "4b6972fdcb19613e9b022c41ad53dc3b7fdfd8296099ca10b91086cd90f335d7"
+        }
+      ],
+      "models": [
+        {
+          "id": "u2netp",
+          "name": "U2-Net-P",
+          "file": "u2netp.onnx",
+          "url": "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx",
+          "bytes": 4574861,
+          "sha256": "309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8",
+          "licence": "Apache-2.0"
+        }
+      ],
+      "network": [
+        "github.com",
+        "objects.githubusercontent.com",
+        "release-assets.githubusercontent.com"
+      ],
+      "privacy": "Only the model file is downloaded, once. Images are processed locally and never sent anywhere.",
+      "path": "plugins/ai-background-removal",
+      "approved": true
+    },
+    {
+      "id": "ai-enlarge",
+      "name": "AI Image Enlarger",
+      "version": "1.0.0",
+      "category": "Image editing",
+      "kind": "editor-worker",
+      "description": "Offline 3x image enlargement with a sub-pixel convolutional neural network. The model is tiny (235 KB) and ships inside the plugin, so nothing is downloaded.",
+      "author": "Pigeon",
+      "licence": "Apache-2.0",
+      "source": "ONNX Model Zoo (super_resolution 10)",
+      "operations": [
+        "enlarge"
+      ],
+      "worker": {
+        "runtime": "python3",
+        "entry": "worker.py",
+        "protocol": 1,
+        "requires": [
+          "numpy",
+          "Pillow",
+          "onnxruntime"
+        ]
+      },
+      "files": [
+        {
+          "path": "worker.py",
+          "bytes": 5272,
+          "sha256": "4b6972fdcb19613e9b022c41ad53dc3b7fdfd8296099ca10b91086cd90f335d7"
+        },
+        {
+          "path": "model/super-resolution-10.onnx",
+          "role": "model",
+          "bytes": 240078,
+          "sha256": "85f36ff88cc504a24af5e0602148bc56a8aa09a58eca8c0da2756f3e8186035e"
+        }
+      ],
+      "models": [],
+      "network": [],
+      "privacy": "Runs entirely on this computer. Images are never sent anywhere.",
+      "path": "plugins/ai-enlarge",
+      "approved": true
+    },
+    {
+      "id": "ai-object-removal",
+      "name": "AI Object Removal",
+      "version": "1.0.0",
+      "category": "Image editing",
+      "kind": "editor-worker",
+      "description": "Paint over an object and LaMa inpaints the background. Runs offline once the 198 MB model is downloaded. The result must be accepted before it is saved as a derivative.",
+      "author": "Pigeon",
+      "licence": "Apache-2.0",
+      "source": "LaMa (Suvorov et al.), ONNX export by Carve",
+      "operations": [
+        "remove_object"
+      ],
+      "worker": {
+        "runtime": "python3",
+        "entry": "worker.py",
+        "protocol": 1,
+        "requires": [
+          "numpy",
+          "Pillow",
+          "onnxruntime"
+        ]
+      },
+      "files": [
+        {
+          "path": "worker.py",
+          "bytes": 5272,
+          "sha256": "4b6972fdcb19613e9b022c41ad53dc3b7fdfd8296099ca10b91086cd90f335d7"
+        }
+      ],
+      "models": [
+        {
+          "id": "lama-fp32",
+          "name": "Simple LaMa (fp32)",
+          "file": "lama_fp32.onnx",
+          "url": "https://huggingface.co/Carve/LaMa-ONNX/resolve/c3c0c9e468934d62e79c329e35d82dd09ff8c444/lama_fp32.onnx",
+          "bytes": 208044816,
+          "sha256": "1faef5301d78db7dda502fe59966957ec4b79dd64e16f03ed96913c7a4eb68d6",
+          "licence": "Apache-2.0"
+        }
+      ],
+      "network": [
+        "huggingface.co",
+        "cdn-lfs.huggingface.co",
+        "cas-bridge.xethub.hf.co"
+      ],
+      "privacy": "Only the model file is downloaded, once. Images are processed locally and never sent anywhere.",
+      "path": "plugins/ai-object-removal",
+      "approved": true
+    },
+    {
+      "id": "semantic-search",
+      "name": "Local Semantic Search",
+      "version": "1.0.0",
+      "category": "Search",
+      "kind": "semantic-index",
+      "status": "reference",
+      "description": "Private multimodal similarity search, knowledge-graph clustering and tag suggestions using EmbeddingGemma 2 (768-dim embeddings of text, images and video). This is the engine from the original Pigeon app; the Rust app does not load it yet, so it is published as a reference plugin.",
+      "author": "Pigeon",
+      "licence": "Apache-2.0",
+      "source": "google/embeddinggemma-2 on Hugging Face",
+      "operations": [
+        "embed"
+      ],
+      "worker": {
+        "runtime": "python3",
+        "entry": "semantic-engine.py",
+        "requirementsFile": "requirements.txt",
+        "notes": "CPU-only torch is installed from https://download.pytorch.org/whl/cpu"
+      },
+      "files": [
+        {
+          "path": "semantic-engine.py",
+          "bytes": 22082,
+          "sha256": "ea6ed9f0d302059492151cf7ec8d26a6dfced53154a9f6550bb16ff988d4ab17"
+        },
+        {
+          "path": "requirements.txt",
+          "bytes": 244,
+          "sha256": "5d817d98645e494c5d5350426e7bd321a1313647ec44817a0a4f5c0ad0b41bc8"
+        }
+      ],
+      "models": [
+        {
+          "id": "embeddinggemma-2",
+          "name": "EmbeddingGemma 2",
+          "huggingface": {
+            "repo": "google/embeddinggemma-2",
+            "revision": "914f7f89142e33e77833254d9c9b90c3cef7303b"
+          },
+          "bytes": 1526000000,
+          "lfs": [
+            {
+              "path": "model.safetensors",
+              "bytes": 1488915288,
+              "sha256": "197a32965d4b1105faf060417baa899e193fb73cd401f42ec9295234d5553d79"
+            },
+            {
+              "path": "tokenizer.json",
+              "bytes": 32170510,
+              "sha256": "4d777ef5bdc1aa36227abdfb77c3e49e7b9c892d16e1b6bda41c393504828be4"
+            },
+            {
+              "path": "tokenizer.model",
+              "bytes": 4689013,
+              "sha256": "e594c8a90eb08d8bda498ff4747977dc827ae0c3c56b5c0d41a605a22d02ef03"
+            }
+          ],
+          "licence": "Apache-2.0"
+        }
+      ],
+      "network": [
+        "huggingface.co",
+        "cas-bridge.xethub.hf.co",
+        "download.pytorch.org",
+        "pypi.org",
+        "files.pythonhosted.org"
+      ],
+      "privacy": "Files stay on this computer. Not a generative chatbot.",
+      "path": "plugins/semantic-search",
+      "approved": true
+    }
+  ]
+}

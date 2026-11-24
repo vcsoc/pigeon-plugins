@@ -1,0 +1,27 @@
+{
+  "id": "ai-background-removal",
+  "name": "AI Background Removal",
+  "version": "1.0.0",
+  "category": "Image editing",
+  "kind": "editor-worker",
+  "description": "Remove the background from a saved image with U2-Net-P, entirely offline once the 4.5 MB model is downloaded. A preview must be accepted before anything is saved.",
+  "author": "Pigeon",
+  "licence": "Apache-2.0",
+  "source": "U2-Net (Qin et al.) as distributed by rembg",
+  "operations": ["remove_background"],
+  "worker": { "runtime": "python3", "entry": "worker.py", "protocol": 1, "requires": ["numpy", "Pillow", "onnxruntime"] },
+  "files": [ { "path": "worker.py" } ],
+  "models": [
+    {
+      "id": "u2netp",
+      "name": "U2-Net-P",
+      "file": "u2netp.onnx",
+      "url": "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx",
+      "bytes": 4574861,
+      "sha256": "309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8",
+      "licence": "Apache-2.0"
+    }
+  ],
+  "network": ["github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"],
+  "privacy": "Only the model file is downloaded, once. Images are processed locally and never sent anywhere."
+}
