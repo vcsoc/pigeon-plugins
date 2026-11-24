@@ -1,67 +1,66 @@
-#!/usr/bin/env python3
-"""Pigeon editor protocol v1 CPU worker: expand an image canvas and outpaint it with Stable Diffusion.
+"""AI Image Expand (Diffusion): enlarge the canvas and outpaint it with Stable Diffusion 1.5 Inpainting.
 
-Requires numpy, Pillow, onnxruntime. Models are provisioned and pinned by the host; this worker
-never downloads anything. It runs Stable Diffusion 1.5 Inpainting (fp16 ONNX) with its own small
-CLIP tokenizer and DDIM scheduler, so no torch/diffusers/transformers is needed.
-
-Request, operation "expand":
-  input, output                      as in protocol v1
-  model                              directory holding the files listed in plugin.json (a path to
-                                     one of those files is also accepted; its folder is used)
-  expand: {left, top, right, bottom} pixels to add on each side, or
-  scale:  float > 1                  grow about the centre by this factor
-  time_budget (optional, seconds, default 45; 0 = no limit, always full resolution)
-  prompt   (optional) text describing the scene; default is a generic photographic prompt
-  steps    (optional, 1-50; default 20 on a GPU, 12 on CPU)
-  guidance (optional, 1-12; default 3.0 on a GPU, 1.0 on CPU; 1 disables classifier-free guidance)
-  seed     (optional int)
+Request: {"version": 1, "operation": "expand", "input": png, "output": png,
+          "expand": {"left": px, "top": px, "right": px, "bottom": px}  or  "scale": 1.0-4.0,
+          "max_pixels":  optional output limit (default 40,000,000),
+          "time_budget": optional seconds (default 45; 0 = no limit, always full resolution),
+          "prompt":      optional scene description,
+          "steps":       optional 1-50 (default 20 on a GPU, 12 on CPU),
+          "guidance":    optional 1-12 (default 3.0 on a GPU, 1.0 on CPU; 1 = no classifier-free guidance),
+          "seed":        optional integer}
 Original pixels are copied back untouched; only the new border is generated.
 
-Hardware: an NVIDIA GPU (onnxruntime-gpu, CUDAExecutionProvider) or a DirectML GPU is used when
-available, otherwise the CPU. (CoreML is deliberately not used: onnxruntime's CoreML provider
-fails on this model.) On start the worker times the device, estimates the cost of generating at
-full resolution and, if that exceeds time_budget, generates at the largest reduced resolution that
-fits and upscales the new border (softer, but done in time). Fast GPUs usually stay at full size.
+Runs fp16 ONNX models with its own CLIP tokenizer and DDIM scheduler (numpy, Pillow, onnxruntime only).
+Models (text_encoder/unet/vae_encoder/vae_decoder .onnx, vocab.json, merges.txt) are downloaded and
+verified by `run --setup`; request["model"] may name a folder containing them instead.
 
-Full-resolution generation fills outward from the original edge in bands of up to 320px by 512px
-tiles. Each tile sees the pixels already known beside and below it (original or previously
-generated) as context, so tiles join consistently. Progress and the chosen plan go to stderr.
+Hardware: an NVIDIA GPU (onnxruntime-gpu, CUDAExecutionProvider; `run --setup` installs it when
+nvidia-smi is present) or a DirectML GPU is used when available, otherwise the CPU. CoreML is
+deliberately not used: onnxruntime's CoreML provider fails on this model. On start the plugin times
+the device, estimates the cost of generating at full resolution and, if that exceeds time_budget,
+generates at the largest reduced resolution that fits and upscales the new border (softer, but done
+in time). Fast GPUs usually stay at full size.
+
+Full-resolution generation fills outward from the original edge in bands of up to 320px using 512px
+tiles. Each tile sees the pixels already known beside and below it (original or previously generated)
+as context, so tiles join consistently. Progress and the chosen plan are written to stderr.
 """
 import json
 import os
 import re
 import sys
-import traceback
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import plugin_runtime as rt  # noqa: E402
 
 WORK = 512            # tile size; the UNet wants multiples of 64
 UNIT = 64
 STRIP = 320           # maximum band depth
 STRIDE = 384          # new columns per tile (the rest is context from the previous tile)
 MAX_SIDE = 16384
-MAX_PIXELS = 100_000_000
 DEFAULT_PROMPT = 'a high quality photograph, natural, sharp, seamless continuation of the scene'
 NEGATIVE_PROMPT = 'blurry, low quality, text, watermark, frame, border, seam, distorted'
 FILES = ('text_encoder.onnx', 'unet.onnx', 'vae_encoder.onnx', 'vae_decoder.onnx', 'vocab.json', 'merges.txt')
 
 
 def margins(request, width, height):
+    limit = rt.max_pixels(request)
     if isinstance(request.get('expand'), dict):
         e = request['expand']
         m = [int(e.get(k, 0)) for k in ('left', 'top', 'right', 'bottom')]
     elif 'scale' in request:
         scale = float(request['scale'])
         if not 1.0 < scale <= 4.0:
-            raise ValueError('invalid scale')
+            raise rt.PluginError('scale must be between 1 and 4')
         dx, dy = round(width * (scale - 1) / 2), round(height * (scale - 1) / 2)
         m = [dx, dy, dx, dy]
     else:
-        raise ValueError('expand or scale required')
+        raise rt.PluginError('expand or scale required')
     if min(m) < 0 or sum(m) == 0:
-        raise ValueError('invalid margins')
+        raise rt.PluginError('margins must be non-negative and not all zero')
     cw, ch = width + m[0] + m[2], height + m[1] + m[3]
-    if max(cw, ch) > MAX_SIDE or cw * ch > MAX_PIXELS:
-        raise ValueError('canvas too large')
+    if max(cw, ch) > MAX_SIDE or cw * ch > limit:
+        raise rt.PluginError(f'the expanded image ({cw}x{ch}) would exceed the size limit')
     return m
 
 
@@ -133,7 +132,7 @@ def plan(full, m):
             wh = min(WORK, (rows - y0) // UNIT * UNIT)
             tw = min(WORK, (b0 - a0) // UNIT * UNIT)
             if wh < UNIT or tw < UNIT or wh <= d:
-                raise ValueError('image too small to expand this far')
+                raise rt.PluginError('the image is too small to expand this far')
             stride = min(STRIDE, tw)
             xs = list(range(a0, b0 - tw + 1, stride))
             if xs[-1] != b0 - tw:
@@ -162,28 +161,15 @@ def ddim_schedule(steps):
     return acp, timesteps, ratio
 
 
-def main():
+def expand(request):
     import time
     import numpy as np
     import onnxruntime as ort
     from PIL import Image
 
     started = time.time()
-    request = json.load(sys.stdin)
-    if request['version'] != 1:
-        raise ValueError('unsupported protocol')
-    if request['operation'] == 'health':
-        print(json.dumps({'version': 1, 'ok': True}), flush=True)
-        return
-    if request['operation'] != 'expand':
-        raise ValueError('unsupported operation')
-
-    root = request['model']
-    root = root if os.path.isdir(root) else os.path.dirname(root)
-    paths = {name: os.path.join(root, name) for name in FILES}
-    for p in paths.values():
-        if not os.path.isfile(p):
-            raise ValueError('missing model file ' + os.path.basename(p))
+    rt.require_paths(request, 'input', 'output')
+    paths = {name: rt.resolve_model(request, name) for name in FILES}
 
     providers, device = providers_for(ort)
     gpu = device != 'cpu'
@@ -191,7 +177,7 @@ def main():
     guidance = float(request.get('guidance', 3.0 if gpu else 1.0))
     budget = float(request.get('time_budget', 45))
     if not 1 <= steps <= 50 or not 1.0 <= guidance <= 12.0 or budget < 0:
-        raise ValueError('invalid steps, guidance or time_budget')
+        raise rt.PluginError('invalid steps, guidance or time_budget')
     prompt = str(request.get('prompt') or DEFAULT_PROMPT)[:500]
     rng = np.random.default_rng(int(request['seed']) if 'seed' in request else None)
 
@@ -251,7 +237,7 @@ def main():
         decoded = vae_dec.run(None, {'latent_sample': (latents / 0.18215).astype(np.float16)})[0][0]
         out = np.clip((decoded.astype(np.float32).transpose(1, 2, 0) + 1.0) * 127.5 + 0.5, 0, 255)
         if out.shape[:2] != (h, w) or not np.isfinite(out).all():
-            raise ValueError('unexpected decoder output')
+            raise rt.PluginError('unexpected decoder output')
         return out.astype(np.uint8)
 
     # ---- choose a working scale that fits the time budget
@@ -275,7 +261,7 @@ def main():
             sfull = (max(1, round(width * candidate)) + sm[0] + sm[2], max(1, round(height * candidate)) + sm[1] + sm[3])
             try:
                 tiles_list = list(plan(sfull, sm))
-            except ValueError:
+            except rt.PluginError:
                 continue
             # Below full size the model must still see full 512px windows or it produces garbage.
             if candidate < 1.0 and any(t[4] != WORK or t[8] != WORK for t in tiles_list):
@@ -283,7 +269,7 @@ def main():
             for n in dict.fromkeys((steps, min(steps, 8), min(steps, 5))):
                 options_found.append((candidate, n, len(tiles_list), len(tiles_list) * (t_one + (n - 1) * t_step)))
         if not options_found:
-            raise ValueError('image too small to expand')
+            raise rt.PluginError('the image is too small to expand this far')
         fitting = [o for o in options_found if o[3] <= remaining]
         scale, steps, ntiles, eta = fitting[0] if fitting else min(options_found, key=lambda o: o[3])
         print(f'device={device} step={t_step:.2f}s -> scale={scale} steps={steps} tiles={ntiles} '
@@ -329,12 +315,21 @@ def main():
     alpha.paste(image.getchannel('A'), (m[0], m[1]))
     result.putalpha(alpha)
     result.save(request['output'], format='PNG')
-    print(json.dumps({'version': 1, 'ok': True}), flush=True)
+    return {'device': device, 'working_scale': scale, 'steps': steps, 'output_size': list(full)}
+
+
+def describe_device():
+    import onnxruntime as ort
+    return providers_for(ort)[1]
+
+
+def self_test(tmp):
+    from PIL import Image
+    path = os.path.join(tmp, 'in.png')
+    Image.effect_mandelbrot((512, 256), (-2.2, -1.5, 0.8, 1.5), 40).convert('RGB').save(path)
+    return {'operation': 'expand', 'input': path, 'output': os.path.join(tmp, 'out.png'),
+            'expand': {'left': 0, 'top': 0, 'right': 0, 'bottom': 128}, 'steps': 4, 'guidance': 1, 'time_budget': 0, 'seed': 1}
 
 
 if __name__ == '__main__':
-    try:
-        main()
-    except Exception:
-        traceback.print_exc(file=sys.stderr)
-        sys.exit(1)
+    rt.main({'expand': expand}, self_test=self_test, device=describe_device)

@@ -1,7 +1,7 @@
 {
   "id": "ai-image-expand-diffusion",
   "name": "AI Image Expand (Diffusion)",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "category": "Image editing",
   "kind": "editor-worker",
   "description": "Enlarge the canvas by any amount and Stable Diffusion 1.5 Inpainting paints in the new border at full resolution, continuing the scene. About 2.1 GB of models, runs offline on CPU and is slow (minutes to hours for large images). Your original pixels are never altered. The result must be accepted before it is saved as a derivative.",
@@ -13,17 +13,42 @@
   ],
   "worker": {
     "runtime": "python3",
-    "entry": "worker.py",
+    "python": ">=3.10,<3.14",
+    "entry": "run",
     "protocol": 1,
+    "standalone": true,
     "requires": [
       "numpy",
       "Pillow",
       "onnxruntime"
-    ]
+    ],
+    "requirementsFile": "requirements.txt",
+    "commands": {
+      "setup": "run --setup",
+      "health": "run --health [--verify]",
+      "selfTest": "run --self-test",
+      "request": "run  (JSON on stdin)"
+    }
   },
   "files": [
     {
+      "path": "plugin.json"
+    },
+    {
+      "path": "run",
+      "executable": true
+    },
+    {
+      "path": "plugin_runtime.py"
+    },
+    {
       "path": "worker.py"
+    },
+    {
+      "path": "requirements.txt"
+    },
+    {
+      "path": "requirements-cuda.txt"
     }
   ],
   "models": [
@@ -83,9 +108,11 @@
     }
   ],
   "network": [
-    "huggingface.co",
+    "cas-bridge.xethub.hf.co",
     "cdn-lfs.huggingface.co",
-    "cas-bridge.xethub.hf.co"
+    "files.pythonhosted.org",
+    "huggingface.co",
+    "pypi.org"
   ],
-  "privacy": "Only the model files are downloaded, once. Images and prompts are processed locally and never sent anywhere."
+  "privacy": "Setup downloads the Python packages and model files once. Images and prompts are processed locally and never sent anywhere."
 }

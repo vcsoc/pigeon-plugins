@@ -243,7 +243,7 @@
     {
       "id": "ai-image-expand-diffusion",
       "name": "AI Image Expand (Diffusion)",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "category": "Image editing",
       "kind": "editor-worker",
       "description": "Enlarge the canvas by any amount and Stable Diffusion 1.5 Inpainting paints in the new border at full resolution, continuing the scene. About 2.1 GB of models, runs offline on CPU and is slow (minutes to hours for large images). Your original pixels are never altered. The result must be accepted before it is saved as a derivative.",
@@ -255,19 +255,54 @@
       ],
       "worker": {
         "runtime": "python3",
-        "entry": "worker.py",
+        "python": ">=3.10,<3.14",
+        "entry": "run",
         "protocol": 1,
+        "standalone": true,
         "requires": [
           "numpy",
           "Pillow",
           "onnxruntime"
-        ]
+        ],
+        "requirementsFile": "requirements.txt",
+        "commands": {
+          "setup": "run --setup",
+          "health": "run --health [--verify]",
+          "selfTest": "run --self-test",
+          "request": "run  (JSON on stdin)"
+        }
       },
       "files": [
         {
+          "path": "plugin.json",
+          "bytes": 4360,
+          "sha256": "2f0f99cbde0ba50ccee4270b5e44da4f6d3d247645b6846652b22b913e6f318d"
+        },
+        {
+          "path": "run",
+          "executable": true,
+          "bytes": 2717,
+          "sha256": "d770e0176016fac713411518ffe0d00142f59ca816f0654c766d1cef03152e0c"
+        },
+        {
+          "path": "plugin_runtime.py",
+          "bytes": 11733,
+          "sha256": "94a9ca9676e124a2d65fa389cf1628b89f4fb70ab8e82bd95c272d3390d5887d"
+        },
+        {
           "path": "worker.py",
-          "bytes": 16029,
-          "sha256": "d30dba1b0e1f5c52647ac2366dd0b5ec8c1a347401a42bec620a34aa64ec10c2"
+          "bytes": 16156,
+          "sha256": "8c7215319ff00f93fa9d9f116b61faa4e1da9fcabdf6e370b39a32ce6b6cf708"
+        },
+        {
+          "path": "requirements.txt",
+          "bytes": 46,
+          "sha256": "dacd4078831dd7f0d1cace128ad08d461904cadf93f65e605d95549aaea927fb"
+        },
+        {
+          "path": "requirements-cuda.txt",
+          "bytes": 185,
+          "sha256": "e4ffc052f25ba760745961673c764b354f864f5c54521d2959b59fe93959aed4"
         }
       ],
       "models": [
@@ -327,11 +362,13 @@
         }
       ],
       "network": [
-        "huggingface.co",
+        "cas-bridge.xethub.hf.co",
         "cdn-lfs.huggingface.co",
-        "cas-bridge.xethub.hf.co"
+        "files.pythonhosted.org",
+        "huggingface.co",
+        "pypi.org"
       ],
-      "privacy": "Only the model files are downloaded, once. Images and prompts are processed locally and never sent anywhere.",
+      "privacy": "Setup downloads the Python packages and model files once. Images and prompts are processed locally and never sent anywhere.",
       "path": "plugins/ai-image-expand-diffusion",
       "approved": true
     },

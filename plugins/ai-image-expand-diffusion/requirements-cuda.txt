@@ -1,0 +1,5 @@
+# Used instead of requirements.txt when an NVIDIA GPU (nvidia-smi) is present.
+# Needs CUDA 12.x and cuDNN 9 installed on the machine.
+numpy>=1.26
+Pillow>=10.3
+onnxruntime-gpu>=1.18,<2
