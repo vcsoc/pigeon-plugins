@@ -1,0 +1,54 @@
+{
+  "id": "hello-ui",
+  "name": "Hello UI",
+  "version": "1.0.0",
+  "category": "Reference",
+  "kind": "app",
+  "sdk": "python",
+  "description": "Reference plugin for the Pigeon plugin UI SDK. Exercises every slot, every scene node kind, the canvas, lists, resources, providers and host services. Used by the conformance suite.",
+  "author": "Pigeon",
+  "licence": "Apache-2.0",
+  "operations": [],
+  "worker": {
+    "runtime": "python3",
+    "python": ">=3.10,<3.14",
+    "entry": "run",
+    "protocol": 2,
+    "standalone": true,
+    "requires": [],
+    "requirementsFile": "requirements.txt",
+    "commands": {
+      "setup": "run --setup",
+      "health": "run --health",
+      "plugin": "run --plugin"
+    }
+  },
+  "ui": {
+    "protocol": 2,
+    "activation": "visible",
+    "contributions": [
+      { "slot": "sidebar.section", "id": "hello-section", "title": "Hello", "icon": "sparkle", "order": 50 },
+      { "slot": "sidebar.entry", "id": "nav", "title": "Hello UI", "icon": "sparkle", "opens": "main", "order": 51 },
+      { "slot": "toolbar.item", "id": "tb", "group": "hello", "order": 90 },
+      { "slot": "workspace.view", "id": "main", "title": "Hello UI", "icon": "sparkle", "toolbar": true },
+      { "slot": "inspector.panel", "id": "info", "title": "Hello info", "icon": "info", "order": 10,
+        "applies_to": { "kinds": ["image", "video", "audio", "document"], "min": 1, "max": null, "ext": [] } },
+      { "slot": "preferences.page", "id": "prefs", "title": "Hello UI", "icon": "gear", "order": 80 },
+      { "slot": "modal", "id": "about", "title": "About Hello UI", "size": "small", "modal": true, "resizable": false },
+      { "slot": "statusbar.item", "id": "status", "align": "right", "order": 10 },
+      { "slot": "asset.action", "id": "describe", "title": "Describe asset", "icon": "info",
+        "applies_to": { "kinds": ["image", "video", "audio", "document"], "min": 1, "max": 1, "ext": [] },
+        "selection": "one", "group": "hello" },
+      { "slot": "asset.action", "id": "count", "title": "Count selection", "icon": "list",
+        "applies_to": { "kinds": ["image", "video", "audio", "document"], "min": 1, "max": null, "ext": [] },
+        "selection": "many", "group": "hello" },
+      { "slot": "library.source", "id": "demo-source", "title": "Hello Demo", "icon": "cloud",
+        "root": { "id": "root", "title": "Hello Demo", "children": true },
+        "capabilities": ["browse", "search"] },
+      { "slot": "search.provider", "id": "demo-search", "title": "Hello search", "icon": "magnifying-glass", "mode_id": "hello-search" },
+      { "slot": "drop.target", "id": "drop-zone", "accepts": ["files", "assets"], "where": "workspace" },
+      { "slot": "command", "id": "say", "title": "Say hello", "shortcut": "Cmd+Alt+H" }
+    ],
+    "permissions": ["selection", "library.read", "dialogs", "secrets", "clipboard", "shell", "windows"]
+  }
+}

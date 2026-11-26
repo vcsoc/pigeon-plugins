@@ -127,7 +127,7 @@ impl Schemas {
 
 fn collect(v: &Validator, instance: &Value) -> Vec<Violation> {
     v.iter_errors(instance)
-        .map(|e| Violation { path: e.instance_path().to_string(), message: e.to_string() })
+        .map(|e| Violation { path: e.instance_path.to_string(), message: e.to_string() })
         .collect()
 }
 
