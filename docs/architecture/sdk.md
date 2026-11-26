@@ -92,7 +92,7 @@ fails with a JSON error. Python plugins read the UI protocol from `worker.py --p
 
     cd sdk/rust
     cargo run -p pigeon-mock-host --bin pigeon-mock -- run <plugin-dir> [--show <instance>]
-    cargo run -p pigeon-mock-host --bin pigeon-mock -- conformance <plugin-dir> [--only ID] [--update-goldens] [--json report.json]
+    cargo run -p pigeon-mock-host --bin pigeon-mock -- conformance <plugin-dir> [--core | --cases DIR] [--only ID] [--update-goldens] [--json report.json]
     cargo run -p pigeon-mock-host --bin pigeon-mock -- render ../../plugins/hello-ui --instance main --size 960x900 -o hello.png
     cargo run -p pigeon-mock-host --bin pigeon-mock -- render-scene scene.json --out scene.png [--size WxH] [--theme dark|light]
     cargo run -p pigeon-mock-host --bin pigeon-mock -- validate-fixtures ../../schema/ui-v2/examples
@@ -155,22 +155,24 @@ cached resource pixels (fast canvas/list updates included).
 
 ## Conformance
 
-`conformance/cases/*.json` are data: each case launches a fresh plugin and runs steps in order.
-Format: `conformance/README.md`. The same files are the input of `pigeon --conformance` on the real
-host; the host must implement the same step interpreter. Steps that only a host can check (the
-20 fps frame budget under a 10 s stall) report `skipped`, never `pass`.
+For any protocol-v2 plugin, `pigeon-mock conformance <plugin-dir>` uses `conformance/core/`:
+handshake/identity, scene slots and safe events, resource files/acks when emitted, liveness after
+an oversized host line, stall recovery and crash detection. A provider-only plugin can skip scene
+and resource probes. With `hello-ui`, the command defaults to the example fixtures in
+`conformance/cases/`; add `--core` to run the generic probes instead. Use `--cases DIR` for your
+plugin-specific click, service, provider and snapshot assertions. Each case launches a fresh process
+and applies its steps in order; see `conformance/README.md` for the format.
 
-Current result against `plugins/hello-ui` (`pigeon-mock conformance plugins/hello-ui`):
-19 cases, 0 failed; 1 golden written on first run and compared on the second run; the frame-budget
-case is skipped (host-only).
+The `hello-ui` cases cover every contribution, UI and provider events, decoded resources, and a
+PNG golden. The Rust behavioural test checks that its workspace includes every schema node kind.
+The frame-budget step is skipped by the mock: it requires the real host's `pigeon --conformance`.
+Generic probes that infer cases from a plugin's contributions are specific to the mock.
 
 ## Limits and what is not done
 
 * Renderer: no anti-aliasing, no text shaping or kerning, no font weights, scroll bars and wrapping
   are approximated. Golden images are advisory (amendment: section 13).
-* `pigeon --conformance` (the real-host side) is not in this repository. The case format is ready for it.
-* No Python plugin runs the mock's stall test under the real launcher on all platforms; the stall
-  and crash steps use `kill`, so they are POSIX-only.
-* Patch/focus/scroll/beep messages are validated and recorded by the mock; the mock has no UI to
-  apply them.
-* Not verified here: the real Pigeon host, Windows.
+* `pigeon --conformance` and the real host's frame-budget proof belong to WP1. They are not run by
+  the mock. Stall simulation and process-group cleanup use Unix signals; Windows is unverified.
+* The mock validates and records patch/focus/scroll/beep messages but does not apply them; it does
+  not advertise `scene.patch`. The renderer is for snapshots, not an interactive widget toolkit.

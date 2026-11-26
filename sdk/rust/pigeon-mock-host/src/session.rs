@@ -6,7 +6,9 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{self, BufRead, BufReader, Read, Write};
+#[cfg(unix)]
+use std::os::{fd::AsRawFd, unix::{fs::DirBuilderExt, process::CommandExt}};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -140,9 +142,9 @@ pub struct Session {
     stdin: Arc<Mutex<Option<ChildStdin>>>,
     child: Mutex<Child>,
     pid: u32,
-    readers: Vec<JoinHandle<()>>,
+    readers: Mutex<Vec<JoinHandle<()>>>,
     host_req_counter: AtomicU64,
-    temp_root: PathBuf,
+    _temp_root: TempRoot,
 }
 
 /// Why a launch failed.
@@ -173,33 +175,35 @@ impl Session {
         let dir = &dir.canonicalize().map_err(LaunchError::Spawn)?;
         let manifest = load_manifest(dir, &schemas).map_err(LaunchError::Manifest)?;
         let n = SESSION_COUNTER.fetch_add(1, Ordering::SeqCst);
-        let temp_root = std::env::temp_dir().join(format!("pigeon-mock-{}-{n}", std::process::id()));
-        let session_dir = temp_root.join("session");
-        let data_dir = temp_root.join("data");
-        fs::create_dir_all(&session_dir).map_err(LaunchError::Spawn)?;
-        fs::create_dir_all(&data_dir).map_err(LaunchError::Spawn)?;
+        let base = std::env::temp_dir().join(format!("pigeon-mock-{}-{n}", std::process::id()));
+        let mut builder = fs::DirBuilder::new();
+        #[cfg(unix)]
+        builder.mode(0o700);
+        builder.create(&base).map_err(LaunchError::Spawn)?;
+        let temp_root = TempRoot(base);
+        let session_dir = temp_root.0.join("session");
+        let data_dir = temp_root.0.join("data");
+        fs::create_dir(&session_dir).map_err(LaunchError::Spawn)?;
+        fs::create_dir(&data_dir).map_err(LaunchError::Spawn)?;
 
         if options.run_setup {
-            let out = Command::new("sh")
-                .arg(dir.join("run"))
-                .arg("--setup")
-                .current_dir(dir)
-                .env("PIGEON_PLUGIN_DATA", &data_dir)
-                .env("PIGEON_SESSION_DIR", &session_dir)
-                .output()
-                .map_err(LaunchError::Spawn)?;
-            if !out.status.success() {
-                let text = String::from_utf8_lossy(&out.stdout).into_owned() + &String::from_utf8_lossy(&out.stderr);
-                return Err(LaunchError::Setup(text.trim().chars().take(400).collect()));
+            let log = temp_root.0.join("setup.log");
+            let output = fs::File::create(&log).map_err(LaunchError::Spawn)?;
+            let mut setup = launcher(dir, "--setup", &data_dir, &session_dir)
+                .stdin(Stdio::null())
+                .stdout(output.try_clone().map_err(LaunchError::Spawn)?)
+                .stderr(output)
+                .spawn().map_err(LaunchError::Spawn)?;
+            let status = wait_child(&mut setup, Duration::from_secs(120)).map_err(LaunchError::Spawn)?;
+            let Some(status) = status else { return Err(LaunchError::Setup("timed out after 120 s".into())); };
+            if !status.success() {
+                let mut tail = Vec::new();
+                let _ = fs::File::open(log).and_then(|f| f.take(2048).read_to_end(&mut tail));
+                return Err(LaunchError::Setup(format!("{status}: {}", String::from_utf8_lossy(&tail).trim())));
             }
         }
 
-        let mut child = Command::new("sh")
-            .arg(dir.join("run"))
-            .arg("--plugin")
-            .current_dir(dir)
-            .env("PIGEON_PLUGIN_DATA", &data_dir)
-            .env("PIGEON_SESSION_DIR", &session_dir)
+        let mut child = launcher(dir, "--plugin", &data_dir, &session_dir)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -209,6 +213,12 @@ impl Session {
         let stdin = child.stdin.take().expect("piped stdin");
         let stdout = child.stdout.take().expect("piped stdout");
         let stderr = child.stderr.take().expect("piped stderr");
+        #[cfg(unix)]
+        if let Err(error) = make_nonblocking(&stdin) {
+            terminate(&mut child);
+            let _ = child.wait();
+            return Err(LaunchError::Spawn(error));
+        }
 
         let stdin = Arc::new(Mutex::new(Some(stdin)));
         let shared = Arc::new(Shared {
@@ -256,9 +266,9 @@ impl Session {
             stdin,
             child: Mutex::new(child),
             pid,
-            readers,
+            readers: Mutex::new(readers),
             host_req_counter: AtomicU64::new(1),
-            temp_root,
+            _temp_root: temp_root,
         };
         let hello = Incoming::Hello(Hello {
             host: HostInfo { name: "Pigeon".into(), version: "mock".into() },
@@ -338,7 +348,7 @@ impl Session {
     pub fn send_raw(&self, line: &str) -> Result<(), String> {
         let mut guard = lock(&self.stdin);
         let stdin = guard.as_mut().ok_or("stdin closed")?;
-        stdin.write_all(line.as_bytes()).and_then(|_| stdin.write_all(b"\n")).and_then(|_| stdin.flush()).map_err(|e| e.to_string())
+        write_with_deadline(stdin, line.as_bytes()).and_then(|_| write_with_deadline(stdin, b"\n")).map_err(|e| e.to_string())
     }
 
     fn write_host_line(&self, value: &Value) -> Result<(), LaunchError> {
@@ -428,9 +438,10 @@ impl Session {
     /// Kill the plugin process (simulates a crash). Returns once it has exited.
     pub fn crash(&self) -> Option<ExitStatus> {
         let mut child = lock(&self.child);
-        let _ = child.kill();
+        terminate(&mut child);
         let status = child.wait().ok();
         drop(child);
+        self.join_readers();
         self.mark_exited(status);
         status
     }
@@ -448,46 +459,108 @@ impl Session {
     }
 
     /// Ask the plugin to shut down (`shutdown`), close stdin, and wait for the exit. Kills it if it
-    /// does not exit in time. Returns true when it exited on its own.
+    /// does not exit in time. Returns true when it exited successfully on its own.
     pub fn shutdown(&self, timeout: Duration) -> bool {
         let _ = self.send(&Incoming::Shutdown);
         lock(&self.stdin).take();
-        let deadline = Instant::now() + timeout;
-        loop {
-            if let Ok(Some(status)) = lock(&self.child).try_wait() {
-                self.mark_exited(Some(status));
-                return true;
+        let status = wait_child(&mut lock(&self.child), timeout).ok().flatten();
+        self.join_readers();
+        self.mark_exited(status);
+        status.is_some_and(|code| code.success())
+    }
+
+    fn join_readers(&self) {
+        // Ordinary subprocesses share the plugin group and are killed at shutdown. Do not join
+        // indefinitely if a deliberately detached child still has stdout or stderr open.
+        let deadline = Instant::now() + Duration::from_millis(500);
+        for reader in lock(&self.readers).drain(..) {
+            while !reader.is_finished() && Instant::now() < deadline {
+                thread::sleep(Duration::from_millis(5));
             }
-            if Instant::now() >= deadline {
-                self.crash();
-                return false;
-            }
-            thread::sleep(Duration::from_millis(10));
+            if reader.is_finished() { let _ = reader.join(); }
         }
     }
 }
 
 impl Drop for Session {
     fn drop(&mut self) {
-        if self.is_running() {
-            let _ = lock(&self.child).kill();
-            let _ = lock(&self.child).wait();
-        }
+        if self.is_running() { self.crash(); }
         lock(&self.stdin).take();
-        for h in self.readers.drain(..) {
-            let _ = h.join();
-        }
-        let _ = fs::remove_dir_all(&self.temp_root);
+        self.join_readers();
     }
 }
 
-fn signal(pid: u32, sig: &str) -> Result<(), String> {
-    let status = Command::new("kill").arg(format!("-{sig}")).arg(pid.to_string()).status().map_err(|e| e.to_string())?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!("kill -{sig} {pid} failed"))
+struct TempRoot(PathBuf);
+
+impl Drop for TempRoot {
+    fn drop(&mut self) { let _ = fs::remove_dir_all(&self.0); }
+}
+
+fn launcher(dir: &Path, mode: &str, data: &Path, session: &Path) -> Command {
+    let mut cmd = Command::new("sh");
+    cmd.arg(dir.join("run")).arg(mode).current_dir(dir)
+        .env("PIGEON_PLUGIN_DATA", data).env("PIGEON_SESSION_DIR", session);
+    #[cfg(unix)]
+    cmd.process_group(0);
+    cmd
+}
+
+fn wait_child(child: &mut Child, timeout: Duration) -> io::Result<Option<ExitStatus>> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        match child.try_wait() {
+            Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(10)),
+            Ok(None) => { terminate(child); child.wait()?; return Ok(None); }
+            result => {
+                // The group may still contain subprocesses that inherited the transport pipes.
+                #[cfg(unix)]
+                let _ = signal(child.id(), "KILL");
+                return result;
+            }
+        }
     }
+}
+
+fn terminate(child: &mut Child) {
+    #[cfg(unix)]
+    let _ = signal(child.id(), "KILL");
+    let _ = child.kill();
+}
+
+#[cfg(unix)]
+fn signal(pid: u32, sig: &str) -> Result<(), String> {
+    let sig = match sig { "STOP" => libc::SIGSTOP, "CONT" => libc::SIGCONT, "KILL" => libc::SIGKILL, _ => return Err("unknown signal".into()) };
+    let pid = i32::try_from(pid).map_err(|e| e.to_string())?;
+    // SAFETY: kill receives only a scalar signal and the negative id of our isolated process group.
+    if unsafe { libc::kill(-pid, sig) } == 0 { Ok(()) } else { Err(io::Error::last_os_error().to_string()) }
+}
+
+#[cfg(not(unix))]
+fn signal(_: u32, _: &str) -> Result<(), String> { Err("signals require Unix".into()) }
+
+#[cfg(unix)]
+fn make_nonblocking(pipe: &ChildStdin) -> io::Result<()> {
+    let fd = pipe.as_raw_fd();
+    // SAFETY: fd belongs to the live pipe. These two fcntl calls take only scalar arguments.
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+    if flags < 0 || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
+        Err(io::Error::last_os_error())
+    } else { Ok(()) }
+}
+
+fn write_with_deadline(pipe: &mut ChildStdin, mut bytes: &[u8]) -> io::Result<()> {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !bytes.is_empty() {
+        match pipe.write(bytes) {
+            Ok(0) => return Err(io::ErrorKind::WriteZero.into()),
+            Ok(n) => bytes = &bytes[n..],
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock && Instant::now() < deadline => thread::sleep(Duration::from_millis(2)),
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => return Err(io::Error::new(io::ErrorKind::TimedOut, "plugin is not reading stdin")),
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(())
 }
 
 /// Find a node by id anywhere in a scene value.
@@ -726,7 +799,8 @@ pub(crate) fn write_to_plugin(stdin: &Arc<Mutex<Option<ChildStdin>>>, value: &Va
     line.push('\n');
     let mut guard = lock(stdin);
     let pipe = guard.as_mut().ok_or("stdin closed")?;
-    pipe.write_all(line.as_bytes()).and_then(|_| pipe.flush()).map_err(|e| e.to_string())
+    if line.len() > MAX_LINE_BYTES + 1 { return Err("host message exceeds the 1 MiB limit".into()); }
+    write_with_deadline(pipe, line.as_bytes()).map_err(|e| e.to_string())
 }
 
 fn answer(shared: &Arc<Shared>, method: &str, params: &Value) -> Result<Value, (String, String)> {

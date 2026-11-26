@@ -25,6 +25,7 @@
       "expect_resource": {
         "rid": "hello:frame",
         "kind": "rgba",
+        "min_seq": 7,
         "timeout_ms": 5000
       }
     },

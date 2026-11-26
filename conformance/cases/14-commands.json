@@ -22,6 +22,20 @@
     {
       "send": {
         "v": 2,
+        "t": "command",
+        "command": "count",
+        "args": {},
+        "context": {"ids": ["hello-1", "hello-2"]}
+      }
+    },
+    {
+      "expect_toast": {
+        "text_contains": "2 asset(s) selected"
+      }
+    },
+    {
+      "send": {
+        "v": 2,
         "t": "drop",
         "target": "drop-zone",
         "paths": [

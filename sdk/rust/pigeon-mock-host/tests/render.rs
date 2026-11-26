@@ -49,3 +49,28 @@ fn scene_renders_and_png_round_trips() {
     assert_eq!((back.w, back.h), (200, 120));
     assert_eq!(back.rgba, surf.px);
 }
+
+#[test]
+fn draw_clip_can_be_removed_but_cannot_escape_its_canvas() {
+    let scene = json!({"id":"root","kind":"column","padding":2,"children":[{
+        "id":"canvas","kind":"canvas","width":{"px":8},"height":{"px":8},"draw":{"frame":1,"ops":[
+            {"op":"clip","x":0,"y":0,"w":4,"h":4},
+            {"op":"rect","x":0,"y":0,"w":8,"h":8,"fill":"#ff0000"},
+            {"op":"unclip"}, {"op":"restore"},
+            {"op":"rect","x":4,"y":0,"w":30,"h":30,"fill":"#00ff00"}
+        ]}
+    }]});
+    let theme = Theme::dark();
+    let surf = render::render_scene(&scene, (16, 16), &theme, &HashMap::new(), 1.0);
+    assert_eq!(surf.pixel(2, 2), Rgba([255, 0, 0, 255]));
+    assert_eq!(surf.pixel(9, 9), Rgba([0, 255, 0, 255]));
+    assert_eq!(surf.pixel(10, 10), theme.resolve("bg"));
+}
+
+#[test]
+fn list_windows_render_non_numeric_node_ids() {
+    let scene = json!({"id":"list","kind":"list","key":"entries","count":10,"row_height":20,
+        "window":{"start":4,"rows":[{"id":"book-uuid","kind":"text","text":"", "bg":"#ff0000"}]}});
+    let surf = render::render_scene(&scene, (60, 40), &Theme::dark(), &HashMap::new(), 1.0);
+    assert_eq!(surf.pixel(10, 10), Rgba([255, 0, 0, 255]));
+}
