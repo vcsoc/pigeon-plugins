@@ -1,5 +1,29 @@
 # Reelio plugin UI: parity checklist (WP5)
 
+## Status update (speed pass, latest commit on arch/reelio-ui)
+
+Done since the first draft (each with tests unless noted):
+* Native dialogs and links: `EngineHost` served by the Pigeon host (`dialog.open_file`, `dialog.save_file`,
+  `dialog.pick_folder`, `shell.open_url`) from worker threads. **Not run against a real Pigeon host**;
+  the parameter shapes are the SDK's convention and the mock host is not used.
+* Engine events consumed (`preview:ready`, `dependencies:repair`, `notification`, `resource:*`, close).
+* Preview playback: ffmpeg RGBA decode of the engine preview URL, paced clock, resource ring via SDK,
+  exact paused seeks, ffplay audio with atempo (see `crates/app/src/player.rs`). Decode of the engine URL is
+  tested; the on-screen result is **not verified visually**; audio output is **not verified** (ffplay).
+* Timeline and project context menus with keyboard navigation (6 behavioural tests).
+* Subtitle Studio: engine open/choose/save/dirty, 40-step history, cue edits, split/merge/shift/replace,
+  virtualized cue window (9 studio tests). Provider search and translation are not wired.
+* Poster & cover studio: engine search with cached pages, filters, page sizes, use-this-cover with undo,
+  rotate/flip (5 poster tests). Thumbnails are not rendered; still-image import goes through probe.
+* Preferences (backend paths, default folder, image format) and About (update check) controls.
+* Four compact scenario ports (`crates/ui/tests/e2e_scenarios.rs`) replacing the Playwright specs.
+
+Not done in this pass (honest): mock-host (SDK) driven tests, scene-to-PNG renders and any pixel
+comparison, the dependency panel and export-history progress UI, toasts as a separate overlay (current
+toasts are in-scene with reducer timers), cover drop on the inspector, double-click cover lane routing.
+Counts below are from the first draft and are stale for the rows listed above.
+
+
 Reference: `reelio` apps/desktop (read only), README.md, docs/ui-styling.md, docs/subtitle-editor.md,
 docs/artwork-and-subtitles.md, Vitest tests and Playwright scenarios.
 
