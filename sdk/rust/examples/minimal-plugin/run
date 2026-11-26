@@ -1,0 +1,12 @@
+#!/bin/sh
+# Launcher for the minimal Rust plugin. `--setup` builds the binary; `--plugin` runs it.
+# A release installer would ship bin/ instead of building; this is the developer path.
+set -eu
+HERE=$(cd "$(dirname "$0")" && pwd -P)
+BIN="$HERE/target/release/minimal-plugin"
+if [ "${1:-}" = "--setup" ] || [ ! -x "$BIN" ]; then
+  cargo build --quiet --release --manifest-path "$HERE/Cargo.toml" >&2 || {
+    printf '{"version":1,"ok":false,"error":"cannot build the plugin (cargo is required in developer mode)"}\n'; exit 1; }
+  [ "${1:-}" = "--setup" ] && { printf '{"version":1,"ok":true,"ready":true}\n'; exit 0; }
+fi
+exec "$BIN" "$@"

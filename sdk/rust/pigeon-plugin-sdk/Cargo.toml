@@ -1,9 +1,11 @@
+# Self-contained on purpose: plugins vendor this folder verbatim (sdk/sync_sdk.py), so it must not
+# inherit anything from the SDK workspace.
 [package]
 name = "pigeon-plugin-sdk"
+version = "0.1.0"
+edition = "2021"
+publish = false
 description = "SDK for Pigeon plugins that draw themselves into host slots (protocol v2)."
-version.workspace = true
-edition.workspace = true
-publish.workspace = true
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

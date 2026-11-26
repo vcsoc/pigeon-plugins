@@ -1,6 +1,19 @@
 [package]
 name = "pigeon-mock-host"
-description = "Headless Pigeon host for plugin tests: validation, events, scene recording, PNG rendering, conformance."
+description = "Headless Pigeon host for plugin tests: schema validation, event driving, scene recording, host-service fakes, PNG rendering, conformance runner."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+
+[[bin]]
+name = "pigeon-mock"
+path = "src/main.rs"
+
+[dependencies]
+pigeon-plugin-sdk = { path = "../pigeon-plugin-sdk" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+jsonschema = "0.33"
+png = "0.17"
+ab_glyph = "0.2"
+epaint_default_fonts = "0.33"

@@ -1,3 +1,5 @@
+__version__ = "0.1.0"  # vendored copies carry this version (sdk/sync_sdk.py)
+
 """pigeon_plugin: the Python SDK for Pigeon plugins (protocol v2). Standard library only.
 
 Canvas draw ops live in `pigeon_plugin.draw` (`draw.rect`, `draw.text`, `draw.DrawList`).
