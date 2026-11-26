@@ -165,17 +165,33 @@ pub struct Toast {
 pub enum Pending {
     ChooseMedia,
     Dropped,
-    Probe { path: String },
+    Probe {
+        path: String,
+    },
     Save,
-    Validate { revision: u64 },
+    Validate {
+        revision: u64,
+    },
     ExportStart,
     Jobs,
-    PreviewSource { path: String },
-    SubtitleTest { track: String, revision: u64 },
+    PreviewSource {
+        path: String,
+    },
+    SubtitleTest {
+        track: String,
+        revision: u64,
+    },
     Dependencies,
     Settings,
     Backend,
-    ArtworkImport { path: String },
+    ArtworkImport {
+        path: String,
+    },
+    SubtitleOpen,
+    SubtitleChoose,
+    SubtitleSave,
+    /// Fire-and-forget request (its reply is ignored).
+    Silent,
     OpenProject,
     Other,
 }
@@ -212,6 +228,8 @@ pub struct State {
     pub gesture: Option<crate::timeline_input::Gesture>,
     /// Open context or project menu (see `menus`).
     pub menu: Option<crate::menus::Menu>,
+    /// Subtitle Studio document and history (see `studio`).
+    pub studio: Option<crate::studio::Studio>,
     /// Live feedback for the gesture in progress; never part of the undo history.
     pub drafts: crate::timeline_input::Drafts,
     pub project_rev: u64,
@@ -265,6 +283,7 @@ impl State {
             store: ProjectStore::new(empty_project()),
             gesture: None,
             menu: None,
+            studio: None,
             drafts: Default::default(),
             project_rev: 0,
             section: Section::Timeline,
@@ -324,6 +343,11 @@ impl State {
     /// Drain the effects produced since the last call.
     pub fn drain(&mut self) -> Vec<Effect> {
         std::mem::take(&mut self.outbox)
+    }
+
+    /// Queue an engine request with its pending meaning (used by the studio and menus).
+    pub fn engine_request_with(&mut self, request: Request, pending: Pending) -> u64 {
+        self.request(request, pending)
     }
 
     fn request(&mut self, request: Request, pending: Pending) -> u64 {
@@ -681,6 +705,10 @@ impl State {
                     Err(e) => self.set_error(e),
                 }
             }
+            Pending::SubtitleOpen | Pending::SubtitleChoose | Pending::SubtitleSave => {
+                self.studio_reply(&pending, &reply);
+            }
+            Pending::Silent => {}
             Pending::Other => {
                 self.busy = None;
                 if let Err(e) = reply {
@@ -916,7 +944,7 @@ impl State {
             self.set_error("Finish the active operation before quitting Reelio.");
             return;
         }
-        if self.store.dirty() {
+        if self.store.dirty() || self.studio.as_ref().map(|s| s.dirty()).unwrap_or(false) {
             self.dialogs.quit_confirm = true;
             return;
         }
@@ -983,6 +1011,7 @@ impl State {
                     }
                 }
             }
+            "sub" => self.studio_action(&arg, value),
             "undo" => self.undo(),
             "redo" => self.redo(),
             "project" => match arg.as_str() {

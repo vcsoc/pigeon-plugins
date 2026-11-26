@@ -713,53 +713,203 @@ fn artwork_studio(s: &State) -> Value {
 }
 
 fn subtitle_studio(s: &State) -> Value {
-    let p = s.project();
-    let subs: Vec<Value> = p
-        .tracks
+    let empty = crate::studio::Studio::default();
+    let st = s.studio.as_ref().unwrap_or(&empty);
+    let doc = &st.doc;
+    let rows: Vec<Value> = doc
+        .cues
         .iter()
-        .filter(|t| p.track_kind(t) == Some(Kind::Subtitle))
-        .map(|t| {
-            button(
-                &format!("sub.track:{}", t.id),
-                &t.title,
+        .enumerate()
+        .skip(st.window_start)
+        .take(crate::studio::CUE_WINDOW)
+        .map(|(i, c)| {
+            let first = c.text.lines().next().unwrap_or("");
+            let mut b = button(
+                &format!("sub:select:{}", c.id),
+                &format!(
+                    "{:>3}  {} → {}  {}",
+                    i + 1,
+                    crate::subtitles::cue_clock(c.start_ms),
+                    crate::subtitles::cue_clock(c.end_ms),
+                    first
+                ),
                 None,
                 "ghost",
                 true,
-            )
+            );
+            b["toggled"] = json!(st.selected.as_deref() == Some(c.id.as_str()));
+            b
         })
         .collect();
-    let cues: Vec<Value> = s
-        .subtitle_test
+    let list = node(
+        "sub:list",
+        "list",
+        json!({
+            "count": doc.cues.len(), "row_height": 28, "key": "rows",
+            "window": {"start": st.window_start, "rows": rows}
+        }),
+    );
+    let selected = st
+        .selected
         .as_ref()
-        .map(|t| {
-            t.cues
-                .iter()
-                .take(100)
-                .enumerate()
-                .map(|(i, c)| {
-                    text(
-                        &format!("sub.cue:{i}"),
-                        &format!(
-                            "{} → {}  {}",
-                            crate::chapters::chapter_time(c.start as f64),
-                            crate::chapters::chapter_time(c.end as f64),
-                            c.text
-                        ),
-                        "mono",
-                    )
-                })
-                .collect()
-        })
-        .unwrap_or_default();
+        .and_then(|id| doc.cues.iter().find(|c| &c.id == id));
+    let mut fields = vec![];
+    if let Some(c) = selected {
+        fields.push(input(
+            &format!("sub:start:{}", c.id),
+            &crate::subtitles::cue_clock(c.start_ms),
+            "HH:MM:SS,mmm",
+            "submit",
+        ));
+        fields.push(input(
+            &format!("sub:end:{}", c.id),
+            &crate::subtitles::cue_clock(c.end_ms),
+            "HH:MM:SS,mmm",
+            "submit",
+        ));
+        fields.push(node(
+            &format!("sub:text:{}", c.id),
+            "text_input",
+            json!({"value": c.text, "rev": 0, "multiline": true, "commit": "change", "label": "Subtitle text"}),
+        ));
+        fields.push(row(
+            "sub.cue_actions",
+            vec![
+                button(
+                    &format!("sub:split:{}", c.id),
+                    "Split at playhead",
+                    None,
+                    "secondary",
+                    true,
+                ),
+                button(
+                    &format!("sub:merge:{}", c.id),
+                    "Merge with next",
+                    None,
+                    "secondary",
+                    true,
+                ),
+                button(
+                    &format!("sub:delete:{}", c.id),
+                    "Delete cue",
+                    None,
+                    "danger",
+                    true,
+                ),
+            ],
+            6.0,
+        ));
+    } else {
+        fields.push(text(
+            "sub.no_cue",
+            "Select a cue to edit its text and timing.",
+            "caption",
+        ));
+    }
+    let issues = crate::subtitles::cue_issues(doc);
+    let issue_nodes: Vec<Value> = issues
+        .iter()
+        .take(20)
+        .enumerate()
+        .map(|(i, t)| text(&format!("sub.issue:{i}"), t, "caption"))
+        .collect();
+    let toolbar = row(
+        "sub.toolbar",
+        vec![
+            button(
+                "sub:open",
+                "Open SRT",
+                Some("folder-open"),
+                "secondary",
+                s.busy.is_none(),
+            ),
+            button(
+                "sub:choose",
+                "Choose subtitle file",
+                None,
+                "secondary",
+                s.busy.is_none(),
+            ),
+            button("sub:new", "New", Some("file-plus"), "ghost", true),
+            button("sub:add", "Add cue", Some("plus"), "ghost", true),
+            button(
+                "sub:undo",
+                "Undo",
+                Some("undo"),
+                "ghost",
+                !st.past.is_empty(),
+            ),
+            button(
+                "sub:redo",
+                "Redo",
+                Some("redo"),
+                "ghost",
+                !st.future.is_empty(),
+            ),
+            button("sub:discard", "Discard draft", None, "ghost", st.dirty()),
+            button(
+                "sub:save",
+                "Save SRT copy",
+                Some("save"),
+                "primary",
+                !doc.cues.is_empty(),
+            ),
+        ],
+        6.0,
+    );
+    let tools = row(
+        "sub.tools",
+        vec![
+            input("sub:find", &st.find, "Find", "change"),
+            input("sub:replacement", &st.replacement, "Replace with", "change"),
+            button(
+                "sub:replace",
+                "Replace in all cues",
+                None,
+                "secondary",
+                !st.find.is_empty(),
+            ),
+            node(
+                "sub:shift_amount",
+                "number_input",
+                json!({"label": "Shift all cues (ms)", "value": st.shift_ms, "min": -86400000, "max": 86400000, "step": 100, "commit": "submit"}),
+            ),
+        ],
+        6.0,
+    );
+    let notice = st.error.clone().or(st.notice.clone()).unwrap_or_default();
     column(
         "subtitles",
         vec![
-            text("sub.title", "Subtitle Studio", "title"),
-            column("sub.tracks", subs, 4.0),
-            node(
-                "sub.cues",
-                "scroll",
-                json!({"axis": "vertical", "children": [column("sub.cue_list", cues, 4.0)]}),
+            row(
+                "sub.head",
+                vec![
+                    text("sub.title", "Subtitle Studio", "title"),
+                    text("sub.source", &st.source_label, "caption"),
+                ],
+                8.0,
+            ),
+            toolbar,
+            tools,
+            if notice.is_empty() {
+                text("sub.notice", "", "caption")
+            } else {
+                text("sub.notice", &notice, "caption")
+            },
+            row(
+                "sub.body",
+                vec![
+                    column("sub.left", vec![list], 4.0),
+                    column(
+                        "sub.right",
+                        vec![
+                            column("sub.fields", fields, 6.0),
+                            column("sub.issues", issue_nodes, 2.0),
+                        ],
+                        6.0,
+                    ),
+                ],
+                10.0,
             ),
         ],
         8.0,

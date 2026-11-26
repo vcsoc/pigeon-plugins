@@ -23,6 +23,20 @@ pub enum Request {
     ChooseMedia {
         folder: bool,
     },
+    /// Former `subtitle_editor_open`: a path, or None for the host open dialog.
+    SubtitleEditorOpen {
+        path: Option<String>,
+    },
+    /// Former `subtitle_editor_save`: the document goes to a host save dialog (never overwrites).
+    SubtitleEditorSave {
+        document: Value,
+    },
+    /// Former `subtitle_editor_dirty`: unsaved subtitle work protects the window from closing.
+    SubtitleEditorDirty {
+        dirty: bool,
+    },
+    /// Former `choose_subtitles`: host open dialog for standalone subtitle files.
+    ChooseSubtitles,
     /// Authorizes dropped files (engine `media_dropped`); returns the authorized canonical paths.
     MediaDropped {
         paths: Vec<String>,

@@ -19,5 +19,6 @@ pub mod posters;
 pub mod scene;
 pub mod state;
 pub mod store;
+pub mod studio;
 pub mod subtitles;
 pub mod timeline_input;

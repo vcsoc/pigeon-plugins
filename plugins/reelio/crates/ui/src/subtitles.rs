@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 pub const MAX_TIME: i64 = 359_999_999;
 pub const MAX_CUES: usize = 10_000;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SrtCue {
     pub id: String,
     pub start_ms: i64,
@@ -14,7 +14,7 @@ pub struct SrtCue {
     pub text: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct SrtDocument {
     pub cues: Vec<SrtCue>,
 }

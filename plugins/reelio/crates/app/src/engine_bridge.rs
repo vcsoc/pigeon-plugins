@@ -172,6 +172,16 @@ impl EngineBridge for Real {
             ),
             Request::SettingsChooseFolder => encode(e.settings_choose_folder()),
             Request::ChooseMedia { folder } => encode(e.choose_media(folder)),
+            Request::SubtitleEditorOpen { path } => {
+                encode(e.subtitle_editor_open(path.map(PathBuf::from)))
+            }
+            Request::SubtitleEditorSave { document } => decode::<reelio_engine::Document>(document)
+                .and_then(|d| encode(e.subtitle_editor_save(d))),
+            Request::SubtitleEditorDirty { dirty } => {
+                e.subtitle_editor_dirty(dirty);
+                Ok(Value::Null)
+            }
+            Request::ChooseSubtitles => encode(e.choose_subtitles()),
             Request::MediaDropped { paths } => {
                 let paths = paths.into_iter().map(PathBuf::from).collect();
                 let point = reelio_engine::Point { x: 0.0, y: 0.0 };
