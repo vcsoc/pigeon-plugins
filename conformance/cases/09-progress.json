@@ -1,0 +1,33 @@
+{
+  "id": "09-progress",
+  "title": "Progress job starts, updates and ends",
+  "steps": [
+    {
+      "ready": {}
+    },
+    {
+      "show": "hello-ui/main"
+    },
+    {
+      "wait_node": {
+        "instance": "hello-ui/main",
+        "node": "progress"
+      }
+    },
+    {
+      "event": {
+        "instance": "hello-ui/main",
+        "node": "progress",
+        "type": "click"
+      }
+    },
+    {
+      "expect_progress_end": {}
+    },
+    {
+      "expect_toast": {
+        "text_contains": "Progress finished"
+      }
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "id": "17-crash",
+  "title": "A crashed plugin is detected (process exit)",
+  "steps": [
+    {
+      "ready": {}
+    },
+    {
+      "crash": {}
+    }
+  ]
+}

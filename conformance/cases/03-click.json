@@ -1,0 +1,53 @@
+{
+  "id": "03-click",
+  "title": "A click re-renders the scene (state to scene)",
+  "steps": [
+    {
+      "ready": {}
+    },
+    {
+      "show": "hello-ui/main"
+    },
+    {
+      "wait_node": {
+        "instance": "hello-ui/main",
+        "node": "go"
+      }
+    },
+    {
+      "event": {
+        "instance": "hello-ui/main",
+        "node": "go",
+        "type": "click"
+      }
+    },
+    {
+      "expect_node": {
+        "instance": "hello-ui/main",
+        "node": "count",
+        "props": {
+          "text": "1 clicks"
+        }
+      }
+    },
+    {
+      "event": {
+        "instance": "hello-ui/main",
+        "node": "go",
+        "type": "click"
+      }
+    },
+    {
+      "expect_node": {
+        "instance": "hello-ui/main",
+        "node": "count",
+        "props": {
+          "text": "2 clicks"
+        }
+      }
+    },
+    {
+      "expect_no_violations": true
+    }
+  ]
+}

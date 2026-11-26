@@ -1,14 +1,18 @@
 //! `pigeon-mock`: drive plugins the way Pigeon does, headless.
 //!
-//!   pigeon-mock validate-fixtures <dir>         validate valid/ and invalid/ fixture folders
-//!   pigeon-mock run <plugin-dir> [--show <instance>] [--wait-ms N]
-//!                                               launch, print ready, optional show, shut down
+//!   pigeon-mock validate-fixtures <examples-dir>
+//!   pigeon-mock run <plugin-dir> [--show <instance>]
+//!   pigeon-mock conformance <plugin-dir> [--cases DIR] [--goldens DIR] [--only ID] [--update-goldens] [--json FILE]
+//!   pigeon-mock render-scene <scene.json> --out <png> [--size WxH] [--theme dark|light] [--scale N]
 
-use std::path::PathBuf;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Duration;
 
+use pigeon_mock_host::conformance::{self, RunOptions};
+use pigeon_mock_host::render::{self, Theme};
 use pigeon_mock_host::{LaunchOptions, Schemas, Session};
 
 fn main() -> ExitCode {
@@ -16,11 +20,22 @@ fn main() -> ExitCode {
     match args.first().map(String::as_str) {
         Some("run") => run(&args[1..]),
         Some("validate-fixtures") => validate_fixtures(args.get(1).map(PathBuf::from)),
+        Some("conformance") => conformance_cmd(&args[1..]),
+        Some("render-scene") => render_scene_cmd(&args[1..]),
         _ => {
-            eprintln!("usage: pigeon-mock run <plugin-dir> [--show <instance>] | validate-fixtures <dir>");
+            eprintln!("usage: pigeon-mock run|conformance|render-scene|validate-fixtures ...  (see --help in the docs)");
             ExitCode::from(2)
         }
     }
+}
+
+/// Value of `--flag value`, if present.
+fn flag<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
+    args.windows(2).find(|w| w[0] == name).map(|w| w[1].as_str())
+}
+
+fn has(args: &[String], name: &str) -> bool {
+    args.iter().any(|a| a == name)
 }
 
 fn run(args: &[String]) -> ExitCode {
@@ -28,7 +43,6 @@ fn run(args: &[String]) -> ExitCode {
         eprintln!("usage: pigeon-mock run <plugin-dir> [--show <instance>]");
         return ExitCode::from(2);
     };
-    let show = args.windows(2).find(|w| w[0] == "--show").map(|w| w[1].clone());
     let schemas = Arc::new(Schemas::load());
     let session = match Session::launch(&PathBuf::from(dir), Arc::clone(&schemas), LaunchOptions::default()) {
         Ok(s) => s,
@@ -45,13 +59,13 @@ fn run(args: &[String]) -> ExitCode {
         }
     };
     println!("ready: {}", ready["plugin"]);
-    if let Some(instance) = show {
-        if let Err(e) = session.show(&instance) {
+    if let Some(instance) = flag(args, "--show") {
+        if let Err(e) = session.show(instance) {
             eprintln!("{e}");
             return ExitCode::FAILURE;
         }
-        match session.wait_until(Duration::from_secs(5), |st| st.scenes.get(&instance).cloned(), "scene") {
-            Some(scene) => println!("scene {instance}: {}", serde_json::to_string(&scene).unwrap_or_default()),
+        match session.wait_until(Duration::from_secs(5), |st| st.scenes.get(instance).cloned(), "scene") {
+            Some(scene) => println!("scene {instance}: {} nodes", scene_count(&scene)),
             None => {
                 eprintln!("no scene for {instance} within 5 s");
                 return ExitCode::FAILURE;
@@ -65,6 +79,111 @@ fn run(args: &[String]) -> ExitCode {
     }
     println!("shutdown clean: {exited}; violations: {}", violations.len());
     if violations.is_empty() { ExitCode::SUCCESS } else { ExitCode::FAILURE }
+}
+
+fn scene_count(v: &serde_json::Value) -> usize {
+    1 + v["children"].as_array().map(|c| c.iter().map(scene_count).sum::<usize>()).unwrap_or(0)
+}
+
+fn conformance_cmd(args: &[String]) -> ExitCode {
+    let Some(plugin) = args.first() else {
+        eprintln!("usage: pigeon-mock conformance <plugin-dir> [--cases DIR] [--goldens DIR] [--only ID] [--update-goldens] [--json FILE]");
+        return ExitCode::from(2);
+    };
+    let root = repo_root();
+    let cases_dir = flag(args, "--cases").map(PathBuf::from).unwrap_or_else(|| root.join("conformance/cases"));
+    let goldens = flag(args, "--goldens").map(PathBuf::from).unwrap_or_else(|| root.join("conformance/goldens"));
+    let only = flag(args, "--only");
+    if has(args, "--update-goldens") {
+        // SAFETY-free: environment is read by the golden comparison in this process only.
+        std::env::set_var("UPDATE_GOLDENS", "1");
+    }
+    let cases = match conformance::load_cases(&cases_dir) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("{e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let schemas = Arc::new(Schemas::load());
+    let opts = RunOptions { goldens, timeout: Duration::from_secs(5) };
+    let mut results = Vec::new();
+    for (_, case) in cases {
+        if let Some(id) = only {
+            if case["id"].as_str() != Some(id) {
+                continue;
+            }
+        }
+        let r = conformance::run_case(&case, &PathBuf::from(plugin), Arc::clone(&schemas), &opts);
+        let mark = if r.passed { "PASS" } else { "FAIL" };
+        println!("{mark} {} ({:.1}s){}", r.id, r.elapsed.as_secs_f64(), if r.skipped > 0 { format!(" [{} skipped]", r.skipped) } else { String::new() });
+        for (n, name, outcome) in &r.steps {
+            match outcome {
+                conformance::Outcome::Fail(m) => println!("    step {n} {name}: {m}"),
+                conformance::Outcome::Skipped(m) => println!("    step {n} {name}: skipped: {m}"),
+                conformance::Outcome::Pass => {}
+            }
+        }
+        results.push(r);
+    }
+    let failed = results.iter().filter(|r| !r.passed).count();
+    println!("{} case(s), {} failed", results.len(), failed);
+    if let Some(path) = flag(args, "--json") {
+        let report: Vec<serde_json::Value> = results
+            .iter()
+            .map(|r| serde_json::json!({"id": r.id, "title": r.title, "passed": r.passed, "skipped": r.skipped,
+                "steps": r.steps.iter().map(|(n, name, o)| serde_json::json!({"step": n, "name": name, "outcome": format!("{o:?}")})).collect::<Vec<_>>()}))
+            .collect();
+        if let Err(e) = std::fs::write(path, serde_json::to_string_pretty(&report).unwrap_or_default()) {
+            eprintln!("cannot write {path}: {e}");
+        }
+    }
+    if failed == 0 && !results.is_empty() { ExitCode::SUCCESS } else { ExitCode::FAILURE }
+}
+
+/// The repository root (two levels above the crate's `sdk/rust` workspace).
+fn repo_root() -> PathBuf {
+    let here = Path::new(env!("CARGO_MANIFEST_DIR"));
+    here.join("../../..").canonicalize().unwrap_or_else(|_| PathBuf::from("."))
+}
+
+fn render_scene_cmd(args: &[String]) -> ExitCode {
+    let (Some(input), Some(out)) = (args.first(), flag(args, "--out")) else {
+        eprintln!("usage: pigeon-mock render-scene <scene.json> --out <png> [--size WxH] [--theme dark|light] [--scale N]");
+        return ExitCode::from(2);
+    };
+    let size = flag(args, "--size").and_then(|s| {
+        let (w, h) = s.split_once('x')?;
+        Some((w.parse().ok()?, h.parse().ok()?))
+    });
+    let (w, h) = size.unwrap_or((640, 480));
+    let theme = if flag(args, "--theme") == Some("light") { Theme::light() } else { Theme::dark() };
+    let scale: f32 = flag(args, "--scale").and_then(|s| s.parse().ok()).unwrap_or(1.0);
+    let text = match std::fs::read_to_string(input) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("{input}: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let scene: serde_json::Value = match serde_json::from_str(&text) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("{input}: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let surface = render::render_scene(&scene, (w, h), &theme, &HashMap::new(), scale);
+    match render::png::encode(&surface).and_then(|bytes| std::fs::write(out, bytes).map_err(|e| e.to_string())) {
+        Ok(()) => {
+            println!("wrote {out} ({}x{} px)", surface.w, surface.h);
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            ExitCode::FAILURE
+        }
+    }
 }
 
 fn validate_fixtures(dir: Option<PathBuf>) -> ExitCode {
@@ -97,8 +216,7 @@ fn validate_fixtures(dir: Option<PathBuf>) -> ExitCode {
             } else {
                 schemas.check_to_plugin(&value)
             };
-            let ok = problems.is_empty() == expect_valid;
-            if !ok {
+            if problems.is_empty() != expect_valid {
                 failures += 1;
                 println!("FAIL {sub}/{name}: {}", problems.first().map(|p| p.to_string()).unwrap_or_else(|| "accepted".into()));
             }
