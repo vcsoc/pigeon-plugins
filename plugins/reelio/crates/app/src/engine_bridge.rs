@@ -206,6 +206,20 @@ impl EngineBridge for Real {
                 .and_then(|(artwork, edits)| {
                     encode(e.artwork_edit(reelio_engine::ArtworkEditRequest { artwork, edits }))
                 }),
+            Request::SearchBrowserOpen { kind, query } => decode::<reelio_engine::SearchKind>(Value::String(kind))
+                .and_then(|kind| encode(e.search_browser_open(reelio_engine::SearchBrowserRequest { kind, query }).map(|()| Value::Null))),
+            Request::SearchBrowserAllows { url } => encode(Ok(e.search_browser_allows(url))),
+            Request::SearchBrowserDownload { kind, url } => decode::<reelio_engine::SearchKind>(Value::String(kind))
+                .and_then(|kind| encode(e.search_browser_download(reelio_engine::SearchBrowserDownloadRequest { kind, url, cookie: String::new() }))),
+            Request::SubtitleModels => encode(e.subtitle_models()),
+            Request::SubtitleModelStart { model, document, language } => decode::<reelio_engine::Document>(document)
+                .and_then(|d| encode(e.subtitle_model_start(reelio_engine::SubtitleModelStartRequest { model, document: Some(d), language }))),
+            Request::SubtitleModelStatus => encode(e.subtitle_model_status()),
+            Request::SubtitleModelCancel => {
+                e.subtitle_model_cancel();
+                Ok(Value::Null)
+            }
+            Request::SubtitleModelResults { id } => encode(e.subtitle_model_results(id)),
             Request::UpdateCheck => encode(e.update_check()),
             Request::UpdateDownload { offer_id } => encode(e.update_download(offer_id)),
             Request::SubtitleEditorDirty { dirty } => {

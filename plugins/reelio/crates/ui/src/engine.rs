@@ -59,6 +59,36 @@ pub enum Request {
     UpdateDownload {
         offer_id: String,
     },
+    /// Former `search_browser_open`: opens the provider search (host window or external browser).
+    SearchBrowserOpen {
+        kind: String,
+        query: String,
+    },
+    /// Navigation policy check for a provider URL.
+    SearchBrowserAllows {
+        url: String,
+    },
+    /// Former `search_browser_download`: queues a download offer for confirmation (resource prompt).
+    SearchBrowserDownload {
+        kind: String,
+        url: String,
+    },
+    /// Former `subtitle_models`.
+    SubtitleModels,
+    /// Former `subtitle_model_start`: translation of the current document with a local model.
+    SubtitleModelStart {
+        model: String,
+        document: Value,
+        language: String,
+    },
+    /// Former `subtitle_model_status`.
+    SubtitleModelStatus,
+    /// Former `subtitle_model_cancel`.
+    SubtitleModelCancel,
+    /// Former `subtitle_model_results`.
+    SubtitleModelResults {
+        id: String,
+    },
     /// Authorizes dropped files (engine `media_dropped`); returns the authorized canonical paths.
     MediaDropped {
         paths: Vec<String>,
