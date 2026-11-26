@@ -42,19 +42,20 @@ def enlarge(request):
     luminance = (rgb[:, :, 0] * .299 + rgb[:, :, 1] * .587 + rgb[:, :, 2] * .114) / 255
     padded = np.pad(luminance, ((8, TILE), (8, TILE)), mode='edge')
     output = np.array(baseline, dtype=np.uint8)
-    for y in range(0, height, STEP):
-        for x in range(0, width, STEP):
-            tile = padded[y:y + TILE, x:x + TILE][None, None].astype(np.float32)
-            prediction = session.run(None, {name: tile})[0][0, 0]
-            if prediction.shape != (672, 672) or not np.isfinite(prediction).all():
-                raise rt.PluginError('unexpected super-resolution output')
-            h, w = min(STEP, height - y), min(STEP, width - x)
-            ai = Image.fromarray(np.clip(prediction[24:24 + h * 3, 24:24 + w * 3], 0, 1), mode='F').resize(
-                (w * scale, h * scale), Image.Resampling.BILINEAR)
-            region = output[y * scale:(y + h) * scale, x * scale:(x + w) * scale, :3].astype(np.float32)
-            base_y = region[:, :, 0] * .299 + region[:, :, 1] * .587 + region[:, :, 2] * .114
-            region += (np.asarray(ai) * 255 - base_y)[:, :, None]
-            output[y * scale:(y + h) * scale, x * scale:(x + w) * scale, :3] = np.clip(region, 0, 255).astype(np.uint8)
+    positions = [(y, x) for y in range(0, height, STEP) for x in range(0, width, STEP)]
+    for index, (y, x) in enumerate(positions):
+        rt.progress(request, index / len(positions), f'Enlarging tile {index + 1} of {len(positions)}')
+        tile = padded[y:y + TILE, x:x + TILE][None, None].astype(np.float32)
+        prediction = session.run(None, {name: tile})[0][0, 0]
+        if prediction.shape != (672, 672) or not np.isfinite(prediction).all():
+            raise rt.PluginError('unexpected super-resolution output')
+        h, w = min(STEP, height - y), min(STEP, width - x)
+        ai = Image.fromarray(np.clip(prediction[24:24 + h * 3, 24:24 + w * 3], 0, 1), mode='F').resize(
+            (w * scale, h * scale), Image.Resampling.BILINEAR)
+        region = output[y * scale:(y + h) * scale, x * scale:(x + w) * scale, :3].astype(np.float32)
+        base_y = region[:, :, 0] * .299 + region[:, :, 1] * .587 + region[:, :, 2] * .114
+        region += (np.asarray(ai) * 255 - base_y)[:, :, None]
+        output[y * scale:(y + h) * scale, x * scale:(x + w) * scale, :3] = np.clip(region, 0, 255).astype(np.uint8)
     Image.fromarray(output, 'RGBA').save(request['output'], format='PNG')
     return {'output_size': list(size)}
 
@@ -67,4 +68,7 @@ def self_test(tmp):
 
 
 if __name__ == '__main__':
+    if '--plugin' in sys.argv[1:]:          # protocol v2: the UI process (ui.py) drives this file
+        import ui
+        sys.exit(ui.main())
     rt.main({'enlarge': enlarge}, self_test=self_test)

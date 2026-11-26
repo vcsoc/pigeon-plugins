@@ -2,8 +2,8 @@
 """Copy shared/run and shared/plugin_runtime.py into every standalone plugin.
 
 Each plugin folder must be self-contained (Pigeon installs one plugin at a time), so the shared
-launcher/runtime are duplicated, not imported. Edit shared/, run this script, commit the result.
-`build_index.py --check` fails if any copy differs.
+launcher, runtime and protocol-v2 UI adapter are duplicated, not imported. Edit shared/, run this
+script, commit the result. `build_index.py --check` fails if any copy differs.
 """
 import json
 import shutil
@@ -12,13 +12,12 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SHARED = ("run", "plugin_runtime.py")
+SHARED = ("run", "plugin_runtime.py", "ui_support.py")
 
 
 def editor_plugins():
     for manifest in sorted((ROOT / "plugins").glob("*/plugin.json")):
-        m = json.loads(manifest.read_text())
-        if m.get("kind") == "editor-worker" or m.get("worker", {}).get("standalone"):
+        if json.loads(manifest.read_text()).get("worker", {}).get("standalone"):
             yield manifest.parent
 
 
