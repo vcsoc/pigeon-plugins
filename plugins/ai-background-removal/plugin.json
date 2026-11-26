@@ -1,9 +1,12 @@
 {
   "id": "ai-background-removal",
   "name": "AI Background Removal",
-  "version": "1.1.1",
+  "version": "2.0.0",
   "category": "Image editing",
-  "kind": "editor-worker",
+  "kind": "app",
+  "provides": [
+    "ops"
+  ],
   "description": "Remove the background from a saved image with U2-Net-P, entirely offline once the 4.5 MB model is downloaded. A preview must be accepted before anything is saved.",
   "author": "Pigeon",
   "licence": "Apache-2.0",
@@ -15,7 +18,7 @@
     "runtime": "python3",
     "python": ">=3.10,<3.14",
     "entry": "run",
-    "protocol": 1,
+    "protocol": 2,
     "standalone": true,
     "requires": [
       "numpy",
@@ -27,9 +30,12 @@
       "setup": "run --setup",
       "health": "run --health [--verify]",
       "selfTest": "run --self-test",
-      "request": "run  (JSON on stdin)"
+      "request": "run  (JSON on stdin)",
+      "plugin": "run --plugin",
+      "uninstall": "run --uninstall"
     }
   },
+  "sdk": "python",
   "files": [
     {
       "path": "plugin.json"
@@ -43,6 +49,12 @@
     },
     {
       "path": "worker.py"
+    },
+    {
+      "path": "ui.py"
+    },
+    {
+      "path": "ui_support.py"
     },
     {
       "path": "requirements.txt"
@@ -66,5 +78,53 @@
     "pypi.org",
     "release-assets.githubusercontent.com"
   ],
-  "privacy": "Setup downloads the Python packages and model files once. Images and prompts are processed locally and never sent anywhere."
+  "privacy": "Setup downloads the Python packages and model files once. Images and prompts are processed locally and never sent anywhere.",
+  "ui": {
+    "protocol": 2,
+    "activation": "visible",
+    "contributions": [
+      {
+        "slot": "inspector.panel",
+        "id": "panel",
+        "title": "AI Background Removal",
+        "icon": "scissors",
+        "order": 61,
+        "applies_to": {
+          "kinds": [
+            "image"
+          ],
+          "min": 1,
+          "max": 1
+        }
+      },
+      {
+        "slot": "asset.action",
+        "id": "open",
+        "title": "Remove background with AI…",
+        "icon": "scissors",
+        "applies_to": {
+          "kinds": [
+            "image"
+          ],
+          "min": 1,
+          "max": 1
+        },
+        "selection": "one",
+        "group": "AI"
+      },
+      {
+        "slot": "modal",
+        "id": "tool",
+        "title": "AI Background Removal",
+        "size": "medium",
+        "resizable": true,
+        "modal": false
+      }
+    ],
+    "permissions": [
+      "selection",
+      "library.write",
+      "windows"
+    ]
+  }
 }
