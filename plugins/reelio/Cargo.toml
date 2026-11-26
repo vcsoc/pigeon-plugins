@@ -1,6 +1,6 @@
 [workspace]
 members = ["crates/*"]
-default-members = ["crates/reelio-domain", "crates/reelio-ffmpeg", "crates/reelio-storage", "crates/reelio-application", "crates/engine"]
+default-members = ["crates/reelio-domain", "crates/reelio-ffmpeg", "crates/reelio-storage", "crates/reelio-application", "crates/engine", "crates/ui", "crates/app"]
 resolver = "2"
 
 [workspace.package]
