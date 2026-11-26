@@ -14,7 +14,7 @@ use std::sync::Arc;
 fn run_plugin() -> Result<(), String> {
     let spec = transport::spec()?;
     let plugin = Plugin::stdio(spec).map_err(|e| e.to_string())?;
-    let engine: Arc<dyn EngineBridge> = match Real::start(PluginHost::from_env()) {
+    let engine: Arc<dyn EngineBridge> = match Real::start(PluginHost::from_env(plugin.ctx())) {
         Ok(real) => Arc::new(real),
         Err(error) => Arc::new(Unavailable(format!(
             "The Reelio engine could not start: {error}"

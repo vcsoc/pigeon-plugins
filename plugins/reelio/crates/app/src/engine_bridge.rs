@@ -5,6 +5,7 @@
 //! Pigeon host (`dialogs.*`, `shell.*` services); until those services are wired through the SDK
 //! the [`PluginHost`] refuses them with an explicit message instead of guessing.
 
+use pigeon_plugin_sdk::runtime::Ctx;
 use reelio_engine::{
     ConfirmDialog, Engine, EngineHost, ExportStartRequest, FileDialog, Project, ReelioEngine,
     SettingsUpdateRequest, SubtitlePreviewRequest, WindowAction,
@@ -12,7 +13,7 @@ use reelio_engine::{
 use reelio_ui::engine::{Reply, Request};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -21,30 +22,72 @@ pub trait EngineBridge: Send + Sync + 'static {
     fn call(&self, request: Request) -> Reply;
 }
 
-/// Host services the engine needs. Dialogs are refused until the Pigeon host serves them.
+/// Host services the engine needs, served by the Pigeon host through the SDK (`dialogs` and `shell`
+/// permissions in `plugin.json`). Engine calls run on worker threads, so the blocking `Ctx::call`
+/// waits for the user without stalling the plugin's protocol thread.
 pub struct PluginHost {
     data_dir: PathBuf,
     videos_dir: Option<PathBuf>,
+    ctx: Option<Ctx>,
 }
 
 impl PluginHost {
-    /// Test host: engine data under `data_dir`, no Movies folder.
+    pub fn new(data_dir: PathBuf, ctx: Option<Ctx>) -> Self {
+        let videos_dir = std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Movies"));
+        Self {
+            data_dir,
+            videos_dir,
+            ctx,
+        }
+    }
+
     #[cfg(test)]
     pub fn new_for_tests(data_dir: PathBuf) -> Self {
         Self {
             data_dir,
             videos_dir: None,
+            ctx: None,
         }
     }
 
-    pub fn from_env() -> Self {
+    pub fn from_env(ctx: Ctx) -> Self {
         let data_dir = std::env::var_os("PIGEON_PLUGIN_DATA")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from(".data"));
-        Self {
-            data_dir,
-            videos_dir: std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Movies")),
-        }
+        Self::new(data_dir, Some(ctx))
+    }
+
+    fn dialog(&self, method: &str, request: &FileDialog) -> Result<Value, String> {
+        let ctx = self
+            .ctx
+            .as_ref()
+            .ok_or("The Pigeon host dialog service is not available in this context.")?;
+        let filters: Vec<Value> = request
+            .filters
+            .iter()
+            .map(|(name, exts)| json!({"name": name, "extensions": exts}))
+            .collect();
+        let params = json!({
+            "title": request.title,
+            "directory": request.directory.as_ref().map(|d| d.to_string_lossy().into_owned()),
+            "file_name": request.file_name,
+            "filters": filters,
+            "multiple": request.multiple,
+        });
+        ctx.call(method, params).map_err(|e| e.to_string())
+    }
+
+    fn paths(value: &Value) -> Vec<PathBuf> {
+        value
+            .get("paths")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(|p| p.as_str())
+                    .map(PathBuf::from)
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 }
 
@@ -55,24 +98,34 @@ impl EngineHost for PluginHost {
     fn videos_dir(&self) -> Option<PathBuf> {
         self.videos_dir.clone()
     }
-    fn pick_files(&self, _request: &FileDialog) -> Option<Vec<PathBuf>> {
-        None
+    fn pick_files(&self, request: &FileDialog) -> Option<Vec<PathBuf>> {
+        let paths = Self::paths(&self.dialog("dialog.open_file", request).ok()?);
+        (!paths.is_empty()).then_some(paths)
     }
-    fn pick_folder(&self, _request: &FileDialog) -> Option<PathBuf> {
-        None
+    fn pick_folder(&self, request: &FileDialog) -> Option<PathBuf> {
+        let value = self.dialog("dialog.pick_folder", request).ok()?;
+        Self::paths(&value).into_iter().next()
     }
-    fn save_file(&self, _request: &FileDialog) -> Option<PathBuf> {
-        None
+    fn save_file(&self, request: &FileDialog) -> Option<PathBuf> {
+        let value = self.dialog("dialog.save_file", request).ok()?;
+        Self::paths(&value).into_iter().next()
     }
-    /// Destructive or approval prompts default to "no" until the host confirmation service exists.
+    /// Yes/no prompts are rendered as in-plugin review dialogs; the engine's prompts default to No.
     fn confirm(&self, _request: &ConfirmDialog) -> bool {
         false
     }
-    fn open_url(&self, _url: &str) -> Result<(), String> {
-        Err("Opening links needs the Pigeon shell service, which this plugin build does not have yet.".into())
+    fn open_url(&self, url: &str) -> Result<(), String> {
+        let ctx = self
+            .ctx
+            .as_ref()
+            .ok_or("The Pigeon shell service is not available in this context.")?;
+        ctx.open_url(url).map_err(|e| e.to_string())
     }
     fn open_search_browser(&self, _url: &str) -> Result<(), String> {
-        Err("The isolated search browser needs the Pigeon host window service.".into())
+        Err(
+            "The isolated search browser is a host window service; use the browser link instead."
+                .into(),
+        )
     }
     fn window_control(&self, _action: WindowAction) -> Result<bool, String> {
         Ok(false)
