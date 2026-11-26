@@ -1,0 +1,25 @@
+[package]
+name = "reelio-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Tauri-free headless Reelio engine: one method per former Tauri command, plus events"
+
+[dependencies]
+reelio-application.workspace = true
+reelio-artwork.workspace = true
+reelio-domain.workspace = true
+reelio-ffmpeg.workspace = true
+reelio-resources.workspace = true
+reelio-storage.workspace = true
+reelio-subtitles.workspace = true
+reelio-updates.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+tracing = "=0.1.44"
+url = "=2.5.8"
+
+[dev-dependencies]
+tempfile.workspace = true
+reelio-domain.workspace = true
