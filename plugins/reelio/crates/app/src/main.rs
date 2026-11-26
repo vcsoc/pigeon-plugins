@@ -5,6 +5,7 @@
 //! so this confirms without touching the user's media or projects).
 
 mod engine_bridge;
+mod player;
 mod transport;
 
 use engine_bridge::{EngineBridge, PluginHost, Real, Unavailable};
@@ -14,13 +15,21 @@ use std::sync::Arc;
 fn run_plugin() -> Result<(), String> {
     let spec = transport::spec()?;
     let plugin = Plugin::stdio(spec).map_err(|e| e.to_string())?;
-    let engine: Arc<dyn EngineBridge> = match Real::start(PluginHost::from_env(plugin.ctx())) {
-        Ok(real) => Arc::new(real),
-        Err(error) => Arc::new(Unavailable(format!(
-            "The Reelio engine could not start: {error}"
-        ))),
-    };
+    let (engine, events): (Arc<dyn EngineBridge>, _) =
+        match Real::start(PluginHost::from_env(plugin.ctx())) {
+            Ok((real, events)) => (Arc::new(real), Some(events)),
+            Err(error) => (
+                Arc::new(Unavailable(format!(
+                    "The Reelio engine could not start: {error}"
+                ))),
+                None,
+            ),
+        };
     let app = transport::App::new(plugin.ctx(), engine);
+    transport::attach_player(&app);
+    if let Some(events) = events {
+        transport::forward_engine_events(&app, events);
+    }
     transport::start_ticker(&app);
     let handler_app = app.clone();
     plugin.run(move |_ctx, msg| transport::handle(&handler_app, msg));

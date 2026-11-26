@@ -141,10 +141,12 @@ pub struct Real {
 }
 
 impl Real {
-    pub fn start(host: PluginHost) -> Result<Self, String> {
-        let (engine, _events) = ReelioEngine::new(Arc::new(host))?;
-        // Engine events (job progress) are polled through `jobs_list`; the receiver is dropped here.
-        Ok(Self { engine })
+    /// Start the engine. The receiver carries `EngineEvent`s (previews, repairs, notifications).
+    pub fn start(
+        host: PluginHost,
+    ) -> Result<(Self, std::sync::mpsc::Receiver<reelio_engine::EngineEvent>), String> {
+        let (engine, events) = ReelioEngine::new(Arc::new(host))?;
+        Ok((Self { engine }, events))
     }
 }
 
@@ -289,7 +291,7 @@ mod tests {
 
         let data = dir.join("data");
         let bridge = match Real::start(PluginHost::new_for_tests(data.clone())) {
-            Ok(b) => b,
+            Ok((b, _events)) => b,
             Err(e) => panic!("engine start: {e}"),
         };
         let mut state = State::new();
@@ -314,6 +316,66 @@ mod tests {
             scene.contains("lane.canvas:"),
             "timeline lane rendered from real probe data"
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn engine_preview_url_decodes_to_exact_rgba_frames() {
+        if Command::new("ffmpeg")
+            .arg("-version")
+            .output()
+            .map(|o| !o.status.success())
+            .unwrap_or(true)
+        {
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("reelio-frames-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let media = dir.join("frames.mp4");
+        let ok = Command::new("ffmpeg")
+            .args([
+                "-y",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc=duration=2:size=320x180:rate=25",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+            ])
+            .arg(&media)
+            .status()
+            .unwrap()
+            .success();
+        assert!(ok);
+        let (bridge, _events) =
+            Real::start(PluginHost::new_for_tests(dir.join("data"))).expect("engine");
+        let path = media.to_string_lossy().into_owned();
+        bridge
+            .call(Request::MediaDropped {
+                paths: vec![path.clone()],
+            })
+            .expect("authorized");
+        bridge
+            .call(Request::MediaProbe { path: path.clone() })
+            .expect("probe");
+        let url = bridge
+            .call(Request::PreviewSource { path })
+            .expect("preview url");
+        let url = url.as_str().expect("url string").to_string();
+        let (w, h) = (160u32, 90u32);
+        let args = crate::player::decoder_args(&url, 0.0, w, h, false);
+        let out = Command::new("ffmpeg").args(&args).output().unwrap();
+        let frame = w as usize * h as usize * 4;
+        assert!(
+            out.stdout.len() >= frame * 10,
+            "decoded frames: {} bytes",
+            out.stdout.len()
+        );
+        assert_eq!(out.stdout.len() % frame, 0, "whole frames only");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

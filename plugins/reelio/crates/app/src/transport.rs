@@ -6,6 +6,7 @@
 //! engine replies, the 100 ms tick and host events all update it through [`update`].
 
 use crate::engine_bridge::EngineBridge;
+use crate::player::{Cmd, Player};
 use pigeon_plugin_sdk::canvas::DrawOp;
 use pigeon_plugin_sdk::protocol::{Incoming, NodeEvent, PointerPhase};
 use pigeon_plugin_sdk::runtime::{Ctx, PluginSpec};
@@ -14,7 +15,9 @@ use reelio_ui::scene;
 use reelio_ui::state::{Effect, Event, State};
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::OnceLock;
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::thread;
 use std::time::{Duration, Instant};
 
 /// The embedded manifest is the single source of truth for the static contributions.
@@ -210,6 +213,8 @@ pub struct App {
     pub ctx: Ctx,
     pub engine: Arc<dyn EngineBridge>,
     core: Mutex<Core>,
+    /// Frame pump; set once after creation (it holds a weak handle back to this app).
+    pub player: OnceLock<Player>,
 }
 
 impl App {
@@ -222,6 +227,7 @@ impl App {
                 pump: Pump::default(),
                 started: Instant::now(),
             }),
+            player: OnceLock::new(),
         })
     }
 
@@ -259,8 +265,28 @@ fn update_boxed(app: &Arc<App>, f: Box<dyn FnOnce(&mut Core) + Send>) {
                         );
                     }
                     Effect::CloseWindow => app.ctx.log("info", "close requested by the user"),
-                    // The preview element is driven by the engine's frame ring once it is wired.
-                    Effect::Seek { .. } | Effect::SetPlaying(_) => {}
+                    Effect::Seek { ms, fast } => send_player(app, Cmd::Seek { ms, exact: !fast }),
+                    Effect::Transport {
+                        playing,
+                        from_ms,
+                        speed,
+                        volume,
+                    } => send_player(
+                        app,
+                        Cmd::Transport {
+                            playing,
+                            from_ms,
+                            speed,
+                            volume,
+                        },
+                    ),
+                    Effect::LoadPreview { url, width, height } => {
+                        send_player(app, Cmd::Load { url, width, height })
+                    }
+                    Effect::HostToast { level, text } => {
+                        let level = if level == "error" { "error" } else { "info" };
+                        let _ = app.ctx.toast(level, &text);
+                    }
                 }
             }
         }
@@ -277,6 +303,43 @@ fn update_boxed(app: &Arc<App>, f: Box<dyn FnOnce(&mut Core) + Send>) {
             });
         });
     }
+}
+
+fn send_player(app: &Arc<App>, cmd: Cmd) {
+    if let Some(player) = app.player.get() {
+        player.send(cmd);
+    }
+}
+
+/// Create the playback pump for `app`. Its clock reports back through a weak handle (no cycle).
+pub fn attach_player(app: &Arc<App>) {
+    let weak = Arc::downgrade(app);
+    let on_clock = Arc::new(move |ms: f64| {
+        if let Some(app) = weak.upgrade() {
+            update(&app, move |core| {
+                core.state.dispatch(Event::PlaybackClock(ms))
+            });
+        }
+    });
+    let _ = app.player.set(Player::start(app.ctx.clone(), on_clock));
+}
+
+/// Forward engine notifications (`EngineEvent`) into the reducer.
+pub fn forward_engine_events(
+    app: &Arc<App>,
+    events: std::sync::mpsc::Receiver<reelio_engine::EngineEvent>,
+) {
+    let weak = Arc::downgrade(app);
+    thread::spawn(move || {
+        for event in events {
+            let Some(app) = weak.upgrade() else { break };
+            if let Ok(value) = serde_json::to_value(&event) {
+                update(&app, move |core| {
+                    core.state.dispatch(Event::EngineEvent(value))
+                });
+            }
+        }
+    });
 }
 
 /// Convert an SDK node event into the reducer's `ui` event (`node`, `value`).

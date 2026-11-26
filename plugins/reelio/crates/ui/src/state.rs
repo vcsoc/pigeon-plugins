@@ -98,6 +98,10 @@ pub enum Event {
         id: u64,
         reply: Reply,
     },
+    /// Notification from the engine event channel (`{"event": "...", ...}`).
+    EngineEvent(Value),
+    /// Playback clock reported by the frame pump, in source milliseconds.
+    PlaybackClock(f64),
     /// Host clock tick (ms, monotonic). Drives toasts, polling, debounced validation, seeks.
     Tick {
         now: f64,
@@ -122,6 +126,11 @@ pub enum Effect {
         key: String,
         value: String,
     },
+    /// Mirror a notification to the Pigeon host toast service (`notify.toast`).
+    HostToast {
+        level: String,
+        text: String,
+    },
     /// Ask the host to close the plugin window (after the confirmation flow).
     CloseWindow,
     /// Set the preview element source/timeline position (host applies it to the media element).
@@ -129,7 +138,19 @@ pub enum Effect {
         ms: f64,
         fast: bool,
     },
-    SetPlaying(bool),
+    /// Start (`playing`) or stop the preview clock and its audio at `from_ms` with `speed`/`volume`.
+    Transport {
+        playing: bool,
+        from_ms: f64,
+        speed: f64,
+        volume: f64,
+    },
+    /// A new preview source is ready: decode frames of `url` at this pixel size.
+    LoadPreview {
+        url: String,
+        width: u32,
+        height: u32,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -427,6 +448,8 @@ impl State {
         match event {
             Event::Tick { now } => self.tick(now),
             Event::Engine { id, reply } => self.engine_reply(id, reply),
+            Event::EngineEvent(value) => self.engine_event(&value),
+            Event::PlaybackClock(ms) => self.playback_clock(ms),
             Event::Command { id } => self.command(&id),
             Event::Drop { paths } => {
                 // The engine authorizes dropped files before any probe; imports follow the reply.
@@ -617,8 +640,10 @@ impl State {
                             .ok_or_else(|| "bad url".to_string())
                     }) {
                         Ok(url) => {
-                            self.preview.url = Some(url);
+                            self.preview.url = Some(url.clone());
                             self.preview.error = None;
+                            let (width, height) = self.frame_size();
+                            self.outbox.push(Effect::LoadPreview { url, width, height });
                         }
                         Err(e) => {
                             self.preview.error =
@@ -661,6 +686,85 @@ impl State {
             }
         }
         self.after_jobs_change();
+    }
+
+    /// Engine notifications: preview readiness, dependency repair, toasts, resource prompts, close.
+    fn engine_event(&mut self, value: &Value) {
+        match value.get("event").and_then(Value::as_str).unwrap_or("") {
+            "preview:ready" => {
+                let path = value.get("path").and_then(Value::as_str).unwrap_or("");
+                let url = value.get("url").and_then(Value::as_str).unwrap_or("").to_string();
+                if self.source_asset().map(|a| a.path == path).unwrap_or(false) && !url.is_empty() {
+                    self.preview.url = Some(url.clone());
+                    self.preview.error = None;
+                    let (width, height) = self.frame_size();
+                    self.outbox.push(Effect::LoadPreview { url, width, height });
+                }
+            }
+            "dependencies:repair" => {
+                let message = value.get("message").and_then(Value::as_str).unwrap_or("").to_string();
+                match value.get("phase").and_then(Value::as_str) {
+                    Some("started") => self.busy = Some(message),
+                    Some("finished") => {
+                        self.busy = None;
+                        self.set_notice(if message.is_empty() {
+                            "Required components are installed and verified. Preview is ready.".into()
+                        } else {
+                            message
+                        });
+                        self.check_dependencies();
+                    }
+                    _ => {
+                        self.busy = None;
+                        self.set_error(message);
+                    }
+                }
+            }
+            "dependencies:changed" => self.check_dependencies(),
+            "notification" => {
+                let text = value.get("text").and_then(Value::as_str).unwrap_or("").to_string();
+                let level = value.get("level").and_then(Value::as_str).unwrap_or("info").to_string();
+                self.outbox.push(Effect::HostToast { level: level.clone(), text: text.clone() });
+                if level == "error" || level == "warning" {
+                    self.set_error(text);
+                } else {
+                    self.set_notice(text);
+                }
+            }
+            "resource:download-requested" => {
+                if let Some(info) = value.get("info") {
+                    if let Ok(r) = serde_json::from_value::<engine::PendingResource>(info.clone()) {
+                        self.queue_resource(r);
+                    }
+                }
+            }
+            "resource:error" => {
+                let text = value.get("error").and_then(Value::as_str).unwrap_or("Resource error").to_string();
+                self.set_error(text);
+            }
+            "app:close-requested" => self.quit(),
+            "app:close-blocked" => self.set_error(
+                "An export, component installation or update download is running. Wait for completion or cancel the operation before closing Reelio.",
+            ),
+            "export:updated" => self.last_jobs_poll = f64::NEG_INFINITY,
+            _ => {}
+        }
+    }
+
+    /// Frame pixels for the preview decoder: the source size, at most 960 px wide, even dimensions.
+    pub fn frame_size(&self) -> (u32, u32) {
+        let stream = self
+            .source_asset()
+            .and_then(|a| a.streams.iter().find(|s| is_video_stream(s)));
+        let sw: f64 = stream
+            .and_then(|s| s.prop("width").parse().ok())
+            .unwrap_or(640.0);
+        let sh: f64 = stream
+            .and_then(|s| s.prop("height").parse().ok())
+            .unwrap_or(360.0);
+        let scale = 960f64.min(sw.max(2.0)) / sw.max(2.0);
+        let even = |v: f64| (((v.round() as u32) / 2) * 2).max(2);
+        (even(sw * scale), even(sh * scale))
     }
 
     fn merge_jobs(&mut self, jobs: Vec<Job>) {
@@ -1709,7 +1813,7 @@ impl State {
             "play" | "toggle" => self.toggle_play(),
             "stop" => {
                 self.playing = false;
-                self.outbox.push(Effect::SetPlaying(false));
+                self.transport(false);
                 self.media_time = 0.0;
                 self.outbox.push(Effect::Seek {
                     ms: 0.0,
@@ -1726,7 +1830,7 @@ impl State {
                 let frame = preview_frame_ms(rate.as_deref());
                 let direction = if arg == "next_frame" { 1.0 } else { -1.0 };
                 self.playing = false;
-                self.outbox.push(Effect::SetPlaying(false));
+                self.transport(false);
                 let target = frame_target(self.media_time, direction, frame, fallback_end);
                 self.set_media_time(target);
             }
@@ -1787,9 +1891,30 @@ impl State {
         PLAYBACK_SPEEDS[self.speed_index]
     }
 
+    /// Emit a transport command from the current media position, speed and volume.
+    pub fn transport(&mut self, playing: bool) {
+        self.playing = playing;
+        let speed = self.speed();
+        let volume = self.volume;
+        let from_ms = self.media_time;
+        self.outbox.push(Effect::Transport {
+            playing,
+            from_ms,
+            speed,
+            volume,
+        });
+    }
+
+    /// Clock reported by the frame pump while playing. Not an edit: no undo entry, no dirtiness.
+    pub fn playback_clock(&mut self, ms: f64) {
+        self.media_time = ms.clamp(0.0, self.source_duration_ms().max(0.0));
+        self.playhead = self.media_time + self.video_offset() as f64;
+    }
+
     fn toggle_play(&mut self) {
         self.playing = !self.playing;
-        self.outbox.push(Effect::SetPlaying(self.playing));
+        let playing = self.playing;
+        self.transport(playing);
     }
 
     fn set_media_time(&mut self, ms: f64) {
