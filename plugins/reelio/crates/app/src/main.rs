@@ -6,6 +6,7 @@
 
 mod consent;
 mod engine_bridge;
+mod images;
 mod player;
 mod transport;
 

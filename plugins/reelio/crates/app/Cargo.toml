@@ -13,6 +13,8 @@ path = "src/main.rs"
 [dependencies]
 reelio-ui = { path = "../ui" }
 reelio-engine = { path = "../engine" }
+reelio-artwork.workspace = true
+reelio-resources.workspace = true
 pigeon-plugin-sdk = { path = "../../vendor/pigeon-plugin-sdk" }
 serde.workspace = true
 serde_json.workspace = true

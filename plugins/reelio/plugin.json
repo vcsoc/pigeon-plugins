@@ -42,6 +42,7 @@
       {"slot": "inspector.panel", "id": "project", "title": "Project tools", "icon": "sliders", "order": 20},
       {"slot": "asset.action", "id": "open-in-reelio", "title": "Open in Reelio", "icon": "film", "applies_to": {"kinds": ["video", "audio"], "min": 1}, "selection": "one", "group": "open"},
       {"slot": "asset.action", "id": "add-to-reelio", "title": "Add to Reelio project", "icon": "plus", "applies_to": {"kinds": ["video", "audio", "subtitle", "image"], "min": 1}, "selection": "any", "group": "project"},
+      {"slot": "drop.target", "id": "cover-drop", "accepts": ["jpg", "jpeg", "png", "webp", "avif"], "where": "cover:preview"},
       {"slot": "preferences.page", "id": "prefs", "title": "Reelio", "icon": "film", "order": 50},
       {"slot": "modal", "id": "settings", "title": "Preferences", "size": "medium", "resizable": false, "modal": true},
       {"slot": "modal", "id": "about", "title": "About Reelio", "size": "small", "resizable": false, "modal": true},

@@ -599,13 +599,13 @@ fn timeline(s: &State) -> Value {
         lanes.push(text("timeline.empty", "Drop media into the media pool to begin. Every audio and subtitle stream gets its own lane.", "body"));
     }
     if let Some(art) = &p.artwork {
-        lanes.push(row(
-            "lane.cover",
+        let mut cover = row(
+            "cover:lane",
             vec![
                 node(
-                    "cover.thumb",
+                    "cover:lane:thumbnail",
                     "image",
-                    json!({"inline_jpeg": art.jpeg, "width": 56, "height": 56, "fit": "cover"}),
+                    json!({"resource":"cover:project", "width":{"px":56}, "height":{"px":56}, "fit":"cover", "on":["double_click"]}),
                 ),
                 column(
                     "cover.text",
@@ -627,11 +627,15 @@ fn timeline(s: &State) -> Value {
                     ],
                     2.0,
                 ),
-                button("cover.edit", "Edit", None, "ghost", s.busy.is_none()),
-                button("cover.remove", "Remove", None, "ghost", s.busy.is_none()),
+                button("cover:edit", "Edit", None, "ghost", s.busy.is_none()),
+                button("cover:remove", "Remove", None, "ghost", s.busy.is_none()),
             ],
             8.0,
-        ));
+        );
+        cover["on"] = json!(["double_click"]);
+        cover["children"][1]["id"] = json!("cover:lane:label");
+        cover["children"][1]["on"] = json!(["double_click"]);
+        lanes.push(cover);
     }
     let zoom_pct = format!("{}%", (s.timeline_view.zoom * 100.0).round());
     let head = row(
@@ -688,9 +692,12 @@ fn artwork_studio(s: &State) -> Value {
             let host = r.get("source_host").and_then(Value::as_str).unwrap_or("");
             let w = r.get("width").and_then(Value::as_u64).unwrap_or(0);
             let h = r.get("height").and_then(Value::as_u64).unwrap_or(0);
-            row(
+            column(
                 &format!("art:row:{i}"),
                 vec![
+                    if let Some(url) = r["thumbnail_url"].as_str().filter(|u| !u.is_empty()) {
+                        node(&format!("art.thumb:{i}"), "image", json!({"resource":crate::poster::thumbnail_rid(url), "height":{"px":104}, "fit":"contain"}))
+                    } else { node(&format!("art.no_thumb:{i}"),"spacer",json!({"height":{"px":104}})) },
                     column(
                         &format!("art:info:{i}"),
                         vec![
@@ -731,31 +738,32 @@ fn artwork_studio(s: &State) -> Value {
         .iter()
         .map(|r| json!({"value": crate::poster::proportion_key(*r), "label": r.label()}))
         .collect();
-    let search = row(
+    let search_fields = vec![
+        input("art:query", &p.query, "Movie title and year", "change"),
+        button(
+            "art:search",
+            "Search posters",
+            Some("search"),
+            "primary",
+            s.busy.is_none(),
+        ),
+        orient("sparkle", "Landscape", "landscape"),
+        orient("sparkle", "Portrait", "portrait"),
+        node(
+            "art:ratio",
+            "select",
+            json!({"label": "Image proportions", "value": crate::poster::proportion_key(p.proportion), "options": ratio_options}),
+        ),
+        node(
+            "art:size",
+            "select",
+            json!({"label": "Results per page", "value": p.page_size.to_string(), "options": ([12,24,48].map(|n|json!({"value":n.to_string(),"label":n.to_string()})))}),
+        ),
+    ];
+    let search = node(
         "art.search",
-        vec![
-            input("art:query", &p.query, "Movie title and year", "submit"),
-            button(
-                "art:search",
-                "Search posters",
-                Some("search"),
-                "primary",
-                s.busy.is_none(),
-            ),
-            orient("sparkle", "Landscape", "landscape"),
-            orient("sparkle", "Portrait", "portrait"),
-            node(
-                "art:ratio",
-                "select",
-                json!({"label": "Image proportions", "value": crate::poster::proportion_key(p.proportion), "options": ratio_options}),
-            ),
-            node(
-                "art:size",
-                "select",
-                json!({"label": "Results per page", "value": p.page_size, "options": [12, 24, 48]}),
-            ),
-        ],
-        6.0,
+        "wrap",
+        json!({"children":search_fields,"gap":6}),
     );
     let pager = row(
         "art.pager",
@@ -776,76 +784,209 @@ fn artwork_studio(s: &State) -> Value {
         ],
         8.0,
     );
-    let cover = match &s.project().artwork {
-        Some(_) => node("art.preview", "image", json!({"resource": "cover:project", "fit": "contain", "height": {"px": 260}})),
-        None => text("art.empty", "No cover applied. Search posters, import an image, or drop a JPEG, PNG, WebP or AVIF image on the inspector.", "body"),
-    };
-    let edit_tools = row(
-        "art.edit",
+    let mut children = vec![row(
+        "art.header",
         vec![
+            text("art.title", "Poster & cover", "title"),
             button(
-                "art:rotate:left",
-                "Rotate left",
-                Some("rotate-ccw"),
-                "ghost",
-                s.project().artwork.is_some(),
+                "art:choose",
+                "Import local image",
+                Some("folder-open"),
+                "default",
+                s.busy.is_none(),
             ),
             button(
-                "art:rotate:right",
-                "Rotate right",
-                Some("rotate-cw"),
+                "art:browser",
+                if p.browser && p.editor.is_some() {
+                    "Back to image editor"
+                } else {
+                    "Find artwork"
+                },
+                Some("search"),
                 "ghost",
-                s.project().artwork.is_some(),
-            ),
-            button(
-                "art:flip",
-                "Flip horizontal",
-                Some("flip-horizontal"),
-                "ghost",
-                s.project().artwork.is_some(),
-            ),
-            button(
-                "cover:remove",
-                "Remove cover",
-                None,
-                "danger",
-                s.project().artwork.is_some(),
+                true,
             ),
         ],
-        6.0,
-    );
-    let notice = p.error.clone().or(p.notice.clone()).unwrap_or_default();
-    column(
-        "artwork",
-        vec![
+        6.,
+    )];
+    if p.browser || p.editor.is_none() {
+        children.extend([
             search,
-            text("art.notice", &notice, "caption"),
             row(
-                "art.body",
+                "art.link",
                 vec![
-                    column(
-                        "art.results",
-                        vec![node(
-                            "art.list",
-                            "scroll",
-                            json!({"axis": "vertical", "children": [column("art.rows", rows, 6.0)]}),
-                        )],
-                        6.0,
+                    input("art:url", &p.url, "Public HTTPS artwork URL", "change"),
+                    button(
+                        "art:offer",
+                        "Review download",
+                        None,
+                        "default",
+                        !p.url.trim().is_empty(),
                     ),
-                    column("art.current", vec![cover, edit_tools], 8.0),
                 ],
-                12.0,
+                6.,
             ),
             pager,
-            button(
-                "art:apply",
-                "Apply cover to project",
-                Some("check"),
-                "primary",
-                s.project().artwork.is_some(),
-            ),
-        ],
-        8.0,
+        ]);
+        if p.pending {
+            children.push(text("art.busy", "Searching artwork…", "caption"));
+        }
+        children.push(node("art.list","scroll",json!({"axis":"vertical","height":{"fill":1},"children":[node("art.grid","grid",json!({"columns":if s.window_width<820.0{2}else{4},"gap":8,"children":rows}))]})));
+    } else if let Some(ed) = &p.editor {
+        children.push(cover_editor(s, ed));
+    }
+    if let Some(notice) = p.error.as_ref().or(p.notice.as_ref()) {
+        children.push(text("art.notice", notice, "caption"));
+    }
+    column("artwork", children, 8.)
+}
+
+fn cover_editor(s: &State, ed: &crate::cover_editor::CoverEditor) -> Value {
+    let c = ed.edits.crop;
+    let resize = ed.edits.resize;
+    let numeric = |id: &str, label: &str, v: u32, max: u32| {
+        node(
+            id,
+            "number_input",
+            json!({"value":v,"min":2,"max":max,"step":1,"label":label,"on":["change"]}),
+        )
+    };
+    let toggle = |id: &str, label: &str, active: bool| {
+        let mut b = button(id, label, None, "ghost", true);
+        b["toggled"] = json!(active);
+        b
+    };
+    let slider = |id: &str, label: &str, v: f64| {
+        node(
+            id,
+            "slider",
+            json!({"label":label,"min":0.1,"max":3.,"step":0.01,"value":v,"on":["change","double_click"]}),
+        )
+    };
+    let presets = crate::crop::CROP_PRESETS
+        .iter()
+        .enumerate()
+        .map(|(i, (name, _, _))| button(&format!("art:preset:{i}"), name, None, "ghost", true))
+        .collect::<Vec<_>>();
+    let controls = vec![
+        text("art.controls.title", "Image editor", "title"),
+        node("art.presets", "wrap", json!({"children":presets,"gap":3})),
+        row(
+            "art.crop.size",
+            vec![
+                numeric(
+                    "art:crop_w",
+                    "Crop width",
+                    c.map_or(ed.original.width, |c| c.width),
+                    ed.original.width,
+                ),
+                numeric(
+                    "art:crop_h",
+                    "Crop height",
+                    c.map_or(ed.original.height, |c| c.height),
+                    ed.original.height,
+                ),
+                toggle("art:lock", "Lock crop proportions", ed.locked),
+            ],
+            4.,
+        ),
+        row(
+            "art.crop.tools",
+            vec![
+                button("art:clear_crop", "Clear crop", None, "ghost", c.is_some()),
+                button("art:rotate:left", "Rotate left", None, "ghost", true),
+                button("art:rotate:right", "Rotate right", None, "ghost", true),
+                toggle("art:flip", "Flip horizontal", ed.edits.flip),
+            ],
+            4.,
+        ),
+        row(
+            "art.resize",
+            vec![
+                numeric(
+                    "art:resize_w",
+                    "Resize width",
+                    resize.map_or(ed.rendered.width, |r| r.width),
+                    4096,
+                ),
+                numeric(
+                    "art:resize_h",
+                    "Resize height",
+                    resize.map_or(ed.rendered.height, |r| r.height),
+                    4096,
+                ),
+                toggle(
+                    "art:resize_lock",
+                    "Lock resize proportions",
+                    ed.resize_locked,
+                ),
+            ],
+            4.,
+        ),
+        row(
+            "art.tones",
+            vec![
+                toggle("art:grayscale", "Black & white", ed.edits.grayscale),
+                toggle("art:negative", "Negative", ed.edits.negative),
+                toggle("art:sepia", "Sepia", ed.edits.sepia),
+            ],
+            4.,
+        ),
+        slider("art:brightness", "Brightness", ed.edits.brightness),
+        slider("art:contrast", "Contrast", ed.edits.contrast),
+        row(
+            "art.edits",
+            vec![
+                button(
+                    "art:edit_undo",
+                    "Undo image edit",
+                    None,
+                    "ghost",
+                    !ed.past.is_empty(),
+                ),
+                button(
+                    "art:edit_redo",
+                    "Redo image edit",
+                    None,
+                    "ghost",
+                    !ed.future.is_empty(),
+                ),
+                button("art:reset", "Reset edits", None, "ghost", true),
+            ],
+            4.,
+        ),
+    ];
+    let kind = if s.window_width < 820.0 {
+        "column"
+    } else {
+        "row"
+    };
+    let mut image = node(
+        "art.preview",
+        "image",
+        json!({"resource":"cover:preview","fit":"contain","width":{"px":s.cover_canvas_width()},"height":{"px":220}}),
+    );
+    if ed.active_crop() != ed.edits.crop {
+        if let Some(c) = ed.active_crop() {
+            let width = s.cover_canvas_width();
+            let k = (width / c.width as f64).min(220. / c.height as f64);
+            let (w, h) = (c.width as f64 * k, c.height as f64 * k);
+            image = node(
+                "art.preview.live",
+                "canvas",
+                json!({"width":{"px":width},"height":{"px":220},"draw":{"frame":0,"ops":[{"op":"image","rid":"cover:original","src":{"x":c.x,"y":c.y,"w":c.width,"h":c.height},"dst":{"x":(width-w)/2.,"y":(220.-h)/2.,"w":w,"h":h}}]}}),
+            );
+        }
+    }
+    node(
+        "art.editor",
+        kind,
+        json!({"gap":10,"children":[
+            column("art.original",vec![text("art.original.title","Original image","title"),ed.canvas(s.cover_canvas_width())],6.),
+            node("art.controls","scroll",json!({"axis":"vertical","width":{"fill":1},"children":[column("art.control_body",controls,4.)]})),
+            column("art.live",vec![row("art.preview.heading",vec![text("art.preview.title","Live preview","title"),button("art:save_image","Save preview image",None,"ghost",ed.can_apply())],4.),image,
+                button("art:apply","Apply cover to project",Some("check"),"primary",ed.can_apply()&&s.busy.is_none())],6.),
+        ]}),
     )
 }
 
@@ -1391,8 +1532,8 @@ pub fn summary_panel(s: &State) -> Value {
     let p = s.project();
     let mut children = vec![section_title("summary.cover.title", "POSTER / COVER")];
     children.push(match &p.artwork {
-        Some(_) => node("summary.cover", "image", json!({"resource": "cover:project", "fit": "contain", "height": {"px": 140}, "on": ["double_click", "context"]})),
-        None => node("summary.cover.empty", "button", json!({"label": "Select a cover", "variant": "ghost", "on": ["click"]})),
+        Some(_) => node("cover:preview", "image", json!({"resource":"cover:project", "fit":"contain", "height":{"px":140}, "on":["double_click","context","drop"], "tooltip":"Drop one still image to apply it as cover"})),
+        None => node("cover:preview", "button", json!({"label":"Select a cover", "variant":"ghost", "on":["click","drop"], "tooltip":"Drop one still image to apply it as cover"})),
     });
     children.push(row(
         "summary.cover.actions",

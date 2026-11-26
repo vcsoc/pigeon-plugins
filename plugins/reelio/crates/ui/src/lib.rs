@@ -8,6 +8,7 @@
 
 pub mod canvas;
 pub mod chapters;
+pub mod cover_editor;
 pub mod crop;
 pub mod engine;
 pub mod geometry;

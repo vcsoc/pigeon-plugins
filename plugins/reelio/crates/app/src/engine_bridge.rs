@@ -314,6 +314,9 @@ impl EngineBridge for Real {
             Request::JobsList => encode(e.jobs_list()),
             Request::JobProject { id } => encode(e.job_project(id)),
             Request::ArtworkImport { path } => encode(e.artwork_import(PathBuf::from(path))),
+            Request::ChooseArtwork => encode(e.choose_artwork()),
+            Request::ArtworkSaveCopy { artwork } => decode::<reelio_engine::Artwork>(artwork)
+                .and_then(|art| encode(e.artwork_save_copy(art))),
             Request::SubtitlePreview { project, track_id } => {
                 decode::<Project>(project).and_then(|p| {
                     encode(e.subtitle_preview(SubtitlePreviewRequest {

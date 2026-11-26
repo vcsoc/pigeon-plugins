@@ -112,6 +112,9 @@ pub enum Event {
     Drop {
         paths: Vec<String>,
     },
+    CoverDrop {
+        paths: Vec<String>,
+    },
     Quit,
 }
 
@@ -186,8 +189,9 @@ pub enum Pending {
     Settings,
     Backend,
     ArtworkImport {
-        path: String,
+        apply: bool,
     },
+    CoverAuthorize,
     SubtitleOpen,
     SubtitleSave(crate::subtitles::SrtDocument),
     Studio(crate::studio_workflow::StudioRequest),
@@ -200,9 +204,17 @@ pub enum Pending {
     QuitRecovery,
     UpdateCheck,
     SettingsFolder,
-    PosterSearch,
+    PosterSearch {
+        version: u64,
+    },
     PosterImage,
-    ArtworkEdit,
+    ArtworkEdit {
+        generation: u64,
+        revision: u64,
+    },
+    CoverChoose,
+    CoverOffer,
+    CoverSave,
     /// Fire-and-forget request (its reply is ignored).
     Silent,
     OpenProject,
@@ -500,6 +512,17 @@ impl State {
                 // The engine authorizes dropped files before any probe; imports follow the reply.
                 self.request(Request::MediaDropped { paths }, Pending::Dropped);
             }
+            Event::CoverDrop { paths } => {
+                if self.busy.is_some() {
+                    return;
+                }
+                if paths.len() != 1 {
+                    self.set_error("Drop a single still image onto the cover preview.");
+                    return;
+                }
+                self.busy = Some("Validating cover image".into());
+                self.request(Request::MediaDropped { paths }, Pending::CoverAuthorize);
+            }
             Event::Quit => self.quit(),
             Event::Ui { node, value } => self.ui(&node, value),
         }
@@ -545,6 +568,7 @@ impl State {
             });
         }
         self.studio_tick();
+        self.cover_tick();
         if now - self.last_jobs_poll >= 1000.0 {
             self.last_jobs_poll = now;
             self.request(Request::JobsList, Pending::Jobs);
@@ -622,7 +646,18 @@ impl State {
                 let result = reply.and_then(engine::decode::<Asset>);
                 self.finish_probe(path, result);
             }
-            Pending::ArtworkImport { path: _ } => {
+            Pending::CoverAuthorize => match reply.and_then(engine::decode::<Vec<String>>) {
+                Ok(paths) if paths.len() == 1 => self.outbox_cover_import(paths[0].clone(), true),
+                Ok(_) => {
+                    self.busy = None;
+                    self.set_error("The dropped cover could not be opened.");
+                }
+                Err(e) => {
+                    self.busy = None;
+                    self.set_error(e);
+                }
+            },
+            Pending::ArtworkImport { apply } => {
                 self.busy = None;
                 match reply.and_then(|v| {
                     let art: Artwork =
@@ -631,7 +666,8 @@ impl State {
                         engine::decode(v.get("asset").cloned().unwrap_or(Value::Null))?;
                     Ok((asset, art))
                 }) {
-                    Ok((asset, art)) => self.apply_cover(asset, art),
+                    Ok((asset, art)) if apply => self.apply_cover(asset, art),
+                    Ok((_, art)) => self.load_cover_editor(art),
                     Err(e) => self.set_error(e),
                 }
             }
@@ -772,10 +808,7 @@ impl State {
                         );
                     }
                     Ok(v) if v["kind"] == "artwork" => match engine::decode(v["artwork"].clone()) {
-                        Ok(artwork) => {
-                            self.incoming_artwork = Some(artwork);
-                            self.section = Section::Artwork;
-                        }
+                        Ok(artwork) => self.load_cover_editor(artwork),
                         Err(e) => self.set_error(e),
                     },
                     Ok(_) => self.set_error("Unrecognized download result."),
@@ -789,7 +822,12 @@ impl State {
                     Err(e) => self.set_error(format!("Could not save subtitle recovery: {e}")),
                 }
             }
-            Pending::PosterSearch | Pending::PosterImage | Pending::ArtworkEdit => {
+            Pending::PosterSearch { .. }
+            | Pending::PosterImage
+            | Pending::ArtworkEdit { .. }
+            | Pending::CoverChoose
+            | Pending::CoverOffer
+            | Pending::CoverSave => {
                 self.poster_reply(&pending, &reply);
             }
             Pending::UpdateCheck => {
@@ -955,32 +993,29 @@ impl State {
         }
     }
 
-    fn finish_probe(&mut self, path: String, result: Result<Asset, String>) {
-        match result {
-            Ok(asset) => {
-                if is_image_asset(Some(&asset)) {
-                    self.request(
-                        Request::ArtworkImport {
-                            path: asset.path.clone(),
-                        },
-                        Pending::ArtworkImport { path },
-                    );
-                } else {
-                    match add_asset(self.project(), &asset) {
-                        Ok(next) => {
-                            let asset_id = asset.id.clone();
-                            self.edit(|p| *p = next);
-                            if self.preview.asset.is_none() {
-                                self.preview.asset = Some(asset_id);
-                            }
-                        }
-                        Err(e) => self.set_error(e.message()),
-                    }
+    fn finish_probe(&mut self, _path: String, result: Result<Asset, String>) {
+        match result.and_then(|asset| {
+            add_asset(self.project(), &asset)
+                .map(|p| (asset, p))
+                .map_err(|e| e.message().to_owned())
+        }) {
+            Ok((asset, next)) => {
+                self.edit(|p| *p = next);
+                if self.preview.asset.is_none() && !is_image_asset(Some(&asset)) {
+                    self.preview.asset = Some(asset.id);
+                    self.refresh_preview();
                 }
             }
             Err(e) => self.set_error(e),
         }
         self.continue_imports();
+    }
+
+    fn outbox_cover_import(&mut self, path: String, apply: bool) {
+        self.request(
+            Request::ArtworkImport { path },
+            Pending::ArtworkImport { apply },
+        );
     }
 
     /// Imports run one file at a time; the next probe starts when the previous one completes.
@@ -1051,7 +1086,7 @@ impl State {
             draft.artwork = Some(artwork.clone());
         });
         self.cover_asset = Some(id);
-        self.incoming_artwork = Some(artwork);
+        self.incoming_artwork = None;
         self.set_notice("Cover applied. Its C lane is container artwork, not a video stream; the original image is unchanged.");
     }
 
@@ -1065,6 +1100,7 @@ impl State {
         };
         self.plan = None;
         self.cover_asset = None;
+        self.poster = None;
         self.incoming_artwork = None;
         self.subtitle_test = None;
         self.resources.clear();
@@ -1170,6 +1206,14 @@ impl State {
                     }
                     if s == Section::Subtitles {
                         self.studio_enter();
+                    } else if s == Section::Artwork
+                        && self
+                            .poster
+                            .as_ref()
+                            .and_then(|p| p.editor.as_ref())
+                            .is_none()
+                    {
+                        self.open_applied_cover();
                     } else {
                         self.section = s;
                     }
@@ -1234,7 +1278,14 @@ impl State {
             "track" => self.track(&arg, value),
             "chapter" => self.chapter(&arg, value),
             "cover" => match arg.as_str() {
-                "edit" => self.section = Section::Artwork,
+                "edit" => self.open_applied_cover(),
+                "preview" if is_context => self.open_cover_menu(12., 44.),
+                "preview" if value.is_null() => self.open_applied_cover(),
+                part if (part == "preview" || part.starts_with("lane"))
+                    && value["type"] == "double_click" =>
+                {
+                    self.open_applied_cover()
+                }
                 "remove" => {
                     self.edit(|d| d.artwork = None);
                     self.set_notice("Project cover removed.");
@@ -1662,12 +1713,7 @@ impl State {
                 return;
             }
             self.busy = Some("Opening image in Poster & cover".into());
-            self.request(
-                Request::ArtworkImport {
-                    path: asset.path.clone(),
-                },
-                Pending::ArtworkImport { path: asset.path },
-            );
+            self.outbox_cover_import(asset.path, false);
             return;
         }
         let video = asset.streams.iter().any(is_video_stream);

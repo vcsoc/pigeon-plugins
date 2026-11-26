@@ -1298,7 +1298,9 @@ name = "reelio-app"
 version = "2.0.0"
 dependencies = [
  "pigeon-plugin-sdk",
+ "reelio-artwork",
  "reelio-engine",
+ "reelio-resources",
  "reelio-ui",
  "serde",
  "serde_json",

@@ -221,6 +221,7 @@ pub struct Core {
     started: Instant,
     consent: Option<(Instant, std::sync::mpsc::SyncSender<bool>)>,
     consent_id: u64,
+    images: crate::images::Images,
 }
 
 /// Everything the SDK callbacks need. Engine and ctx are immutable; the core is locked briefly.
@@ -234,6 +235,7 @@ pub struct App {
 
 impl App {
     pub fn new(ctx: Ctx, engine: Arc<dyn EngineBridge>) -> Arc<App> {
+        let images = crate::images::Images::new(ctx.clone());
         Arc::new(App {
             ctx,
             engine,
@@ -243,6 +245,7 @@ impl App {
                 started: Instant::now(),
                 consent: None,
                 consent_id: 0,
+                images,
             }),
             player: OnceLock::new(),
         })
@@ -322,7 +325,13 @@ fn update_boxed(app: &Arc<App>, f: Box<dyn FnOnce(&mut Core) + Send>) {
                 }
             }
         }
-        let Core { state, pump, .. } = &mut *core;
+        let Core {
+            state,
+            pump,
+            images,
+            ..
+        } = &mut *core;
+        images.update(&app.ctx, state, pump.visible.contains("main"));
         pump.render(&app.ctx, state);
         requests
     };
@@ -496,14 +505,24 @@ pub fn handle(app: &Arc<App>, msg: Incoming) {
                     core.state.dispatch(Event::Ui { node, value })
                 });
             } else if let NodeEvent::Drop { paths, .. } = event {
-                update(app, move |core| core.state.dispatch(Event::Drop { paths }));
+                let drop = if node == "cover:preview" {
+                    Event::CoverDrop { paths }
+                } else {
+                    Event::Drop { paths }
+                };
+                update(app, move |core| core.state.dispatch(drop));
             }
         }
         Incoming::Command { command, .. } => update(app, move |core| {
             core.state.dispatch(Event::Command { id: command })
         }),
-        Incoming::Drop { paths, .. } => {
-            update(app, move |core| core.state.dispatch(Event::Drop { paths }))
+        Incoming::Drop { paths, target, .. } => {
+            let drop = if target == "cover-drop" {
+                Event::CoverDrop { paths }
+            } else {
+                Event::Drop { paths }
+            };
+            update(app, move |core| core.state.dispatch(drop));
         }
         Incoming::Resize { w, .. } => update(app, move |core| core.state.set_window(w as f64)),
         _ => {}

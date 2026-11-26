@@ -6,7 +6,7 @@ use crate::engine::{self, Request};
 use crate::model::{Artwork, Project};
 use crate::posters::{Orientation, Proportion};
 use crate::state::{Pending, State};
-use serde_json::{json, Value};
+use serde_json::Value;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PosterState {
@@ -21,9 +21,14 @@ pub struct PosterState {
     pub notice: Option<String>,
     pub error: Option<String>,
     pub pending: bool,
-    /// Cover edit state: rotation in quarter turns and flip.
-    pub rotation: u32,
-    pub flip: bool,
+    pub editor: Option<crate::cover_editor::CoverEditor>,
+    pub browser: bool,
+    pub url: String,
+    pub generation: u64,
+    search_version: u64,
+    page_buffer: Vec<Value>,
+    seen: std::collections::BTreeSet<String>,
+    batches: usize,
 }
 
 impl Default for PosterState {
@@ -39,8 +44,14 @@ impl Default for PosterState {
             notice: None,
             error: None,
             pending: false,
-            rotation: 0,
-            flip: false,
+            editor: None,
+            browser: true,
+            url: String::new(),
+            generation: 0,
+            search_version: 0,
+            page_buffer: vec![],
+            seen: Default::default(),
+            batches: 0,
         }
     }
 }
@@ -64,6 +75,13 @@ fn parse_proportion(text: &str) -> Proportion {
     }
 }
 
+pub fn thumbnail_rid(url: &str) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut hash = std::collections::hash_map::DefaultHasher::new();
+    url.hash(&mut hash);
+    format!("poster:thumb:{:016x}", hash.finish())
+}
+
 /// Provider string for a filter (`landscape`, `4:3`, ...), as the engine expects it.
 pub fn proportion_key(p: Proportion) -> String {
     match p {
@@ -76,15 +94,21 @@ pub fn proportion_key(p: Proportion) -> String {
 }
 
 impl State {
-    fn poster_mut(&mut self) -> &mut PosterState {
+    pub(crate) fn poster_mut(&mut self) -> &mut PosterState {
         self.poster.get_or_insert_with(PosterState::default)
     }
 
     fn poster_request_next(&mut self) {
-        let (query, proportion, offset) = {
+        let (query, proportion, offset, version) = {
             let p = self.poster.get_or_insert_with(PosterState::default);
             p.pending = true;
-            (p.query.clone(), proportion_key(p.proportion), p.next_offset)
+            p.batches += 1;
+            (
+                p.query.clone(),
+                proportion_key(p.proportion),
+                p.next_offset,
+                p.search_version,
+            )
         };
         self.engine_request_with(
             Request::PosterSearch {
@@ -92,7 +116,7 @@ impl State {
                 proportion,
                 offset,
             },
-            Pending::PosterSearch,
+            Pending::PosterSearch { version },
         );
     }
 
@@ -100,6 +124,11 @@ impl State {
     fn poster_restart(&mut self) {
         let p = self.poster_mut();
         p.pages.clear();
+        p.page_buffer.clear();
+        p.seen.clear();
+        p.batches = 0;
+        p.pending = false;
+        p.search_version += 1;
         p.page = 0;
         p.next_offset = 0;
         p.has_more = true;
@@ -116,7 +145,7 @@ impl State {
             .unwrap_or((arg.to_string(), String::new()));
         match verb.as_str() {
             "query" => {
-                let text = value.as_str().unwrap_or("").to_string();
+                let text = value.as_str().unwrap_or("").chars().take(160).collect();
                 self.poster_mut().query = text;
             }
             "search" => {
@@ -146,7 +175,10 @@ impl State {
                 self.poster_restart();
             }
             "size" => {
-                let size = value.as_u64().unwrap_or(12) as usize;
+                let size = value
+                    .as_u64()
+                    .or_else(|| value.as_str()?.parse().ok())
+                    .unwrap_or(12) as usize;
                 if [12, 24, 48].contains(&size) {
                     self.poster_mut().page_size = size;
                     self.poster_restart();
@@ -167,6 +199,7 @@ impl State {
                 if has_cached {
                     self.poster_mut().page = page + 1;
                 } else if has_more && pages < 40 && !self.poster_mut().pending {
+                    self.poster_mut().batches = 0;
                     self.poster_request_next();
                 }
             }
@@ -201,45 +234,16 @@ impl State {
                     }
                 }
             }
-            "rotate" => {
-                let turns = if rest == "left" { 3 } else { 1 };
+            "browser" => {
+                let name = self.project().name.clone();
                 let p = self.poster_mut();
-                p.rotation = (p.rotation + turns) % 4;
-                self.poster_edit();
+                p.browser = !p.browser;
+                if p.query.is_empty() {
+                    p.query = name;
+                }
             }
-            "flip" => {
-                let p = self.poster_mut();
-                p.flip = !p.flip;
-                self.poster_edit();
-            }
-            "apply" => {
-                let Some(artwork) = self.project().artwork.clone() else {
-                    return;
-                };
-                self.apply_cover_artwork(artwork, "Cover applied to this project. Export to a new file to embed it; sources are unchanged.");
-            }
-            _ => {}
+            _ => self.cover_edit_action(&verb, &rest, &value),
         }
-    }
-
-    /// Commit the current rotation/flip to the cover through the engine (`artwork_edit`).
-    fn poster_edit(&mut self) {
-        let Some(artwork) = self.project().artwork.clone() else {
-            return;
-        };
-        let (rotation, flip) = self
-            .poster
-            .as_ref()
-            .map(|p| (p.rotation, p.flip))
-            .unwrap_or((0, false));
-        let edits = json!({"crop": null, "rotation": rotation, "flip": flip, "grayscale": false, "negative": false, "sepia": false, "brightness": 1.0, "contrast": 1.0, "resize": null});
-        self.engine_request_with(
-            Request::ArtworkEdit {
-                artwork: serde_json::to_value(&artwork).unwrap_or(Value::Null),
-                edits,
-            },
-            Pending::ArtworkEdit,
-        );
     }
 
     /// Set the project cover (one undo step) and leave the studio.
@@ -251,8 +255,11 @@ impl State {
 
     pub fn poster_reply(&mut self, pending: &Pending, reply: &engine::Reply) {
         match pending {
-            Pending::PosterSearch => {
+            Pending::PosterSearch { version } => {
                 let p = self.poster_mut();
+                if p.search_version != *version {
+                    return;
+                }
                 p.pending = false;
                 match reply.clone().and_then(|v| {
                     let results: Vec<Value> = v
@@ -265,13 +272,31 @@ impl State {
                     Ok((results, next, more))
                 }) {
                     Ok((results, next, more)) => {
+                        if more && next <= p.next_offset {
+                            p.error =
+                                Some("The provider did not advance to the next batch.".into());
+                            return;
+                        }
                         p.next_offset = next;
-                        p.has_more = more;
-                        if results.is_empty() && !more {
+                        for result in results.into_iter().take(100) {
+                            if let Some(url) = result["image_url"].as_str() {
+                                if p.seen.insert(url.to_owned()) {
+                                    p.page_buffer.push(result);
+                                }
+                            }
+                        }
+                        let provider_more = more && next < 1400;
+                        if p.page_buffer.len() < p.page_size && provider_more && p.batches < 4 {
+                            self.poster_request_next();
+                            return;
+                        }
+                        let count = p.page_buffer.len().min(p.page_size);
+                        if count == 0 && !provider_more {
                             p.notice =
                                 Some("No selectable matches. Refine the title or filters.".into());
                         }
-                        p.pages.push(results);
+                        p.pages.push(p.page_buffer.drain(..count).collect());
+                        p.has_more = provider_more || !p.page_buffer.is_empty();
                         p.page = p.pages.len() - 1;
                         p.error = None;
                     }
@@ -281,14 +306,53 @@ impl State {
             Pending::PosterImage => {
                 self.busy = None;
                 match reply.clone().and_then(engine::decode::<Artwork>) {
-                    Ok(art) => self.apply_cover_artwork(art, "Cover applied to this project. Export to a new file to embed it; sources are unchanged."),
+                    Ok(art) => {
+                        self.apply_cover_artwork(art.clone(), "Cover applied to this project. Export to a new file to embed it; sources are unchanged.");
+                        self.load_cover_editor(art);
+                    }
                     Err(e) => self.poster_mut().error = Some(e),
                 }
             }
-            Pending::ArtworkEdit => match reply.clone().and_then(engine::decode::<Artwork>) {
-                Ok(art) => {
-                    self.edit(|d| d.artwork = Some(art));
+            Pending::ArtworkEdit {
+                generation,
+                revision,
+            } => {
+                let p = self.poster_mut();
+                if p.generation != *generation {
+                    return;
                 }
+                let Some(ed) = p.editor.as_mut() else { return };
+                ed.rendering = false;
+                if ed.revision != *revision {
+                    return;
+                }
+                match reply.clone().and_then(engine::decode::<Artwork>) {
+                    Ok(art) => {
+                        ed.rendered = art;
+                        ed.ready = true;
+                        p.error = None;
+                    }
+                    Err(e) => p.error = Some(e),
+                }
+            }
+            Pending::CoverChoose => match reply.clone() {
+                Ok(Value::Null) => {}
+                Ok(v) => match engine::decode(v) {
+                    Ok(art) => self.load_cover_editor(art),
+                    Err(e) => self.poster_mut().error = Some(e),
+                },
+                Err(e) => self.poster_mut().error = Some(e),
+            },
+            Pending::CoverSave => match reply {
+                Ok(Value::String(path)) => self.set_notice(format!(
+                    "Saved a new preview image: {}",
+                    crate::model::basename(path)
+                )),
+                Err(e) => self.poster_mut().error = Some(e.clone()),
+                _ => {}
+            },
+            Pending::CoverOffer => match reply.clone().and_then(engine::decode) {
+                Ok(offer) => self.queue_resource(offer),
                 Err(e) => self.poster_mut().error = Some(e),
             },
             _ => {}

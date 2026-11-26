@@ -53,6 +53,10 @@ pub enum Request {
         artwork: Value,
         edits: Value,
     },
+    ChooseArtwork,
+    ArtworkSaveCopy {
+        artwork: Value,
+    },
     /// Former `update_check`: manual check against published GitHub releases.
     UpdateCheck,
     /// Former `update_download`: verified download of an offer (host save dialog).
