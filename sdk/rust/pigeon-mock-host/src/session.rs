@@ -4,7 +4,7 @@
 //! host sends is validated first, so a test cannot accidentally send an invalid host message
 //! (use [`Session::send_raw`] to send deliberately broken lines).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
@@ -14,9 +14,11 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use pigeon_plugin_sdk::protocol::{HostInfo, Hello, Incoming, NodeEvent, ProtocolRange, Theme, MAX_LINE_BYTES};
+use pigeon_plugin_sdk::protocol::{HostInfo, Hello, Incoming, NodeEvent, ProtocolRange, Theme, MAX_LINE_BYTES, MAX_SCENE_NODES};
 use serde_json::{json, Value};
 
+use crate::behavior::{find_matching, node_children};
+use crate::render::{resource, ImageRef};
 use crate::schemas::{method_permission, Schemas, Violation};
 use crate::services::{Fixtures, Services};
 
@@ -77,8 +79,9 @@ impl Default for LaunchOptions {
 pub struct State {
     /// The full `ready` message, once received.
     pub ready: Option<Value>,
-    /// Latest scene per instance (`ui.set`, also after `ui.patch` is not applied: patches are recorded in `patches`).
+    /// Latest scene per instance, including fast canvas and list updates. Patches are only recorded.
     pub scenes: BTreeMap<String, Value>,
+    pub(crate) scene_revisions: BTreeMap<String, u64>,
     pub patches: Vec<Value>,
     /// Latest draw value `{frame, clear, ops}` per (instance, node).
     pub canvases: BTreeMap<(String, String), Value>,
@@ -87,6 +90,7 @@ pub struct State {
     /// Latest `resource.put` per rid.
     pub resources: BTreeMap<String, Value>,
     pub resource_puts: u64,
+    pub(crate) images: HashMap<String, ImageRef>,
     pub focus: Vec<Value>,
     pub scroll_to: Vec<Value>,
     pub beeps: u64,
@@ -115,6 +119,7 @@ pub(crate) struct Shared {
     pub schemas: Arc<Schemas>,
     pub services: Mutex<Services>,
     pub permissions: Vec<String>,
+    pub session_dir: PathBuf,
     /// Plugin stdin, shared so the reader can answer service requests.
     pub stdin: Arc<Mutex<Option<ChildStdin>>>,
 }
@@ -212,6 +217,7 @@ impl Session {
             schemas: Arc::clone(&schemas),
             services: Mutex::new(Services::new(options.fixtures.clone(), manifest.permissions.clone())),
             permissions: manifest.permissions.clone(),
+            session_dir: session_dir.clone(),
             stdin: Arc::clone(&stdin),
         });
 
@@ -262,7 +268,7 @@ impl Session {
             scale: options.scale,
             data_dir: Some(session.data_dir.to_string_lossy().into_owned()),
             session_dir: session_dir.to_string_lossy().into_owned(),
-            features: vec!["scene.patch".into(), "canvas".into(), "resources.file".into(), "list.window".into(), "source".into(), "search".into()],
+            features: vec!["canvas".into(), "resources.file".into(), "list.window".into(), "source".into(), "search".into()],
         });
         session.write_host_line(&hello.to_value())?;
         Ok(session)
@@ -290,7 +296,7 @@ impl Session {
                 return Some(v);
             }
             let now = Instant::now();
-            if now >= deadline {
+            if st.closed || now >= deadline {
                 return None;
             }
             let (guard, _) = match self.shared.cond.wait_timeout(st, deadline - now) {
@@ -304,6 +310,11 @@ impl Session {
     /// The latest scene of an instance, if the plugin sent one.
     pub fn scene(&self, instance: &str) -> Option<Value> {
         self.with_state(|st| st.scenes.get(instance).cloned())
+    }
+
+    /// Capture the current scene and its decoded resource images under the same lock.
+    pub fn render_snapshot(&self, instance: &str) -> Option<(Value, HashMap<String, ImageRef>)> {
+        self.with_state(|st| Some((st.scenes.get(instance)?.clone(), st.images.clone())))
     }
 
     /// Wait for a scene to contain a node with this id.
@@ -481,39 +492,37 @@ fn signal(pid: u32, sig: &str) -> Result<(), String> {
 
 /// Find a node by id anywhere in a scene value.
 pub fn find_node<'a>(scene: &'a Value, id: &str) -> Option<&'a Value> {
-    if scene["id"] == id {
-        return Some(scene);
+    find_matching(scene, &|node| node["id"].as_str() == Some(id))
+}
+
+fn find_node_mut<'a>(scene: &'a mut Value, id: &str) -> Option<&'a mut Value> {
+    if scene["id"].as_str() == Some(id) { return Some(scene); }
+    let object = scene.as_object_mut()?;
+    if object.contains_key("children") {
+        object.get_mut("children")?.as_array_mut()?.iter_mut().find_map(|child| find_node_mut(child, id))
+    } else {
+        object.get_mut("window")?.get_mut("rows")?.as_array_mut()?.iter_mut().find_map(|row| find_node_mut(row, id))
     }
-    if let Some(children) = scene["children"].as_array() {
-        for c in children {
-            if let Some(found) = find_node(c, id) {
-                return Some(found);
-            }
-        }
-    }
-    None
 }
 
 fn read_stdout(shared: &Arc<Shared>, stdout: impl Read) {
     let mut reader = BufReader::with_capacity(64 * 1024, stdout);
     loop {
         let mut buf = Vec::new();
-        let read = match reader.read_until(b'\n', &mut buf) {
-            Ok(n) => n,
-            Err(_) => break,
-        };
-        if read == 0 {
-            break;
-        }
-        let line = String::from_utf8_lossy(&buf).trim_end_matches(['\r', '\n']).to_string();
-        if line.is_empty() {
+        let Ok(n) = (&mut reader).take((MAX_LINE_BYTES + 2) as u64).read_until(b'\n', &mut buf) else { break };
+        if n == 0 { break; }
+        let payload = buf.strip_suffix(b"\n").unwrap_or(&buf);
+        let payload = payload.strip_suffix(b"\r").unwrap_or(payload);
+        if payload.len() > MAX_LINE_BYTES || (n == MAX_LINE_BYTES + 2 && !buf.ends_with(b"\n")) {
+            record_violation(shared, Violation { path: String::new(), message: "line exceeds the 1 MiB limit".into() }, "");
+            if !buf.ends_with(b"\n") && reader.skip_until(b'\n').is_err() { break; }
             continue;
         }
-        if line.len() > MAX_LINE_BYTES {
-            record_violation(shared, Violation { path: String::new(), message: format!("line of {} bytes exceeds the 1 MiB limit", line.len()) }, &line);
-            continue;
+        match std::str::from_utf8(payload) {
+            Ok(line) if !line.is_empty() => handle_line(shared, line),
+            Ok(_) => {},
+            Err(_) => record_violation(shared, Violation { path: String::new(), message: "line is not UTF-8".into() }, ""),
         }
-        handle_line(shared, &line);
     }
     let mut st = lock(&shared.state);
     st.closed = true;
@@ -538,6 +547,10 @@ fn handle_line(shared: &Arc<Shared>, line: &str) {
     let known = ["ready", "contribute", "withdraw", "ui.set", "ui.patch", "ui.focus", "ui.scroll_to", "ui.beep",
         "canvas.draw", "list.rows", "resource.put", "resource.drop", "req", "res", "pong", "source.changed", "search.status"];
     if !known.contains(&t.as_str()) {
+        if t.is_empty() || value["v"].as_u64() != Some(2) {
+            record_violation(shared, Violation { path: "/".into(), message: "missing or invalid v2 envelope".into() }, line);
+            return;
+        }
         let mut st = lock(&shared.state);
         st.unknown_types.push(t.clone());
         st.outgoing.push(value);
@@ -547,7 +560,8 @@ fn handle_line(shared: &Arc<Shared>, line: &str) {
     let problems = shared.schemas.check_to_host(&value);
     if let Some(p) = problems.into_iter().next() {
         record_violation(shared, p, line);
-        // Keep going: the message is still recorded below where possible.
+        lock(&shared.state).outgoing.push(value);
+        return;
     }
     lock(&shared.state).outgoing.push(value.clone());
     dispatch(shared, &t, value);
@@ -578,12 +592,12 @@ fn dispatch(shared: &Arc<Shared>, t: &str, v: Value) {
             let instance = v["instance"].as_str().unwrap_or("").to_string();
             let scene = v["scene"].clone();
             let mut st = lock(&shared.state);
-            let count = count_nodes(&scene);
-            if count > 50_000 {
-                let msg = format!("scene has {count} nodes (limit 50,000)");
-                st.violations.push((Violation { path: "/scene".into(), message: msg }, instance.clone()));
+            if let Err(message) = validate_scene(&scene, &mut HashSet::new()) {
+                st.violations.push((Violation { path: "/scene".into(), message }, instance));
+            } else {
+                *st.scene_revisions.entry(instance.clone()).or_default() += 1;
+                st.scenes.insert(instance, scene);
             }
-            st.scenes.insert(instance, scene);
             shared.cond.notify_all();
         }
         "ui.patch" => {
@@ -596,8 +610,15 @@ fn dispatch(shared: &Arc<Shared>, t: &str, v: Value) {
         "ui.beep" => push(shared, |st| st.beeps += 1),
         "canvas.draw" => {
             let key = (v["instance"].as_str().unwrap_or("").to_string(), v["node"].as_str().unwrap_or("").to_string());
-            let draw = json!({"frame": v["frame"], "ops": v["ops"], "region": v.get("region").cloned().unwrap_or(Value::Null)});
+            let mut draw = json!({"frame": v["frame"], "ops": v["ops"]});
             let mut st = lock(&shared.state);
+            if let Some(node) = st.scenes.get_mut(&key.0).and_then(|sc| find_node_mut(sc, &key.1)) {
+                if node["kind"] == "canvas" && !node["draw"]["frame"].as_u64().is_some_and(|f| f > v["frame"].as_u64().unwrap_or_default()) {
+                    if let Some(clear) = node["draw"].get("clear") { draw["clear"] = clear.clone(); }
+                    node["draw"] = draw.clone();
+                    *st.scene_revisions.entry(key.0.clone()).or_default() += 1;
+                }
+            }
             st.canvases.insert(key, draw);
             st.canvas_updates += 1;
             shared.cond.notify_all();
@@ -605,19 +626,38 @@ fn dispatch(shared: &Arc<Shared>, t: &str, v: Value) {
         "list.rows" => {
             let key = (v["instance"].as_str().unwrap_or("").to_string(), v["node"].as_str().unwrap_or("").to_string());
             push(shared, |st| {
-                st.list_rows.insert(key, v["rows"].as_array().cloned().unwrap_or_default());
+                st.list_rows.insert(key.clone(), v["rows"].as_array().cloned().unwrap_or_default());
+                if let Some(node) = st.scenes.get_mut(&key.0).and_then(|sc| find_node_mut(sc, &key.1)) {
+                    if node["kind"] == "list" {
+                        node["window"] = json!({"start": v["start"], "rows": v["rows"]});
+                        *st.scene_revisions.entry(key.0).or_default() += 1;
+                    }
+                }
             });
         }
         "resource.put" => {
             let rid = v["rid"].as_str().unwrap_or("").to_string();
             let seq = v["seq"].as_u64().unwrap_or(0);
+            let image = match resource::load(&shared.session_dir, &v) {
+                Ok(image) => image,
+                Err(message) => {
+                    record_violation(shared, Violation { path: "/file".into(), message }, &rid);
+                    return;
+                }
+            };
             {
                 let mut st = lock(&shared.state);
-                st.resources.insert(rid.clone(), v);
-                st.resource_puts += 1;
+                let usage: usize = st.images.iter().filter(|(key, _)| *key != &rid).map(|(_, img)| img.rgba.len()).sum();
+                if usage + image.rgba.len() > resource::CACHE_BYTES {
+                    st.violations.push((Violation { path: "/file".into(), message: "decoded resource cache exceeds its limit".into() }, rid.clone()));
+                } else if st.resources.get(&rid).and_then(|old| old["seq"].as_u64()).is_none_or(|old| seq > old) {
+                    st.images.insert(rid.clone(), image);
+                    st.resources.insert(rid.clone(), v);
+                    st.resource_puts += 1;
+                }
                 shared.cond.notify_all();
             }
-            // The host copies the file and acknowledges it (section 6); the mock acks at once.
+            // Acknowledge only after reading the file; the plugin can now recycle it.
             let ack = json!({"v": 2, "t": "resource.ack", "rid": rid, "seq": seq});
             if let Err(e) = write_to_plugin(&shared.stdin, &ack) {
                 record_violation(shared, Violation { path: "/mock".into(), message: format!("cannot ack {rid}: {e}") }, "");
@@ -627,6 +667,7 @@ fn dispatch(shared: &Arc<Shared>, t: &str, v: Value) {
             let rid = v["rid"].as_str().unwrap_or("").to_string();
             push(shared, |st| {
                 st.resources.remove(&rid);
+                st.images.remove(&rid);
             });
         }
         "source.changed" => push(shared, |st| st.source_changed.push(v)),
@@ -649,8 +690,12 @@ fn push(shared: &Arc<Shared>, f: impl FnOnce(&mut State)) {
     shared.cond.notify_all();
 }
 
-fn count_nodes(scene: &Value) -> usize {
-    1 + scene["children"].as_array().map(|c| c.iter().map(count_nodes).sum::<usize>()).unwrap_or(0)
+fn validate_scene<'a>(scene: &'a Value, ids: &mut HashSet<&'a str>) -> Result<(), String> {
+    let id = scene["id"].as_str().ok_or("missing node id")?;
+    if !ids.insert(id) { return Err(format!("duplicate node id {id:?}")); }
+    if ids.len() > MAX_SCENE_NODES { return Err(format!("scene exceeds {MAX_SCENE_NODES} nodes")); }
+    for child in node_children(scene) { validate_scene(child, ids)?; }
+    Ok(())
 }
 
 /// Answer one host-service request (section 10): permission check, parameter and result schema

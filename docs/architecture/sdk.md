@@ -93,6 +93,7 @@ fails with a JSON error. Python plugins read the UI protocol from `worker.py --p
     cd sdk/rust
     cargo run -p pigeon-mock-host --bin pigeon-mock -- run <plugin-dir> [--show <instance>]
     cargo run -p pigeon-mock-host --bin pigeon-mock -- conformance <plugin-dir> [--only ID] [--update-goldens] [--json report.json]
+    cargo run -p pigeon-mock-host --bin pigeon-mock -- render ../../plugins/hello-ui --instance main --size 960x900 -o hello.png
     cargo run -p pigeon-mock-host --bin pigeon-mock -- render-scene scene.json --out scene.png [--size WxH] [--theme dark|light]
     cargo run -p pigeon-mock-host --bin pigeon-mock -- validate-fixtures ../../schema/ui-v2/examples
 
@@ -105,13 +106,52 @@ What it does for a plugin:
 * Answers host services with fakes (`services.rs`): settings, secrets, toasts, progress jobs,
   modals, URLs, clipboard, library and selection fixtures. It enforces the manifest permissions
   (`permission_denied`) and validates params and results against `methods.schema.json`.
-* Acknowledges `resource.put` immediately, as the host does after copying the file.
+* Copies files within `PIGEON_SESSION_DIR` and acknowledges `resource.put` after decoding; snapshots
+  support RGBA (including stride and premultiplied alpha), PNG, JPEG, WebP and vector SVG. Files
+  outside the session and oversized images are rejected. SVG external/embedded images are disabled.
 * Simulates crashes (kill) and stalls (SIGSTOP/SIGCONT), and sends provider requests.
 * Renders scenes and canvases to PNG (`render/`): rectangles, rounded corners, lines, polygons,
   paths, arcs, ellipses, clip, transforms, linear gradients, shadows (offset), images (nearest),
   text in the bundled Ubuntu-Light and Hack fonts (the egui defaults), and a layout for the node
   kinds. The renderer is deterministic (no anti-aliasing), so golden images are stable. It is a
   test renderer: it checks well-formedness and regressions, not pixel parity with Pigeon.
+* `render` captures the first available scene of the slot. The instance can be a contribution id
+  (`main`) or a full instance (`hello-ui/main`). Use `--theme light` or `--scale 2` as needed;
+  dimensions are logical pixels. Use a fresh output path. For an interaction-driven snapshot,
+  send events with the library and render `Session::render_snapshot` after the expected update.
+
+### Behavioural tests (Rust)
+
+Add a dev dependency on `sdk/rust/pigeon-mock-host`. `Session` drives the real subprocess; it
+also exposes the host-service fakes and `launch` fixtures for testing dialogs, selection, library
+requests, and more. Run tests with the plugin's dependencies available, or set `run_setup: false`
+when the test's launcher is already prepared.
+
+```rust
+use pigeon_mock_host::{LaunchOptions, Schemas, Session};
+use pigeon_plugin_sdk::protocol::NodeEvent;
+use std::{path::Path, sync::Arc, time::Duration};
+
+let host = Session::launch(Path::new("../../plugins/hello-ui"), Arc::new(Schemas::load()),
+    LaunchOptions::default()).unwrap();
+let timeout = Duration::from_secs(5);
+host.wait_ready(timeout).unwrap();
+let instance = "hello-ui/main";
+host.show(instance).unwrap();
+let initial = host.wait_next_scene(instance, 0, timeout).unwrap();
+assert_eq!(initial.assert_text("Click me")["id"], "go");
+let before = host.event(instance, "go", NodeEvent::Click).unwrap();
+let clicked = host.wait_scene_matching(instance, before, timeout,
+    |scene| scene.by_text("1 clicks").is_some()).unwrap();
+assert_eq!(clicked.assert_node("count")["text"], "1 clicks");
+assert!(host.shutdown(timeout));
+host.assert_no_violations();
+```
+
+`event` takes the revision before sending so fast replies are not missed; prefer
+`wait_scene_matching` when unrelated async updates can arrive first. `SceneSnapshot::node` and
+`by_text` include the current list window. `render_snapshot` returns the latest scene plus its
+cached resource pixels (fast canvas/list updates included).
 
 ## Conformance
 

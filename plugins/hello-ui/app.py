@@ -65,6 +65,7 @@ class State:
         self.frame = 0
         self.canvas_frame = 0
         self.frames_published = 0
+        self.frame_initialized = False
         self.log = []
 
 
@@ -107,6 +108,10 @@ class HelloApp:
 
     def render_instance(self, ctx, instance):
         if instance == MAIN:
+            if not self.s.frame_initialized:
+                ctx.resources.put_rgba("hello:frame", views.FRAME_W, views.FRAME_H,
+                                       views.gradient_pixels(views.FRAME_W, views.FRAME_H, 0))
+                self.s.frame_initialized = True
             ctx.set_scene(MAIN, views.main(self.s))
         elif instance == INFO:
             ctx.set_scene(INFO, views.info(self.s))

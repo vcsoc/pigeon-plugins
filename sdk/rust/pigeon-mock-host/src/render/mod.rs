@@ -9,6 +9,7 @@
 pub mod golden;
 pub mod png;
 pub mod raster;
+pub(crate) mod resource;
 pub mod scene;
 pub mod text;
 pub mod theme;
