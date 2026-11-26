@@ -281,8 +281,48 @@ def main(operations, self_test=None, device=None):
         _fail(f'internal error ({type(error).__name__}); see last-error.log in the plugin folder')
 
 
+def progress(request, fraction, text=''):
+    """Report progress for a long operation. Written to stderr as `::progress {json}`, which the
+    plugin's UI reads; ordinary diagnostics on stderr are shown only in the plugin log."""
+    try:
+        value = None if fraction is None else max(0.0, min(1.0, float(fraction)))
+    except (TypeError, ValueError):
+        value = None
+    print('::progress ' + json.dumps({'fraction': value, 'text': str(text)[:200]}), file=sys.stderr, flush=True)
+
+
+def image_info(request):
+    """Generic operation `info`: the size of an image (reads the header only)."""
+    from PIL import Image
+    require_paths(request, 'input')
+    with Image.open(request['input']) as opened:
+        width, height = opened.size
+    return {'width': width, 'height': height}
+
+
+def image_preview(request):
+    """Generic operation `preview`: a downscaled PNG copy of the input for on-screen display only."""
+    from PIL import Image
+    require_paths(request, 'input', 'output')
+    try:
+        side = int(request.get('max_side', 960))
+    except (TypeError, ValueError):
+        raise PluginError('invalid max_side')
+    side = max(64, min(side, 2048))
+    with Image.open(request['input']) as opened:
+        image = opened.convert('RGBA' if 'A' in opened.getbands() or opened.mode in ('P', 'LA') else 'RGB')
+    image.thumbnail((side, side), Image.Resampling.LANCZOS)
+    image.save(request['output'], format='PNG')
+    return {'output_size': list(image.size)}
+
+
+BUILTIN_OPERATIONS = {'info': image_info, 'preview': image_preview}
+
+
 def _dispatch(operations, request):
     operation = request.get('operation')
+    if operation in BUILTIN_OPERATIONS and operation not in operations:
+        return BUILTIN_OPERATIONS[operation](request)
     if operation not in operations:
         raise PluginError(f'unsupported operation: {operation}')
     return operations[operation](request)
