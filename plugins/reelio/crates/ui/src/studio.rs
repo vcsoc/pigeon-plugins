@@ -533,6 +533,8 @@ mod tests {
     fn list_window_events_move_the_virtualized_rows() {
         let mut s = State::new();
         opened(&mut s);
+        s.section = crate::state::Section::Subtitles;
+        ui(&mut s, "sub:select:b", Value::Null);
         ui(
             &mut s,
             "sub:list",
@@ -540,7 +542,12 @@ mod tests {
         );
         assert_eq!(s.studio.as_ref().unwrap().window_start, 1);
         let scene = crate::scene::main_view(&s).to_string();
-        assert!(scene.contains("General Kenobi"));
+        assert!(
+            scene.contains("General Kenobi"),
+            "scene: {}",
+            &scene[scene.find("sub:list").unwrap_or(0)
+                ..(scene.find("sub:list").unwrap_or(0) + 400).min(scene.len())]
+        );
         assert!(
             !scene.contains("Hello there"),
             "rows outside the window are not materialized"
