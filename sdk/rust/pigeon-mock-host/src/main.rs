@@ -2,7 +2,7 @@
 //!
 //!   pigeon-mock validate-fixtures <examples-dir>
 //!   pigeon-mock run <plugin-dir> [--show <instance>]
-//!   pigeon-mock conformance <plugin-dir> [--cases DIR] [--goldens DIR] [--only ID] [--update-goldens] [--json FILE]
+//!   pigeon-mock conformance <plugin-dir> [--core | --cases DIR] [--goldens DIR] [--only ID] [--update-goldens] [--json FILE]
 //!   pigeon-mock render <plugin-dir> --instance <id> --size WxH -o <png> [--theme dark|light]
 //!   pigeon-mock render-scene <scene.json> --out <png> [--size WxH] [--theme dark|light] [--scale N]
 
@@ -85,7 +85,7 @@ fn run(args: &[String]) -> ExitCode {
         eprintln!("violation: {v} in {line}");
     }
     println!("shutdown clean: {exited}; violations: {}", violations.len());
-    if violations.is_empty() { ExitCode::SUCCESS } else { ExitCode::FAILURE }
+    if exited && violations.is_empty() { ExitCode::SUCCESS } else { ExitCode::FAILURE }
 }
 
 fn scene_count(v: &serde_json::Value) -> usize {
@@ -94,11 +94,20 @@ fn scene_count(v: &serde_json::Value) -> usize {
 
 fn conformance_cmd(args: &[String]) -> ExitCode {
     let Some(plugin) = args.first() else {
-        eprintln!("usage: pigeon-mock conformance <plugin-dir> [--cases DIR] [--goldens DIR] [--only ID] [--update-goldens] [--json FILE]");
+        eprintln!("usage: pigeon-mock conformance <plugin-dir> [--core | --cases DIR] [--goldens DIR] [--only ID] [--update-goldens] [--json FILE]");
         return ExitCode::from(2);
     };
     let root = repo_root();
-    let cases_dir = flag(args, "--cases").map(PathBuf::from).unwrap_or_else(|| root.join("conformance/cases"));
+    let schemas = Arc::new(Schemas::load());
+    let cases_dir = if let Some(dir) = flag(args, "--cases") {
+        PathBuf::from(dir)
+    } else {
+        let manifest = match pigeon_mock_host::session::load_manifest(Path::new(plugin), &schemas) {
+            Ok(manifest) => manifest,
+            Err(e) => { eprintln!("{e}"); return ExitCode::FAILURE; }
+        };
+        root.join(if manifest.id == "hello-ui" && !has(args, "--core") { "conformance/cases" } else { "conformance/core" })
+    };
     let goldens = flag(args, "--goldens").map(PathBuf::from).unwrap_or_else(|| root.join("conformance/goldens"));
     let only = flag(args, "--only");
     if has(args, "--update-goldens") {
@@ -112,7 +121,6 @@ fn conformance_cmd(args: &[String]) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let schemas = Arc::new(Schemas::load());
     let opts = RunOptions { goldens, timeout: Duration::from_secs(5) };
     let mut results = Vec::new();
     for (_, case) in cases {
@@ -122,7 +130,7 @@ fn conformance_cmd(args: &[String]) -> ExitCode {
             }
         }
         let r = conformance::run_case(&case, &PathBuf::from(plugin), Arc::clone(&schemas), &opts);
-        let mark = if r.passed { "PASS" } else { "FAIL" };
+        let mark = if !r.passed { "FAIL" } else if r.skipped > 0 { "SKIP" } else { "PASS" };
         println!("{mark} {} ({:.1}s){}", r.id, r.elapsed.as_secs_f64(), if r.skipped > 0 { format!(" [{} skipped]", r.skipped) } else { String::new() });
         for (n, name, outcome) in &r.steps {
             match outcome {
@@ -134,7 +142,8 @@ fn conformance_cmd(args: &[String]) -> ExitCode {
         results.push(r);
     }
     let failed = results.iter().filter(|r| !r.passed).count();
-    println!("{} case(s), {} failed", results.len(), failed);
+    let skipped = results.iter().filter(|r| r.passed && r.skipped > 0).count();
+    println!("{} case(s): {} passed, {skipped} skipped, {failed} failed", results.len(), results.len() - failed - skipped);
     if let Some(path) = flag(args, "--json") {
         let report: Vec<serde_json::Value> = results
             .iter()

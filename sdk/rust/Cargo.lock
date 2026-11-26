@@ -832,6 +832,7 @@ dependencies = [
  "epaint_default_fonts",
  "image",
  "jsonschema",
+ "libc",
  "pigeon-plugin-sdk",
  "png 0.17.16",
  "resvg",

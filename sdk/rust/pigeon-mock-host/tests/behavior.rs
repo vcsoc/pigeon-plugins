@@ -15,6 +15,13 @@ fn hello_ui_events_advance_snapshots_and_update_materialized_rows() {
     let first = host.wait_next_scene(id, 0, timeout).unwrap();
     assert_eq!(first.assert_text("Click me")["id"], "go");
     assert_eq!(first.assert_node("count")["text"], "0 clicks");
+    let schema: serde_json::Value = serde_json::from_str(include_str!("../../../../schema/ui-v2/scene.schema.json")).unwrap();
+    let kinds = schema["$defs"]["node"]["properties"]["kind"]["enum"].as_array().unwrap();
+    assert!(!kinds.is_empty());
+    fn has_kind(node: &serde_json::Value, kind: &serde_json::Value) -> bool {
+        node["kind"] == *kind || node["children"].as_array().into_iter().flatten().any(|c| has_kind(c, kind))
+    }
+    for kind in kinds { assert!(has_kind(&first.root, kind), "hello-ui has no {kind} node"); }
     let (_, images) = host.render_snapshot(id).unwrap();
     assert_eq!((images["hello:frame"].w, images["hello:frame"].h), (96, 54));
 

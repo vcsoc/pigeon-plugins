@@ -94,6 +94,19 @@ class RuntimeTests(unittest.TestCase):
         t.start()
         self.finish(host, t)
 
+    def test_shutdown_stops_io_threads_even_with_host_stdin_open(self):
+        host, plugin, _ = start("open-shutdown")
+        seen = []
+        thread = threading.Thread(target=plugin.run, args=(lambda ctx, msg: seen.append(msg["t"]),))
+        thread.start()
+        try:
+            self.finish(host, thread)
+            plugin._threads[0].join(1)
+            self.assertFalse(any(worker.is_alive() for worker in plugin._threads))
+            self.assertEqual(seen, ["shutdown"])
+        finally:
+            host.close()
+
     def test_refuses_unsupported_protocol(self):
         hello = {"v": 2, "t": "hello", "host": {"name": "Pigeon", "version": "9"}, "protocol": {"min": 3, "max": 4},
                  "theme": {}, "locale": "en", "scale": 1.0, "session_dir": tempfile.gettempdir(), "features": []}

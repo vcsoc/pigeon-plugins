@@ -1,6 +1,6 @@
 {
   "id": "15-robustness",
-  "title": "Garbage, unknown message types and oversized lines do not stop the plugin",
+  "title": "Garbage and unknown message types do not stop the plugin",
   "steps": [
     {
       "ready": {}
@@ -10,9 +10,6 @@
     },
     {
       "raw": "{\"v\":2,\"t\":\"future.thing\",\"x\":1}"
-    },
-    {
-      "raw": "{\"v\":2,\"t\":\"ping\",\"pad\":\"PADDING\"}"
     },
     {
       "ping": {

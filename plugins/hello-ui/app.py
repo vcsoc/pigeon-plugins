@@ -8,6 +8,7 @@ conformance suite can check it.
 Layout of the code: `HelloApp.handle` is the only event entry point; `views` build scenes from
 `State`; background work runs on worker threads through `ctx.spawn`.
 """
+import hashlib
 import json
 import math
 import os
@@ -141,6 +142,10 @@ class HelloApp:
         if instance == PREFS:
             self.on_prefs(ctx, node, kind, msg)
             return
+        if instance == TOOLBAR and node == "toolbar-hello" and kind == "click":
+            self.s.clicks += 1
+            self.render_all(ctx)
+            return
         if instance != MAIN:
             return
         if node == "tabs" and kind == "change":
@@ -157,7 +162,7 @@ class HelloApp:
         if handler is not None:
             handler(ctx, kind, msg)
             return
-        if node in ("go", "toolbar-hello") and kind == "click":
+        if node == "go" and kind == "click":
             self.s.clicks += 1
             self.render_all(ctx)
 
@@ -414,7 +419,8 @@ class HelloApp:
             items = [views.source_item(i) for i in range(SOURCE_ITEMS)]
             ctx.answer(rid, {"items": items[:int(params.get("limit", 200))], "total": len(items)})
         elif method == "source.thumbnail":
-            path = os.path.join(ctx.session_dir, f"thumb-{params.get('id')}.rgba")
+            key = hashlib.sha256(str(params.get("id")).encode()).hexdigest()
+            path = os.path.join(ctx.session_dir, f"thumb-{key}.rgba")
             with open(path, "wb") as f:
                 f.write(views.gradient_pixels(64, 36, len(str(params.get("id")))))
             ctx.answer(rid, {"file": path})

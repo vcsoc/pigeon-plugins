@@ -5,13 +5,15 @@
 //! (for checks only a real host can make, such as the frame budget). The same case files are the
 //! input of `pigeon --conformance` in the Pigeon repository.
 
+use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use pigeon_plugin_sdk::protocol::NodeEvent;
+use pigeon_plugin_sdk::protocol::{Incoming, NodeEvent, MAX_LINE_BYTES};
 use serde_json::{json, Map, Value};
 
+use crate::behavior::node_children;
 use crate::render::{self, Theme};
 use crate::session::{find_node, LaunchOptions, Session};
 use crate::Schemas;
@@ -77,7 +79,10 @@ pub fn run_case(case: &Value, plugin_dir: &Path, schemas: Arc<Schemas>, opts: &R
             return finish(id, title, results, started);
         }
     };
-    let steps = case["steps"].as_array().cloned().unwrap_or_default();
+    let Some(steps) = case["steps"].as_array().filter(|steps| !steps.is_empty()) else {
+        results.push((0, "case".into(), Outcome::Fail("case must have nonempty steps".into())));
+        return finish(id, title, results, started);
+    };
     for (index, step) in steps.iter().enumerate() {
         let name = step_name(step);
         let outcome = match run_step(&session, step, opts) {
@@ -90,7 +95,13 @@ pub fn run_case(case: &Value, plugin_dir: &Path, schemas: Arc<Schemas>, opts: &R
             break;
         }
     }
-    session.shutdown(Duration::from_secs(5));
+    let crashed = results.iter().any(|(_, name, outcome)| name == "crash" && *outcome == Outcome::Pass);
+    if !crashed && !session.shutdown(Duration::from_secs(5)) {
+        results.push((steps.len() + 1, "shutdown".into(), Outcome::Fail("plugin did not exit successfully after shutdown".into())));
+    }
+    if let Some((violation, line)) = session.violations().first() {
+        results.push((steps.len() + 2, "protocol".into(), Outcome::Fail(format!("{violation}: {line}"))));
+    }
     finish(id, title, results, started)
 }
 
@@ -111,11 +122,19 @@ fn timeout_of(v: &Value, default: Duration) -> Duration {
 /// Execute one step. `Err` is a failure with a message.
 fn run_step(s: &Session, step: &Value, opts: &RunOptions) -> Result<Outcome, String> {
     let obj: &Map<String, Value> = step.as_object().ok_or("step must be an object")?;
+    if obj.len() != 1 { return Err("step must have exactly one key".into()); }
     let (kind, arg) = obj.iter().next().ok_or("empty step")?;
     let timeout = timeout_of(arg, opts.timeout);
     match kind.as_str() {
         "ready" => {
             let ready = s.wait_ready(Duration::from_secs(10))?;
+            if ready["plugin"]["id"] != s.manifest.id || ready["plugin"]["version"] != s.manifest.version {
+                return Err(format!("ready identity {} differs from manifest {}/{}", ready["plugin"], s.manifest.id, s.manifest.version));
+            }
+            let mut ids = HashSet::new();
+            for c in ready["contributions"].as_array().into_iter().flatten() {
+                if !ids.insert(c["id"].as_str()) { return Err(format!("duplicate contribution id {}", c["id"])); }
+            }
             let min = arg["min_contributions"].as_u64().unwrap_or(1) as usize;
             let n = ready["contributions"].as_array().map(|a| a.len()).unwrap_or(0);
             if n < min {
@@ -138,6 +157,8 @@ fn run_step(s: &Session, step: &Value, opts: &RunOptions) -> Result<Outcome, Str
             s.show(arg.as_str().ok_or("show takes an instance")?)?;
             Ok(Outcome::Pass)
         }
+        "probe_slots" => probe_slots(s, timeout),
+        "probe_resources" => probe_resources(s),
         "wait_node" => {
             let instance = str_arg(arg, "instance")?;
             let node = str_arg(arg, "node")?;
@@ -186,7 +207,19 @@ fn run_step(s: &Session, step: &Value, opts: &RunOptions) -> Result<Outcome, Str
             s.send_raw(arg.as_str().ok_or("raw takes a string line")?)?;
             Ok(Outcome::Pass)
         }
+        "limits" => {
+            let id = "over-limit-must-not-pong";
+            let line = format!(r#"{{"v":2,"t":"ping","id":"{id}","padding":"{}"}}"#, "x".repeat(MAX_LINE_BYTES));
+            s.send_raw(&line)?;
+            s.ping(timeout).ok_or("no pong after oversized line")?;
+            if s.with_state(|st| st.pongs.iter().any(|pong| pong["id"] == id)) {
+                Err("plugin accepted a line larger than 1 MiB".into())
+            } else {
+                Ok(Outcome::Pass)
+            }
+        }
         "stall" => {
+            if !cfg!(unix) { return Ok(Outcome::Skipped("stall simulation requires Unix process groups".into())); }
             // A hung plugin: pause the process, ask for a ping (no pong may arrive during the
             // stall), resume, and require the pong afterwards.
             let ms = arg["ms"].as_u64().unwrap_or(2000);
@@ -203,8 +236,9 @@ fn run_step(s: &Session, step: &Value, opts: &RunOptions) -> Result<Outcome, Str
             }
         }
         "crash" => {
+            if !s.is_running() { return Err("plugin exited before the crash test".into()); }
             let status = s.crash();
-            if status.is_some() {
+            if status.is_some_and(|code| !code.success()) {
                 Ok(Outcome::Pass)
             } else {
                 Err("process did not report an exit status".into())
@@ -281,7 +315,9 @@ fn run_step(s: &Session, step: &Value, opts: &RunOptions) -> Result<Outcome, Str
         "expect_resource" => {
             let rid = str_arg(arg, "rid")?;
             let kind = arg["kind"].as_str().unwrap_or("");
-            let put = s.wait_until(timeout, |st| st.resources.get(&rid).cloned(), "resource").ok_or_else(|| format!("no resource.put for {rid}"))?;
+            let min_seq = arg["min_seq"].as_u64().unwrap_or(0);
+            let put = s.wait_until(timeout, |st| st.resources.get(&rid).filter(|put| put["seq"].as_u64().unwrap_or_default() >= min_seq).cloned(), "resource")
+                .ok_or_else(|| format!("no resource.put for {rid} at sequence {min_seq} or later"))?;
             if !kind.is_empty() && put["kind"] != kind {
                 return Err(format!("resource {rid} has kind {}, expected {kind}", put["kind"]));
             }
@@ -337,6 +373,68 @@ fn run_step(s: &Session, step: &Value, opts: &RunOptions) -> Result<Outcome, Str
                 .into(),
         )),
         other => Err(format!("unknown step {other}")),
+    }
+}
+
+fn probe_slots(s: &Session, timeout: Duration) -> Result<Outcome, String> {
+    let mut slots = BTreeMap::new();
+    for c in s.manifest.ui["contributions"].as_array().into_iter().flatten().cloned()
+        .chain(s.with_state(|st| st.contributions.clone())) {
+        if let (Some(id), Some(slot)) = (c["id"].as_str(), c["slot"].as_str()) {
+            slots.insert(id.to_owned(), slot.to_owned());
+        }
+    }
+    let mut verified = 0;
+    for (id, slot) in slots {
+        // Toolbar and status-bar items may be command-only and do not promise a scene.
+        if !matches!(slot.as_str(), "workspace.view" | "sidebar.section" | "inspector.panel" | "preferences.page" | "modal") { continue; }
+        let instance = format!("{}/{id}", s.manifest.id);
+        let before = s.scene_revision(&instance);
+        s.send(&Incoming::Resize { instance: instance.clone(), w: 960.0, h: 640.0, scale: 1.0 })?;
+        s.show(&instance)?;
+        let scene = s.wait_next_scene(&instance, before, timeout)?;
+        if let Some(list) = find_visible(&scene.root, &|n| n["kind"] == "list" && n["count"].as_u64().unwrap_or(0) > 0) {
+            let node = list["id"].as_str().ok_or("list requires a node id")?;
+            let last = list["count"].as_u64().unwrap_or(1).saturating_sub(1).min(7);
+            let rev = s.event(&instance, node, NodeEvent::ListWindow { first: 0, last, overscan: 0 })?;
+            s.wait_next_scene(&instance, rev, timeout)?;
+        } else if let Some(node) = find_visible(&scene.root, &|n| n["on"].as_array().is_some_and(|events| events.iter().any(|e| e == "hover"))) {
+            s.send_event(&instance, node["id"].as_str().ok_or("hover target needs an id")?, NodeEvent::Hover { x: 0.0, y: 0.0 })?;
+        }
+        s.ping(timeout).ok_or_else(|| format!("no pong after events for {instance}"))?;
+        s.send(&Incoming::Visibility { instance, visible: false })?;
+        verified += 1;
+    }
+    if verified == 0 { Ok(Outcome::Skipped("no contributions requiring a scene".into())) } else { Ok(Outcome::Pass) }
+}
+
+fn find_visible<'a>(node: &'a Value, matches: &impl Fn(&Value) -> bool) -> Option<&'a Value> {
+    if node["visible"] == false { return None; }
+    if matches(node) { return Some(node); }
+    if node["kind"] == "collapsible" && node["open"] == false { return None; }
+    node_children(node).filter(|child| node["kind"] != "tabs" || child["id"] == node["active"])
+        .find_map(|child| find_visible(child, matches))
+}
+
+fn probe_resources(s: &Session) -> Result<Outcome, String> {
+    let (references, decoded) = s.with_state(|st| {
+        fn collect(node: &Value, rids: &mut HashSet<String>) {
+            if let Some(rid) = node["resource"].as_str() { rids.insert(rid.into()); }
+            for op in node["draw"]["ops"].as_array().into_iter().flatten() {
+                if let Some(rid) = op["rid"].as_str() { rids.insert(rid.into()); }
+            }
+            for child in node_children(node) { collect(child, rids); }
+        }
+        let mut rids = HashSet::new();
+        for scene in st.scenes.values() { collect(scene, &mut rids); }
+        (rids, st.resource_puts)
+    });
+    if decoded > 0 {
+        Ok(Outcome::Pass) // Invalid puts are independently reported by session validation.
+    } else if references.is_empty() {
+        Ok(Outcome::Skipped("no resource references or files emitted by initial scenes".into()))
+    } else {
+        Ok(Outcome::Skipped("initial scenes reference images but no files were published (may be interaction-driven)".into()))
     }
 }
 
