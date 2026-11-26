@@ -163,6 +163,8 @@ pub struct Toast {
     pub error: bool,
     pub remaining: f64,
     pub paused: bool,
+    pub hovering: bool,
+    pub focused: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -186,6 +188,11 @@ pub enum Pending {
         revision: u64,
     },
     Dependencies,
+    Repair,
+    ExportValidate {
+        revision: u64,
+    },
+    RestoreJob,
     Settings,
     Backend,
     ArtworkImport {
@@ -241,6 +248,7 @@ pub struct SubtitleTest {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Dialogs {
     pub settings: bool,
+    pub dependencies: bool,
     pub about: bool,
     pub quit_confirm: bool,
     pub export_review: Option<Vec<String>>,
@@ -274,6 +282,7 @@ pub struct State {
     pub backend: Option<Backend>,
     pub deps: Option<RuntimeDependencies>,
     pub deps_checking: bool,
+    pub repair_message: Option<String>,
     pub settings: Settings,
     pub jobs: Vec<Job>,
     pub notifying_export: Option<String>,
@@ -328,6 +337,7 @@ impl State {
             backend: None,
             deps: None,
             deps_checking: false,
+            repair_message: None,
             settings: Settings::default(),
             jobs: vec![],
             notifying_export: None,
@@ -413,6 +423,8 @@ impl State {
                 error: true,
                 remaining: ERROR_MS,
                 paused: false,
+                hovering: false,
+                focused: false,
             });
         } else {
             self.notice = Some(Toast {
@@ -420,6 +432,8 @@ impl State {
                 error: false,
                 remaining: NOTICE_MS,
                 paused: false,
+                hovering: false,
+                focused: false,
             });
         }
     }
@@ -471,6 +485,9 @@ impl State {
     }
 
     fn check_dependencies(&mut self) {
+        if self.deps_checking {
+            return;
+        }
         self.deps_checking = true;
         self.request(Request::DependenciesStatus, Pending::Dependencies);
     }
@@ -624,6 +641,42 @@ impl State {
                     }
                 }
             }
+            Pending::Repair => {
+                self.busy = None;
+                match reply.and_then(engine::decode::<RuntimeDependencies>) {
+                    Ok(report) => {
+                        self.deps = Some(report);
+                        self.refresh_preview();
+                    }
+                    Err(e) => {
+                        self.repair_message = Some(e.clone());
+                        self.set_error(e);
+                    }
+                }
+            }
+            Pending::ExportValidate { revision } => {
+                self.busy = None;
+                if revision == self.project_rev {
+                    match reply.and_then(engine::decode::<Plan>) {
+                        Ok(plan) => {
+                            self.plan = Some(plan);
+                            self.set_notice("Source validation finished.");
+                        }
+                        Err(e) => self.set_error(e),
+                    }
+                }
+            }
+            Pending::RestoreJob => {
+                self.busy = None;
+                match reply.and_then(engine::decode::<Project>) {
+                    Ok(p) => {
+                        self.activate_project(p);
+                        self.refresh_preview();
+                        self.set_notice("Job settings restored. Relink any missing sources and choose a new output destination.");
+                    }
+                    Err(e) => self.set_error(e),
+                }
+            }
             Pending::Jobs => {
                 if let Ok(jobs) = reply.and_then(engine::decode::<Vec<Job>>) {
                     self.merge_jobs(jobs);
@@ -706,6 +759,7 @@ impl State {
                 match reply {
                     Ok(Value::String(job)) => {
                         self.notifying_export = Some(job);
+                        self.last_jobs_poll = f64::NEG_INFINITY;
                         self.set_notice("Export started. Sources are unchanged; the destination appears only after verification.");
                     }
                     Ok(_) => {}
@@ -885,10 +939,10 @@ impl State {
             }
             "dependencies:repair" => {
                 let message = value.get("message").and_then(Value::as_str).unwrap_or("").to_string();
+                self.repair_message = Some(message.clone());
                 match value.get("phase").and_then(Value::as_str) {
                     Some("started") => self.busy = Some(message),
                     Some("finished") => {
-                        self.busy = None;
                         self.set_notice(if message.is_empty() {
                             "Required components are installed and verified. Preview is ready.".into()
                         } else {
@@ -896,10 +950,7 @@ impl State {
                         });
                         self.check_dependencies();
                     }
-                    _ => {
-                        self.busy = None;
-                        self.set_error(message);
-                    }
+                    _ => self.set_error(message),
                 }
             }
             "dependencies:changed" => self.check_dependencies(),
@@ -1322,7 +1373,20 @@ impl State {
                 "start" => self.start_export(),
                 "confirm" => self.confirm_export(),
                 "review_cancel" => self.dialogs.export_review = None,
+                "restore_cancel" => self.dialogs.restore_confirm = None,
+                "restore_confirm" => {
+                    if let Some(id) = self.dialogs.restore_confirm.take() {
+                        self.restore_export_job(id);
+                    }
+                }
                 other => {
+                    if let Some(id) = other.strip_prefix("restore:") {
+                        if self.store.dirty() && self.busy.is_none() {
+                            self.dialogs.restore_confirm = Some(id.into());
+                        } else {
+                            self.restore_export_job(id.into());
+                        }
+                    }
                     if let Some(id) = other.strip_prefix("cancel:") {
                         self.request(Request::ExportCancel { id: id.into() }, Pending::Other);
                         self.busy = Some("Cancelling export".into());
@@ -1487,25 +1551,41 @@ impl State {
                 _ => {}
             },
             "dep" => match arg.as_str() {
-                "repair" => {
-                    self.busy = Some("Installing required components. Follow the system authentication prompt; do not close Reelio.".into());
-                    self.request(Request::DependenciesRepair, Pending::Dependencies);
+                "open" => self.dialogs.dependencies = true,
+                "close" => self.dialogs.dependencies = false,
+                "repair"
+                    if self.busy.is_none()
+                        && self.deps.as_ref().is_some_and(|d| d.repair_supported) =>
+                {
+                    self.busy = Some("Preparing component repair. Follow the system authentication prompt after approval.".into());
+                    self.repair_message = self.busy.clone();
+                    self.request(Request::DependenciesRepair, Pending::Repair);
                 }
                 "recheck" => self.check_dependencies(),
                 _ => {}
             },
             "toast" => {
-                let hover = value.as_bool().unwrap_or(false);
                 let (kind, dismiss) = arg.split_once(':').unwrap_or((arg.as_str(), ""));
                 let slot = if kind == "error" {
                     &mut self.error
                 } else {
                     &mut self.notice
                 };
-                if dismiss == "dismiss" {
+                if dismiss == "dismiss" && value.is_null() {
                     *slot = None;
                 } else if let Some(t) = slot {
-                    t.paused = hover;
+                    match value["type"].as_str() {
+                        Some("enter") => t.hovering = true,
+                        Some("leave") => t.hovering = false,
+                        Some("focus" | "key") => t.focused = true,
+                        Some("blur") => t.focused = false,
+                        _ => {
+                            if let Some(hover) = value.as_bool() {
+                                t.hovering = hover;
+                            }
+                        }
+                    }
+                    t.paused = t.hovering || t.focused;
                 }
             }
             _ => {}
@@ -1617,7 +1697,26 @@ impl State {
         self.section = Section::Export;
         self.busy = Some("Validating sources and output plan".into());
         let project = serde_json::to_value(self.project()).unwrap_or(Value::Null);
-        self.request(Request::ExportPlan { project }, Pending::Other);
+        self.request(
+            Request::ExportPlan { project },
+            Pending::ExportValidate {
+                revision: self.project_rev,
+            },
+        );
+    }
+
+    fn restore_export_job(&mut self, id: String) {
+        if self.busy.is_some() || self.jobs.iter().any(|j| engine::job_is_active(&j.status)) {
+            return;
+        }
+        if self.jobs.iter().any(|j| {
+            j.id == id
+                && j.project_id.as_deref() == Some(self.project().id.as_str())
+                && matches!(j.status.as_str(), "failed" | "interrupted" | "cancelled")
+        }) {
+            self.busy = Some("Restoring export settings".into());
+            self.request(Request::JobProject { id }, Pending::RestoreJob);
+        }
     }
 
     fn start_export(&mut self) {

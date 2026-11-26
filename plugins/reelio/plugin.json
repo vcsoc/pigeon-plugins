@@ -47,6 +47,8 @@
       {"slot": "modal", "id": "settings", "title": "Preferences", "size": "medium", "resizable": false, "modal": true},
       {"slot": "modal", "id": "about", "title": "About Reelio", "size": "small", "resizable": false, "modal": true},
       {"slot": "modal", "id": "quit", "title": "Close Reelio?", "size": "small", "resizable": false, "modal": true},
+      {"slot": "modal", "id": "dependencies", "title": "Required components", "size": "medium", "resizable": false, "modal": true},
+      {"slot": "modal", "id": "restore", "title": "Restore export settings", "size": "small", "resizable": false, "modal": true},
       {"slot": "modal", "id": "export_review", "title": "Export review", "size": "medium", "resizable": true, "modal": true},
       {"slot": "modal", "id": "consent", "title": "Reelio confirmation", "size": "medium", "resizable": false, "modal": true},
       {"slot": "modal", "id": "download", "title": "Download", "size": "small", "resizable": false, "modal": true},

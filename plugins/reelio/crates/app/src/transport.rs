@@ -411,8 +411,8 @@ pub fn ui_value(event: &NodeEvent) -> Option<Value> {
             overscan,
         } => json!({"type": "list.window", "first": first, "last": last, "overscan": overscan}),
         NodeEvent::Change { value, .. } | NodeEvent::Submit { value, .. } => value.clone(),
-        NodeEvent::Hover { .. } => json!(true),
-        NodeEvent::Blur { value, .. } if value.is_null() => json!(false),
+        NodeEvent::Hover { .. } => json!({"type":"enter"}),
+        NodeEvent::Blur { value, .. } if value.is_null() => json!({"type":"blur"}),
         NodeEvent::Blur { value, .. } => value.clone(),
         NodeEvent::Pointer {
             phase: PointerPhase::Down,
@@ -431,7 +431,8 @@ pub fn ui_value(event: &NodeEvent) -> Option<Value> {
                 PointerPhase::Move => "move",
                 PointerPhase::Up => "up",
                 PointerPhase::Cancel => "cancel",
-                PointerPhase::Enter | PointerPhase::Leave => return None,
+                PointerPhase::Enter => return Some(json!({"type":"enter"})),
+                PointerPhase::Leave => return Some(json!({"type":"leave"})),
             };
             json!({"type": "pointer", "phase": phase, "x": x, "y": y, "mods": mods_json(mods)})
         }
@@ -525,6 +526,16 @@ pub fn handle(app: &Arc<App>, msg: Incoming) {
             update(app, move |core| core.state.dispatch(drop));
         }
         Incoming::Resize { w, .. } => update(app, move |core| core.state.set_window(w as f64)),
+        Incoming::Focus { has: false } => update(app, |core| {
+            for t in [&mut core.state.notice, &mut core.state.error]
+                .into_iter()
+                .flatten()
+            {
+                t.focused = false;
+                t.hovering = false;
+                t.paused = false;
+            }
+        }),
         _ => {}
     }
 }

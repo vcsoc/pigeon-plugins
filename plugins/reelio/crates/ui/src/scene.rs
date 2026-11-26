@@ -127,12 +127,13 @@ fn toasts(s: &State) -> Vec<Value> {
                 &format!("toast:{kind}:hover"),
                 "row",
                 json!({
-                    "role": if t.error { "alert" } else { "status" },
-                    "class": if t.error { "toast error" } else { "toast" },
-                    "on": ["hover", "blur"],
+                    "accessibility":{"role": if t.error { "alert" } else { "status" }, "label":t.text},
+                    "on": ["hover", "pointer", "blur", "key"],
+                    "bg":"bg_raised", "border": if t.error {"danger"} else {"border"}, "radius":6,
+                    "padding":10, "width":{"px":360}, "max_width":360,
                     "children": [
                         text(&format!("toast.{kind}.msg"), &t.text, "body"),
-                        icon_button(&format!("toast:{kind}:dismiss"), "x", "Dismiss notification", true),
+                        node(&format!("toast:{kind}:dismiss"), "icon_button", json!({"icon":"x","tooltip":"Dismiss notification","on":["click","hover","pointer","blur","key"]})),
                     ],
                     "gap": 8.0,
                 }),
@@ -186,6 +187,7 @@ fn top_bar(s: &State) -> Value {
                 s.store.can_redo(),
             ),
             icon_button("settings:open", "settings", "Preferences", true),
+            icon_button("dep:open", "info", "Required components", true),
             button(
                 "export:validate",
                 "Export",
@@ -1461,12 +1463,10 @@ pub fn main_view(s: &State) -> Value {
     } else {
         vec![viewer(s), lower(s)]
     };
-    let feedback = toasts(s);
     let mut top_children = vec![top_bar(s)];
     if let Some(busy) = &s.busy {
         top_children.push(text("busy", busy, "caption"));
     }
-    top_children.extend(feedback);
     let mut body = vec![];
     if !s.layout.left_collapsed && s.section != Section::Subtitles {
         body.push(media_pool(s));
@@ -1493,6 +1493,10 @@ pub fn main_view(s: &State) -> Value {
     );
     // Menus overlay the workspace (z-order `stack`).
     let mut children = vec![workspace];
+    let feedback = toasts(s);
+    if !feedback.is_empty() {
+        children.push(node("toast.overlay","column",json!({"width":{"fill":1},"height":{"fill":1},"align":"end","justify":"end","padding":14,"gap":8,"children":feedback})));
+    }
     children.extend(menu_overlay(s));
     json!({"id": "root", "kind": "stack", "children": children})
 }
@@ -1920,9 +1924,9 @@ fn export(s: &State) -> Value {
         6.0,
     )];
     if let Some(plan) = &s.plan {
-        for e in &plan.errors {
+        for (index, e) in plan.errors.iter().enumerate() {
             children.push(node(
-                "export.error",
+                &format!("export.error:{index}"),
                 "text",
                 json!({"text": e, "style": "body", "color": "warning"}),
             ));
@@ -1961,10 +1965,7 @@ fn export(s: &State) -> Value {
         "primary",
         s.export_enabled(),
     ));
-    let jobs: Vec<Value> = s
-        .jobs
-        .iter()
-        .filter(|j| j.project_id.as_deref() == Some(p.id.as_str()) || j.project_id.is_none())
+    let jobs: Vec<Value> = s.jobs.iter().filter(|j| j.project_id.as_deref() == Some(p.id.as_str())).take(40)
         .map(|j| {
             let mut cells = vec![
                 text(
@@ -1975,18 +1976,28 @@ fn export(s: &State) -> Value {
                 text(&format!("job.status:{}", j.id), &j.status, "caption"),
             ];
             if job_is_active(&j.status) {
-                cells.push(button(
-                    &format!("export:cancel:{}", j.id),
-                    "Cancel",
-                    None,
-                    "ghost",
-                    true,
-                ));
+                let progress=j.progress.as_ref();
+                cells.push(node(&format!("job.progress:{}",j.id),"progress",json!({"value":progress.and_then(|p|p.percent.map(|v|(v/100.).clamp(0.,1.))),"accessibility":{"label":"Export progress"}})));
+                cells.push(text(&format!("job.progress.details:{}",j.id),&progress.map(|p|format!("{} · {} · {} elapsed · {} processed",p.phase,bytes_label(p.bytes),time_hms(Some(p.elapsed_ms)),time_hms(Some(p.processed_ms)))).unwrap_or_else(||"Starting media backend…".into()),"caption"));
+                cells.push(button(&format!("export:cancel:{}",j.id),"Cancel export",None,"danger",s.busy.is_none()));
             }
+            if let Some(error)=&j.error {cells.push(node(&format!("job.error:{}",j.id),"text",json!({"text":error,"color":"danger","wrap":true})));}
+            if let Some(progress)=j.progress.as_ref().filter(|p|j.status=="completed"&&!p.notices.is_empty()) {
+                cells.push(node(&format!("job.adjustments:{}",j.id),"collapsible",json!({"open":true,"title":format!("{} timeline adjustments to fit video",progress.notices.len()),"children":progress.notices.iter().take(512).enumerate().map(|(i,n)|text(&format!("job.adjustment:{}:{i}",j.id),n,"body")).collect::<Vec<_>>()})));
+            }
+            if matches!(j.status.as_str(),"failed"|"cancelled"|"interrupted") {
+                cells.push(button(&format!("export:restore:{}",j.id),"Restore settings to retry",None,"default",s.busy.is_none()));
+            }
+            cells.push(text(&format!("job.creation:{}",j.id),&format!("{} · revision {}",j.created_at,j.sequence),"caption"));
             column(&format!("job:{}", j.id), cells, 4.0)
         })
         .collect();
     children.push(text("export.history.title", "Export history", "title"));
+    children.push(text(
+        "export.history.policy",
+        "One supervised job at a time. Interrupted jobs never resume automatically.",
+        "caption",
+    ));
     children.push(if jobs.is_empty() {
         text(
             "export.history.empty",
@@ -2037,16 +2048,15 @@ fn media_info(s: &State) -> Value {
 /// Dialogs (`modal.<name>` instances), shown only while their flag is set.
 pub fn modals(s: &State) -> BTreeMap<String, Value> {
     let mut out = BTreeMap::new();
+    if s.dialogs.dependencies {
+        out.insert("modal.dependencies".into(), dependency_panel(s, true));
+    }
     if s.dialogs.settings {
         let theme = if s.settings.theme.is_empty() {
             "dark"
         } else {
             s.settings.theme.as_str()
         };
-        let deps = s.deps.as_ref();
-        let missing = deps
-            .map(|d| d.missing_components.join(", "))
-            .unwrap_or_default();
         out.insert(
             "modal.settings".into(),
             column(
@@ -2057,11 +2067,7 @@ pub fn modals(s: &State) -> BTreeMap<String, Value> {
                         {"value": "system", "label": "Follow system"}, {"value": "light", "label": "Light"}, {"value": "dark", "label": "Dark"}
                     ]})),
                     text("settings.folder", &format!("Default folder: {}", s.settings.default_folder.clone().unwrap_or_else(|| "Your Videos folder".into())), "caption"),
-                    text("settings.components", &if s.deps_checking { "Checking required components...".into() } else if missing.is_empty() { "Required components verified.".into() } else { format!("Components need attention: {missing}") }, "body"),
-                    row("settings.actions", vec![
-                        button("dep:recheck", "Check required components", None, "secondary", s.busy.is_none()),
-                        button("dep:repair", "Install or repair components", None, "secondary", s.busy.is_none() && deps.map(|d| d.repair_supported).unwrap_or(false)),
-                    ], 6.0),
+                    dependency_panel(s,false),
                     text("settings.backend", &s.backend.as_ref().map(|b| b.ffmpeg_version.clone()).unwrap_or_else(|| "FFmpeg not connected. Install FFmpeg and make it available on PATH, or configure it in Preferences.".into()), "caption"),
                     button("settings:close", "Close", None, "primary", true),
                 ],
@@ -2142,6 +2148,8 @@ pub fn modals(s: &State) -> BTreeMap<String, Value> {
                 true,
             ),
         );
+    } else if s.dialogs.restore_confirm.is_some() {
+        out.insert("modal.restore".into(), confirm_scene("Restore export settings?", &["This replaces your unsaved project edits with the selected job snapshot. Existing output and sources are unchanged.".into()], "export:restore_cancel", "export:restore_confirm", "Restore snapshot", true));
     } else if let Some(lines) = &s.dialogs.export_review {
         out.insert(
             "modal.export_review".into(),
@@ -2171,6 +2179,70 @@ pub fn modals(s: &State) -> BTreeMap<String, Value> {
         );
     }
     out
+}
+
+fn dependency_panel(s: &State, modal: bool) -> Value {
+    let mut children = vec![text("dependency.title", "Required components", "title")];
+    if s.deps_checking {
+        children.push(node(
+            "dependency.checking",
+            "spinner",
+            json!({"label":"Checking required components"}),
+        ));
+    }
+    if let Some(d) = &s.deps {
+        for (id, name, ready) in [
+            ("backend", "FFmpeg/FFprobe", d.backend_available),
+            ("playback", "Source playback", d.preview_available),
+            ("https", "HTTPS downloads", d.network_available),
+        ] {
+            children.push(stat(
+                &format!("dependency.{id}"),
+                name,
+                if ready { "Available" } else { "Unavailable" },
+            ));
+        }
+        for (i, missing) in d.missing_components.iter().enumerate() {
+            children.push(text(&format!("dependency.missing:{i}"), missing, "body"));
+        }
+        if !d.packages.is_empty() {
+            children.push(text(
+                "dependency.packages",
+                &format!("Managed packages: {}", d.packages.join(", ")),
+                "caption",
+            ));
+        }
+        if !d.repair_hint.is_empty() {
+            children.push(text("dependency.hint", &d.repair_hint, "caption"));
+        }
+    }
+    if let Some(message) = &s.repair_message {
+        children.push(text("dependency.repair", message, "body"));
+    }
+    children.push(row(
+        "dependency.actions",
+        vec![
+            button(
+                "dep:recheck",
+                "Check required components",
+                None,
+                "default",
+                !s.deps_checking && s.busy.is_none(),
+            ),
+            button(
+                "dep:repair",
+                "Install or repair components",
+                None,
+                "primary",
+                s.busy.is_none() && s.deps.as_ref().is_some_and(|d| d.repair_supported),
+            ),
+        ],
+        5.,
+    ));
+    if modal {
+        children.push(button("dep:close", "Close", None, "ghost", true));
+    }
+    column("dependency", children, 6.)
 }
 
 fn confirm_scene(
@@ -2221,7 +2293,31 @@ pub fn all(s: &State) -> BTreeMap<String, Value> {
     out.insert("main".into(), main_view(s));
     out.insert("summary".into(), summary_panel(s));
     out.insert("project".into(), project_panel(s));
-    out.extend(modals(s));
+    let dialogs = modals(s);
+    // The host may show the preferences contribution without opening the same panel as a modal.
+    if let Some(panel) = dialogs.get("modal.settings") {
+        out.insert("prefs".into(), panel.clone());
+    } else {
+        out.insert(
+            "prefs".into(),
+            column(
+                "prefs",
+                vec![
+                    text("prefs.title", "Reelio preferences", "title"),
+                    button(
+                        "settings:open",
+                        "Open Reelio preferences",
+                        Some("settings"),
+                        "default",
+                        true,
+                    ),
+                    dependency_panel(s, false),
+                ],
+                8.,
+            ),
+        );
+    }
+    out.extend(dialogs);
     out
 }
 
