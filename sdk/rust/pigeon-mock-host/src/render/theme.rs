@@ -12,7 +12,7 @@ impl Rgba {
     /// Parse `#rrggbb` or `#rrggbbaa`.
     pub fn parse_hex(text: &str) -> Option<Rgba> {
         let hex = text.strip_prefix('#')?;
-        let byte = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).ok();
+        let byte = |i: usize| u8::from_str_radix(hex.get(i..i + 2)?, 16).ok();
         match hex.len() {
             6 => Some(Rgba([byte(0)?, byte(2)?, byte(4)?, 255])),
             8 => Some(Rgba([byte(0)?, byte(2)?, byte(4)?, byte(6)?])),
@@ -116,12 +116,15 @@ impl Theme {
 }
 
 /// The dark theme as a protocol `hello` theme (what the mock sends by default).
-pub fn dark_theme_protocol() -> ProtocolTheme {
+pub fn dark_theme_protocol() -> ProtocolTheme { protocol_theme(false, 2.0) }
+
+/// Built-in mock palette, serialized for `hello`.
+pub fn protocol_theme(light: bool, scale: f32) -> ProtocolTheme {
     ProtocolTheme {
-        mode: "dark".into(),
-        scale: 2.0,
+        mode: if light { "light" } else { "dark" }.into(),
+        scale,
         font: pigeon_plugin_sdk::protocol::Fonts { ui: "Ubuntu".into(), mono: "Hack".into() },
-        colors: DARK.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+        colors: (if light { LIGHT } else { DARK }).iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
         radius: 4.0,
         spacing: 4.0,
     }

@@ -3,14 +3,17 @@
 //!   pigeon-mock validate-fixtures <examples-dir>
 //!   pigeon-mock run <plugin-dir> [--show <instance>]
 //!   pigeon-mock conformance <plugin-dir> [--cases DIR] [--goldens DIR] [--only ID] [--update-goldens] [--json FILE]
+//!   pigeon-mock render <plugin-dir> --instance <id> --size WxH -o <png> [--theme dark|light]
 //!   pigeon-mock render-scene <scene.json> --out <png> [--size WxH] [--theme dark|light] [--scale N]
 
 use std::collections::HashMap;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Duration;
 
+use pigeon_plugin_sdk::protocol::Incoming;
 use pigeon_mock_host::conformance::{self, RunOptions};
 use pigeon_mock_host::render::{self, Theme};
 use pigeon_mock_host::{LaunchOptions, Schemas, Session};
@@ -21,9 +24,13 @@ fn main() -> ExitCode {
         Some("run") => run(&args[1..]),
         Some("validate-fixtures") => validate_fixtures(args.get(1).map(PathBuf::from)),
         Some("conformance") => conformance_cmd(&args[1..]),
+        Some("render") => match render_plugin(&args[1..]) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => { eprintln!("{e}"); ExitCode::FAILURE }
+        },
         Some("render-scene") => render_scene_cmd(&args[1..]),
         _ => {
-            eprintln!("usage: pigeon-mock run|conformance|render-scene|validate-fixtures ...  (see --help in the docs)");
+            eprintln!("usage: pigeon-mock run|conformance|render|render-scene|validate-fixtures ... (see docs/architecture/sdk.md)");
             ExitCode::from(2)
         }
     }
@@ -145,6 +152,51 @@ fn conformance_cmd(args: &[String]) -> ExitCode {
 fn repo_root() -> PathBuf {
     let here = Path::new(env!("CARGO_MANIFEST_DIR"));
     here.join("../../..").canonicalize().unwrap_or_else(|_| PathBuf::from("."))
+}
+
+fn render_plugin(args: &[String]) -> Result<(), String> {
+    let usage = "usage: pigeon-mock render <plugin-dir> --instance <id> --size WxH -o <png> [--theme dark|light] [--scale N]";
+    let dir = Path::new(args.first().ok_or(usage)?);
+    let id = flag(args, "--instance").ok_or(usage)?;
+    let out = flag(args, "-o").or_else(|| flag(args, "--out")).ok_or(usage)?;
+    let (w, h) = flag(args, "--size").ok_or(usage)?.split_once(['x', 'X']).ok_or("size must be WxH")?;
+    let (w, h): (u32, u32) = (w.parse().map_err(|_| "invalid width")?, h.parse().map_err(|_| "invalid height")?);
+    let scale: f32 = flag(args, "--scale").unwrap_or("1").parse().map_err(|_| "invalid scale")?;
+    let (pw, ph) = (w as f32 * scale, h as f32 * scale);
+    if !scale.is_finite() || pw < 1.0 || ph < 1.0 || pw > 8192.0 || ph > 8192.0 || pw * ph > 16_777_216.0 {
+        return Err("render size is outside supported bounds (8192 per side, 16M pixels total)".into());
+    }
+    let light = match flag(args, "--theme").unwrap_or("dark") {
+        "dark" => false, "light" => true, _ => return Err("theme must be dark or light".into()),
+    };
+    let schemas = Arc::new(Schemas::load());
+    let manifest = pigeon_mock_host::session::load_manifest(dir, &schemas)?;
+    let mut theme = render::theme::protocol_theme(light, scale);
+    if let Some(overrides) = manifest.ui["theme_override"].as_object() {
+        for (token, color) in overrides {
+            if let Some(hex) = color.as_str().filter(|s| render::Rgba::parse_hex(s).is_some()) {
+                theme.colors.insert(token.clone(), hex.to_string());
+            }
+        }
+    }
+    let palette = Theme::from_protocol(&theme);
+    let launch = LaunchOptions { theme, scale, ..LaunchOptions::default() };
+    let session = Session::launch(dir, schemas, launch).map_err(|e| e.to_string())?;
+    session.wait_ready(Duration::from_secs(10))?;
+    let instance = if id.contains('/') { id.to_owned() } else { format!("{}/{id}", manifest.id) };
+    session.send(&Incoming::Resize { instance: instance.clone(), w: w as f32, h: h as f32, scale })?;
+    session.show(&instance)?;
+    session.wait_next_scene(&instance, 0, Duration::from_secs(5))?;
+    let (scene, images) = session.render_snapshot(&instance).ok_or("scene disappeared")?;
+    let surface = render::render_scene(&scene, (w, h), &palette, &images, scale);
+    let clean = session.shutdown(Duration::from_secs(5));
+    if let Some((violation, line)) = session.violations().first() { return Err(format!("{violation}: {line}")); }
+    if !clean { return Err("plugin did not exit cleanly".into()); }
+    let png = render::png::encode(&surface)?;
+    std::fs::OpenOptions::new().write(true).create_new(true).open(out)
+        .and_then(|mut file| file.write_all(&png)).map_err(|e| format!("{out}: {e}"))?;
+    println!("wrote {out} ({}x{} px)", surface.w, surface.h);
+    Ok(())
 }
 
 fn render_scene_cmd(args: &[String]) -> ExitCode {

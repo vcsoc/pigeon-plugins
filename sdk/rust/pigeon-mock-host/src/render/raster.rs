@@ -103,6 +103,7 @@ pub struct Painter<'a> {
     pub images: &'a HashMap<String, ImageRef>,
     state: GState,
     stack: Vec<GState>,
+    clips: Vec<Option<(f32, f32, f32, f32)>>,
     pub scale: f32,
 }
 
@@ -122,6 +123,7 @@ impl<'a> Painter<'a> {
             images,
             state: GState { clip: None, tx: 0.0, ty: 0.0, sx: 1.0, sy: 1.0, shadow: None, gradient: None },
             stack: Vec::new(),
+            clips: Vec::new(),
             scale,
         }
     }
@@ -402,7 +404,20 @@ impl<'a> Painter<'a> {
         });
     }
 
-    /// Current clip rectangle in logical px, for layout code that needs it.
+    /// Interpret untrusted draw state without allowing it to undo the canvas viewport clip.
+    pub(crate) fn canvas(&mut self, x: f32, y: f32, w: f32, h: f32, draw: impl FnOnce(&mut Self) -> Result<(), String>) -> Result<(), String> {
+        let saved = self.state.clone();
+        let stack = std::mem::take(&mut self.stack);
+        let clips = std::mem::take(&mut self.clips);
+        self.translate(x, y);
+        self.clip(0.0, 0.0, w, h);
+        let result = draw(self);
+        self.state = saved;
+        self.stack = stack;
+        self.clips = clips;
+        result
+    }
+
     pub fn translate(&mut self, x: f32, y: f32) {
         self.state.tx += x * self.state.sx;
         self.state.ty += y * self.state.sy;
@@ -522,8 +537,13 @@ impl<'a> Painter<'a> {
                     self.fill_rect(dst.x, dst.y, dst.w, dst.h, &grey, 0.0);
                 }
             }
-            DrawOp::Clip { x, y, w, h } => self.clip(*x, *y, *w, *h),
-            DrawOp::Unclip => self.state.clip = None,
+            DrawOp::Clip { x, y, w, h } => {
+                self.clips.push(self.state.clip);
+                self.clip(*x, *y, *w, *h);
+            }
+            DrawOp::Unclip => {
+                if let Some(clip) = self.clips.pop() { self.state.clip = clip; }
+            },
             DrawOp::Translate { x, y } => self.translate(*x, *y),
             DrawOp::Scale { x, y } => self.scale_by(*x, *y),
             DrawOp::Save => self.save(),

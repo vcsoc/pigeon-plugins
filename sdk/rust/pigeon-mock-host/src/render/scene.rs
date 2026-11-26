@@ -173,16 +173,13 @@ fn paint_draw_value(p: &mut Painter, draw: &Value, x: f32, y: f32, w: f32, h: f3
         let c = p.theme.resolve(clear);
         p.rect_paint(x, y, w, h, &Paint::Solid(c), 0.0);
     }
-    let ops = draw.get("ops").and_then(Value::as_array).cloned().unwrap_or_default();
-    p.save();
-    p.translate(x, y);
-    p.clip(0.0, 0.0, w, h);
-    for op in ops {
-        let typed: DrawOp = serde_json::from_value(op.clone()).map_err(|e| format!("bad draw op {op}: {e}"))?;
-        p.apply(&typed);
-    }
-    p.restore();
-    Ok(())
+    p.canvas(x, y, w, h, |p| {
+        for op in draw["ops"].as_array().into_iter().flatten() {
+            let typed: DrawOp = serde_json::from_value(op.clone()).map_err(|e| format!("bad draw op {op}: {e}"))?;
+            p.apply(&typed);
+        }
+        Ok(())
+    })
 }
 
 fn paint_node(p: &mut Painter, node: &Value, r: Rect, scale: f32) {
@@ -197,17 +194,26 @@ fn paint_node(p: &mut Painter, node: &Value, r: Rect, scale: f32) {
     }
     match kind {
         "panel" => {
-            p.rect_paint(r.x, r.y, r.w, r.h, &Paint::Solid(theme.token("bg_panel", "#23262d")), radius);
-            p.stroke_rect(r.x, r.y, r.w, r.h, &Color::token("border"), 1.0);
-            let pad = num(node, "padding").unwrap_or(8.0);
-            layout_children(p, node, inset(r, pad), scale);
+            let bg = color_of(theme, node, "bg").unwrap_or_else(|| theme.token("bg_panel", "#23262d"));
+            p.rect_paint(r.x, r.y, r.w, r.h, &Paint::Solid(bg), radius);
+            p.stroke_rect(r.x, r.y, r.w, r.h, &Color(node["border"].as_str().unwrap_or("border").into()), 1.0);
+            let mut body = inset(r, num(node, "padding").unwrap_or(8.0));
+            if let Some(title) = node["title"].as_str() {
+                p.text(body.x, body.y, title, 16.0, theme.token("fg", "#e6e8ee"), false, "left");
+                body.y += TITLE_H;
+                body.h = (body.h - TITLE_H).max(0.0);
+            }
+            layout_children(p, node, body, scale);
         }
         "row" | "column" | "wrap" | "scroll" => {
             let pad = num(node, "padding").unwrap_or(0.0);
             if kind == "scroll" {
                 p.save();
                 p.clip(r.x, r.y, r.w, r.h);
-                layout_children(p, node, inset(r, pad), scale);
+                let mut content = inset(r, pad);
+                let offset = num(node, "scroll_to").unwrap_or_default();
+                if node["axis"] == "horizontal" { content.x -= offset; } else { content.y -= offset; }
+                layout_children(p, node, content, scale);
                 p.restore();
             } else {
                 layout_children(p, node, inset(r, pad), scale);
@@ -418,7 +424,7 @@ fn inset(r: Rect, pad: f32) -> Rect {
 /// Lay out children along the container's main axis (row: x, column/others: y), with gap.
 fn layout_children(p: &mut Painter, node: &Value, r: Rect, scale: f32) {
     let theme = p.theme;
-    let horizontal = node["kind"].as_str() == Some("row");
+    let horizontal = node["kind"] == "row" || (node["kind"] == "scroll" && node["axis"] == "horizontal");
     let gap = num(node, "gap").unwrap_or(0.0);
     let children = kids(node);
     if children.is_empty() {
@@ -640,14 +646,14 @@ fn paint_list(p: &mut Painter, node: &Value, r: Rect, scale: f32) {
     let count = node.get("count").and_then(Value::as_u64).unwrap_or(0);
     let window = node.get("window");
     let start = window.and_then(|w| w.get("start")).and_then(Value::as_u64).unwrap_or(0);
-    let rows = window.and_then(|w| w.get("rows")).and_then(Value::as_array).cloned().unwrap_or_default();
+    let rows = window.and_then(|w| w.get("rows")).and_then(Value::as_array);
     p.save();
     p.clip(r.x, r.y, r.w, r.h);
-    let visible = (r.h / row_h).ceil() as u64;
-    for i in 0..visible.min(count) {
+    let row_h = row_h.max(1.0);
+    let visible = (r.h / row_h).ceil() as usize;
+    for i in 0..visible.min(count.saturating_sub(start) as usize) {
         let y = r.y + i as f32 * row_h;
-        let index = start + i;
-        let row = rows.iter().find(|row| row["id"] == format!("row-{index}").as_str());
+        let row = rows.and_then(|rows| rows.get(i));
         match row {
             Some(row) => {
                 let rr = Rect { x: r.x, y, w: r.w, h: row_h };

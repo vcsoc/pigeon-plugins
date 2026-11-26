@@ -7,11 +7,13 @@
 //! * [`render`]: software renderer for scenes and canvases (PNG, themeable, golden tests).
 //! * [`conformance`]: the case runner used by `pigeon-mock conformance` and by the real host.
 
+pub mod behavior;
 pub mod conformance;
 pub mod render;
 pub mod schemas;
 pub mod services;
 pub mod session;
 
+pub use behavior::SceneSnapshot;
 pub use schemas::{Schemas, Violation};
 pub use session::{LaunchOptions, Session};

@@ -21,6 +21,7 @@ pub fn decode(bytes: &[u8]) -> Result<ImageRef, String> {
     let mut decoder = png::Decoder::new(bytes);
     decoder.set_transformations(png::Transformations::normalize_to_color8());
     let mut reader = decoder.read_info().map_err(|e| e.to_string())?;
+    super::resource::check_dimensions(reader.info().width, reader.info().height)?;
     let mut buf = vec![0u8; reader.output_buffer_size()];
     let info = reader.next_frame(&mut buf).map_err(|e| e.to_string())?;
     let data = &buf[..info.buffer_size()];

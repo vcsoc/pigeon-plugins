@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use pigeon_plugin_sdk::protocol::NodeEvent;
 use serde_json::{json, Map, Value};
 
-use crate::render::{self, ImageRef, Theme};
+use crate::render::{self, Theme};
 use crate::session::{find_node, LaunchOptions, Session};
 use crate::Schemas;
 
@@ -313,10 +313,8 @@ fn run_step(s: &Session, step: &Value, opts: &RunOptions) -> Result<Outcome, Str
             let file = str_arg(arg, "file")?;
             let size = arg["size"].as_array().and_then(|a| Some((a.first()?.as_u64()? as u32, a.get(1)?.as_u64()? as u32))).unwrap_or((640, 480));
             let max_fraction = arg["max_fraction"].as_f64().unwrap_or(0.0);
-            let scene = s
-                .wait_until(timeout, |st| st.scenes.get(&instance).cloned(), "scene")
-                .ok_or_else(|| format!("no scene for {instance}"))?;
-            let images = session_images(s);
+            s.wait_next_scene(&instance, 0, timeout)?;
+            let (scene, images) = s.render_snapshot(&instance).ok_or_else(|| format!("no scene for {instance}"))?;
             let surface = render::render_scene(&scene, size, &Theme::dark(), &images, 1.0);
             let path = opts.goldens.join(&file);
             let cmp = render::compare_png(&surface, &path)?;
@@ -340,32 +338,6 @@ fn run_step(s: &Session, step: &Value, opts: &RunOptions) -> Result<Outcome, Str
         )),
         other => Err(format!("unknown step {other}")),
     }
-}
-
-/// Decoded resource images from the session (only raw RGBA and PNG files the host would read).
-fn session_images(s: &Session) -> std::collections::HashMap<String, ImageRef> {
-    let puts = s.with_state(|st| st.resources.clone());
-    let mut out = std::collections::HashMap::new();
-    for (rid, put) in puts {
-        let Some(file) = put["file"].as_str() else { continue };
-        let Ok(bytes) = std::fs::read(file) else { continue };
-        let image = match put["kind"].as_str() {
-            Some("rgba") => {
-                let (w, h) = (put["w"].as_u64().unwrap_or(0) as u32, put["h"].as_u64().unwrap_or(0) as u32);
-                if bytes.len() == (w * h * 4) as usize {
-                    Some(ImageRef { w, h, rgba: bytes })
-                } else {
-                    None
-                }
-            }
-            Some("png") => render::png::decode(&bytes).ok(),
-            _ => None,
-        };
-        if let Some(img) = image {
-            out.insert(rid, img);
-        }
-    }
-    out
 }
 
 fn str_arg(arg: &Value, key: &str) -> Result<String, String> {
