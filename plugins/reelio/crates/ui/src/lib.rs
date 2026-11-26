@@ -21,5 +21,6 @@ pub mod scene;
 pub mod state;
 pub mod store;
 pub mod studio;
+pub mod studio_workflow;
 pub mod subtitles;
 pub mod timeline_input;

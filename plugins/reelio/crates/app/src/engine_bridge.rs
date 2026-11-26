@@ -29,6 +29,7 @@ pub struct PluginHost {
     data_dir: PathBuf,
     videos_dir: Option<PathBuf>,
     ctx: Option<Ctx>,
+    consent: Option<std::sync::mpsc::SyncSender<crate::consent::Ask>>,
 }
 
 impl PluginHost {
@@ -38,6 +39,7 @@ impl PluginHost {
             data_dir,
             videos_dir,
             ctx,
+            consent: None,
         }
     }
 
@@ -47,14 +49,17 @@ impl PluginHost {
             data_dir,
             videos_dir: None,
             ctx: None,
+            consent: None,
         }
     }
 
-    pub fn from_env(ctx: Ctx) -> Self {
+    pub fn from_env(ctx: Ctx, consent: std::sync::mpsc::SyncSender<crate::consent::Ask>) -> Self {
         let data_dir = std::env::var_os("PIGEON_PLUGIN_DATA")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from(".data"));
-        Self::new(data_dir, Some(ctx))
+        let mut host = Self::new(data_dir, Some(ctx));
+        host.consent = Some(consent);
+        host
     }
 
     fn dialog(&self, method: &str, request: &FileDialog) -> Result<Value, String> {
@@ -110,9 +115,10 @@ impl EngineHost for PluginHost {
         let value = self.dialog("dialog.save_file", request).ok()?;
         Self::paths(&value).into_iter().next()
     }
-    /// Yes/no prompts are rendered as in-plugin review dialogs; the engine's prompts default to No.
-    fn confirm(&self, _request: &ConfirmDialog) -> bool {
-        false
+    fn confirm(&self, request: &ConfirmDialog) -> bool {
+        self.consent
+            .as_ref()
+            .is_some_and(|tx| crate::consent::ask(tx, request.clone()))
     }
     fn open_url(&self, url: &str) -> Result<(), String> {
         let ctx = self
@@ -121,11 +127,10 @@ impl EngineHost for PluginHost {
             .ok_or("The Pigeon shell service is not available in this context.")?;
         ctx.open_url(url).map_err(|e| e.to_string())
     }
-    fn open_search_browser(&self, _url: &str) -> Result<(), String> {
-        Err(
-            "The isolated search browser is a host window service; use the browser link instead."
-                .into(),
-        )
+    fn open_search_browser(&self, url: &str) -> Result<(), String> {
+        // Protocol v2 does not expose a webview or browser cookies. Open only the
+        // engine-generated search URL; users can paste a public URL or import a local file.
+        self.open_url(url)
     }
     fn window_control(&self, _action: WindowAction) -> Result<bool, String> {
         Ok(false)
@@ -206,14 +211,57 @@ impl EngineBridge for Real {
                 .and_then(|(artwork, edits)| {
                     encode(e.artwork_edit(reelio_engine::ArtworkEditRequest { artwork, edits }))
                 }),
-            Request::SearchBrowserOpen { kind, query } => decode::<reelio_engine::SearchKind>(Value::String(kind))
-                .and_then(|kind| encode(e.search_browser_open(reelio_engine::SearchBrowserRequest { kind, query }).map(|()| Value::Null))),
+            Request::SearchBrowserOpen { kind, query } => {
+                decode::<reelio_engine::SearchKind>(Value::String(kind)).and_then(|kind| {
+                    encode(
+                        e.search_browser_open(reelio_engine::SearchBrowserRequest { kind, query })
+                            .map(|()| Value::Null),
+                    )
+                })
+            }
             Request::SearchBrowserAllows { url } => encode(Ok(e.search_browser_allows(url))),
-            Request::SearchBrowserDownload { kind, url } => decode::<reelio_engine::SearchKind>(Value::String(kind))
-                .and_then(|kind| encode(e.search_browser_download(reelio_engine::SearchBrowserDownloadRequest { kind, url, cookie: String::new() }))),
+            Request::SearchBrowserDownload { kind, url } => {
+                if !e.search_browser_allows(url.clone()) {
+                    return Err("Enter a valid public HTTPS download URL".into());
+                }
+                decode::<reelio_engine::SearchKind>(Value::String(kind)).and_then(|kind| {
+                    encode(
+                        e.search_browser_download(reelio_engine::SearchBrowserDownloadRequest {
+                            kind,
+                            url,
+                            cookie: String::new(),
+                        }),
+                    )
+                })
+            }
             Request::SubtitleModels => encode(e.subtitle_models()),
-            Request::SubtitleModelStart { model, document, language } => decode::<reelio_engine::Document>(document)
-                .and_then(|d| encode(e.subtitle_model_start(reelio_engine::SubtitleModelStartRequest { model, document: Some(d), language }))),
+            Request::SubtitleModelStart {
+                model,
+                document,
+                language,
+            } => document
+                .map(decode::<reelio_engine::Document>)
+                .transpose()
+                .and_then(|document| {
+                    encode(
+                        e.subtitle_model_start(reelio_engine::SubtitleModelStartRequest {
+                            model,
+                            document,
+                            language,
+                        }),
+                    )
+                }),
+            Request::SubtitleEditorDraft { document, clear } => document
+                .map(decode::<reelio_engine::Document>)
+                .transpose()
+                .and_then(|document| {
+                    encode(
+                        e.subtitle_editor_draft(reelio_engine::SubtitleEditorDraftRequest {
+                            document,
+                            clear,
+                        }),
+                    )
+                }),
             Request::SubtitleModelStatus => encode(e.subtitle_model_status()),
             Request::SubtitleModelCancel => {
                 e.subtitle_model_cancel();
@@ -226,7 +274,17 @@ impl EngineBridge for Real {
                 e.subtitle_editor_dirty(dirty);
                 Ok(Value::Null)
             }
-            Request::ChooseSubtitles => encode(e.choose_subtitles()),
+            Request::ChooseSubtitles => encode(e.choose_subtitles().map(|paths| {
+                paths
+                    .into_iter()
+                    .map(|path| match bounded_subtitle(&path) {
+                        Ok(()) => json!({"name": reelio_ui::model::basename(&path), "path": path}),
+                        Err(error) => {
+                            json!({"error": error, "name": reelio_ui::model::basename(&path)})
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            })),
             Request::MediaDropped { paths } => {
                 let paths = paths.into_iter().map(PathBuf::from).collect();
                 let point = reelio_engine::Point { x: 0.0, y: 0.0 };
@@ -271,6 +329,32 @@ impl EngineBridge for Real {
                 .and_then(|a| encode(e.window_action(a))),
         }
     }
+}
+
+fn bounded_subtitle(path: &str) -> Result<(), String> {
+    use std::io::Read;
+    const LIMIT: u64 = 4 * 1024 * 1024;
+    let ext = std::path::Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if !["srt", "ass", "ssa", "vtt"].contains(&ext.as_str()) {
+        return Err("Choose an SRT, ASS, SSA or WebVTT subtitle file.".into());
+    }
+    let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
+    let metadata = file.metadata().map_err(|e| e.to_string())?;
+    if !metadata.is_file() || metadata.len() > LIMIT {
+        return Err("Subtitles must be regular files of at most 4 MiB.".into());
+    }
+    let mut bytes = Vec::new();
+    file.take(LIMIT + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| e.to_string())?;
+    if bytes.len() as u64 > LIMIT || bytes.contains(&0) || std::str::from_utf8(&bytes).is_err() {
+        return Err("Subtitles must be UTF-8 text of at most 4 MiB.".into());
+    }
+    Ok(())
 }
 
 /// Used when the engine cannot start (for example an unwritable data folder): every command

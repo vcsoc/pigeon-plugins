@@ -33,6 +33,7 @@ pub struct Studio {
     pub replacement: String,
     /// Shift amount for the shift control, in milliseconds.
     pub shift_ms: i64,
+    pub workflow: crate::studio_workflow::StudioWorkflow,
 }
 
 impl Studio {
@@ -42,16 +43,16 @@ impl Studio {
 }
 
 impl State {
-    fn studio_mut(&mut self) -> &mut Studio {
+    pub(crate) fn studio_mut(&mut self) -> &mut Studio {
         self.studio.get_or_insert_with(Studio::default)
     }
 
-    fn studio_set_error(&mut self, text: impl Into<String>) {
+    pub(crate) fn studio_set_error(&mut self, text: impl Into<String>) {
         self.studio_mut().error = Some(text.into());
         self.studio_mut().notice = None;
     }
 
-    fn studio_edit(&mut self, next: SrtDocument) {
+    pub(crate) fn studio_edit(&mut self, next: SrtDocument) {
         let st = self.studio_mut();
         if next == st.doc {
             return;
@@ -69,13 +70,20 @@ impl State {
     /// Mirror unsaved work to the engine so close protection and recovery apply.
     fn studio_dirty_sync(&mut self) {
         let dirty = self.studio.as_ref().map(|s| s.dirty()).unwrap_or(false);
+        let due = self.now + 300.0;
+        self.studio_mut().workflow.draft_due = Some(due);
         self.engine_request_with(Request::SubtitleEditorDirty { dirty }, Pending::Silent);
     }
 
     fn studio_fresh_id(&mut self) -> String {
         let st = self.studio_mut();
-        st.next_id += 1;
-        format!("cue-{}", st.next_id)
+        loop {
+            st.next_id += 1;
+            let id = format!("cue-{}", st.next_id);
+            if !st.doc.cues.iter().any(|cue| cue.id == id) {
+                return id;
+            }
+        }
     }
 
     /// Open a document (from the engine reply or a test fixture).
@@ -88,6 +96,8 @@ impl State {
         st.selected = st.doc.cues.first().map(|c| c.id.clone());
         st.source_label = label.into();
         st.source_path = path;
+        st.workflow.saved_copy = None;
+        st.workflow.playing_cue = None;
         st.window_start = 0;
         st.error = None;
         st.notice = Some(format!("Loaded {label}. The original file is unchanged."));
@@ -99,12 +109,21 @@ impl State {
             .split_once(':')
             .map(|(a, b)| (a.to_string(), b.to_string()))
             .unwrap_or((arg.to_string(), String::new()));
+        if self.studio_model_running()
+            && !matches!(verb.as_str(), "model_cancel" | "window" | "list")
+        {
+            return;
+        }
+        if verb == "select" && value["type"] == "key" {
+            self.studio_action("list", value);
+            return;
+        }
         match verb.as_str() {
             "open" => self.outbox_engine(
                 Request::SubtitleEditorOpen { path: None },
                 Pending::SubtitleOpen,
             ),
-            "choose" => self.outbox_engine(Request::ChooseSubtitles, Pending::SubtitleChoose),
+            "choose" => self.studio_workflow_action("import", "", &value),
             "new" => {
                 self.studio_load(SrtDocument::default(), "New subtitle document", None);
                 self.studio_mut().notice =
@@ -114,12 +133,38 @@ impl State {
                 self.studio_mut().selected = Some(rest.clone());
                 if let Some(cue) = self.studio_cue(&rest) {
                     let ms = cue.start_ms as f64;
-                    self.seek_playhead(ms);
+                    self.set_media_time(ms);
                 }
             }
             "window" | "list" => {
-                let first = value.get("first").and_then(Value::as_u64).unwrap_or(0) as usize;
-                self.studio_mut().window_start = first;
+                if value["type"] == "key" && value["phase"] == "down" {
+                    let direction = match value["key"].as_str() {
+                        Some("ArrowLeft" | "Left") => -1,
+                        Some("ArrowRight" | "Right") => 1,
+                        _ => return,
+                    };
+                    let st = self.studio_mut();
+                    let current = st
+                        .doc
+                        .cues
+                        .iter()
+                        .position(|c| Some(&c.id) == st.selected.as_ref())
+                        .unwrap_or(0);
+                    if let Some(cue) = st.doc.cues.get(
+                        current
+                            .saturating_add_signed(direction)
+                            .min(st.doc.cues.len().saturating_sub(1)),
+                    ) {
+                        let (id, ms) = (cue.id.clone(), cue.start_ms as f64);
+                        st.selected = Some(id.clone());
+                        st.workflow.reveal_cue =
+                            Some((id, st.workflow.reveal_cue.as_ref().map_or(0, |r| r.1 + 1)));
+                        self.set_media_time(ms);
+                    }
+                } else if let Some(first) = value.get("first").and_then(Value::as_u64) {
+                    let st = self.studio_mut();
+                    st.window_start = (first as usize).min(st.doc.cues.len().saturating_sub(1));
+                }
             }
             "find" => self.studio_mut().find = value.as_str().unwrap_or("").to_string(),
             "replacement" => {
@@ -285,10 +330,10 @@ impl State {
                 let document = serde_json::to_value(&doc).unwrap_or(Value::Null);
                 self.outbox_engine(
                     Request::SubtitleEditorSave { document },
-                    Pending::SubtitleSave,
+                    Pending::SubtitleSave(doc),
                 );
             }
-            _ => {}
+            _ => self.studio_workflow_action(&verb, &rest, &value),
         }
     }
 
@@ -333,29 +378,12 @@ impl State {
     /// Engine replies for the studio.
     pub fn studio_reply(&mut self, pending: &Pending, reply: &engine::Reply) -> bool {
         match pending {
-            Pending::SubtitleOpen | Pending::SubtitleChoose => {
+            Pending::SubtitleOpen => {
                 match reply {
                     Ok(v) if v.is_null() => {}
                     Ok(v) => {
-                        let (doc, path) = if pending == &Pending::SubtitleOpen {
-                            (
-                                serde_json::from_value::<SrtDocument>(
-                                    v.get("document").cloned().unwrap_or(Value::Null),
-                                ),
-                                v.get("path")
-                                    .and_then(Value::as_str)
-                                    .unwrap_or("")
-                                    .to_string(),
-                            )
-                        } else {
-                            let path = v
-                                .as_array()
-                                .and_then(|a| a.first())
-                                .and_then(Value::as_str)
-                                .unwrap_or("")
-                                .to_string();
-                            (Ok(SrtDocument::default()), path)
-                        };
+                        let doc = serde_json::from_value::<SrtDocument>(v["document"].clone());
+                        let path = v["path"].as_str().unwrap_or_default().to_owned();
                         match doc {
                             Ok(d) if !path.is_empty() => {
                                 let label = crate::model::basename(&path);
@@ -370,13 +398,14 @@ impl State {
                 }
                 true
             }
-            Pending::SubtitleSave => {
+            Pending::SubtitleSave(snapshot) => {
                 match reply {
                     Ok(v) if v.is_null() => {}
                     Ok(v) => {
                         let path = v.as_str().unwrap_or("").to_string();
                         let st = self.studio_mut();
-                        st.saved = st.doc.clone();
+                        st.saved = snapshot.clone();
+                        st.workflow.saved_copy = Some(path.clone());
                         st.notice = Some(format!(
                             "Saved a new SRT copy: {}",
                             crate::model::basename(&path)

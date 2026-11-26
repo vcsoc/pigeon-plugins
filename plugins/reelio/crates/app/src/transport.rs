@@ -124,6 +124,7 @@ pub struct Pump {
     visible: BTreeSet<String>,
     open_modals: BTreeSet<String>,
     frame: u64,
+    last_cue_reveal: Option<(String, u64)>,
 }
 
 impl Pump {
@@ -198,6 +199,18 @@ impl Pump {
                 }
             }
         }
+        if state.section == reelio_ui::state::Section::Subtitles && self.visible.contains("main") {
+            if let Some(reveal) = state
+                .studio
+                .as_ref()
+                .and_then(|s| s.workflow.reveal_cue.as_ref())
+            {
+                if self.last_cue_reveal.as_ref() != Some(reveal) {
+                    self.last_cue_reveal = Some(reveal.clone());
+                    let _ = ctx.scroll_to("main", format!("sub:select:{}", reveal.0), "nearest");
+                }
+            }
+        }
     }
 }
 
@@ -206,6 +219,8 @@ pub struct Core {
     pub state: State,
     pump: Pump,
     started: Instant,
+    consent: Option<(Instant, std::sync::mpsc::SyncSender<bool>)>,
+    consent_id: u64,
 }
 
 /// Everything the SDK callbacks need. Engine and ctx are immutable; the core is locked briefly.
@@ -226,6 +241,8 @@ impl App {
                 state: State::new(),
                 pump: Pump::default(),
                 started: Instant::now(),
+                consent: None,
+                consent_id: 0,
             }),
             player: OnceLock::new(),
         })
@@ -248,6 +265,16 @@ fn update_boxed(app: &Arc<App>, f: Box<dyn FnOnce(&mut Core) + Send>) {
     let requests = {
         let mut core = app.lock();
         f(&mut core);
+        if core
+            .consent
+            .as_ref()
+            .is_some_and(|(since, _)| since.elapsed() >= Duration::from_secs(110))
+        {
+            core.state.dialogs.engine_consent = None;
+            if let Some((_, decision)) = core.consent.take() {
+                let _ = decision.try_send(false);
+            }
+        }
         let mut requests = vec![];
         loop {
             let effects = core.state.drain();
@@ -263,6 +290,11 @@ fn update_boxed(app: &Arc<App>, f: Box<dyn FnOnce(&mut Core) + Send>) {
                             json!({"key": key, "value": value}),
                             |_, _| {},
                         );
+                    }
+                    Effect::ConsentDecision(approved) => {
+                        if let Some((_, decision)) = core.consent.take() {
+                            let _ = decision.try_send(approved);
+                        }
                     }
                     Effect::CloseWindow => app.ctx.log("info", "close requested by the user"),
                     Effect::Seek { ms, fast } => send_player(app, Cmd::Seek { ms, exact: !fast }),
@@ -305,6 +337,22 @@ fn update_boxed(app: &Arc<App>, f: Box<dyn FnOnce(&mut Core) + Send>) {
     }
 }
 
+pub fn show_consent(
+    app: &Arc<App>,
+    prompt: reelio_engine::ConfirmDialog,
+    decision: std::sync::mpsc::SyncSender<bool>,
+) {
+    update(app, move |core| {
+        if core.consent.is_some() {
+            let _ = decision.try_send(false);
+            return;
+        }
+        core.consent_id += 1;
+        core.state.dialogs.engine_consent = Some((core.consent_id, prompt.title, prompt.message));
+        core.consent = Some((Instant::now(), decision));
+    });
+}
+
 fn send_player(app: &Arc<App>, cmd: Cmd) {
     if let Some(player) = app.player.get() {
         player.send(cmd);
@@ -345,7 +393,14 @@ pub fn forward_engine_events(
 /// Convert an SDK node event into the reducer's `ui` event (`node`, `value`).
 pub fn ui_value(event: &NodeEvent) -> Option<Value> {
     Some(match event {
-        NodeEvent::Click | NodeEvent::DoubleClick => Value::Null,
+        NodeEvent::Click => Value::Null,
+        NodeEvent::DoubleClick => json!({"type": "double_click"}),
+        NodeEvent::Context => json!({"type": "context"}),
+        NodeEvent::ListWindow {
+            first,
+            last,
+            overscan,
+        } => json!({"type": "list.window", "first": first, "last": last, "overscan": overscan}),
         NodeEvent::Change { value, .. } | NodeEvent::Submit { value, .. } => value.clone(),
         NodeEvent::Hover { .. } => json!(true),
         NodeEvent::Blur { value, .. } if value.is_null() => json!(false),
@@ -409,7 +464,33 @@ pub fn handle(app: &Arc<App>, msg: Incoming) {
                 core.pump.visible.remove(&instance);
             }
         }),
-        Incoming::UiEvent { node, event, .. } => {
+        Incoming::UiEvent {
+            node,
+            event,
+            instance,
+            ..
+        } => {
+            if let NodeEvent::ListWindow {
+                first,
+                last,
+                overscan,
+            } = event
+            {
+                if node == "sub:list" && instance == "main" {
+                    let core = app.lock();
+                    let (start, rows) = reelio_ui::scene::cue_rows(
+                        &core.state,
+                        first.saturating_sub(overscan),
+                        last.saturating_add(overscan),
+                    );
+                    let rows = rows
+                        .into_iter()
+                        .filter_map(|row| serde_json::from_value(row).ok())
+                        .collect();
+                    let _ = app.ctx.list_rows(instance, node, start, rows);
+                }
+                return;
+            }
             if let Some(value) = ui_value(&event) {
                 update(app, move |core| {
                     core.state.dispatch(Event::Ui { node, value })

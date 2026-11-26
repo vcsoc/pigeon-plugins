@@ -4,6 +4,7 @@
 //! binary, so it only reports readiness), `--version`, `--uninstall` (Reelio keeps no external state,
 //! so this confirms without touching the user's media or projects).
 
+mod consent;
 mod engine_bridge;
 mod player;
 mod transport;
@@ -15,8 +16,9 @@ use std::sync::Arc;
 fn run_plugin() -> Result<(), String> {
     let spec = transport::spec()?;
     let plugin = Plugin::stdio(spec).map_err(|e| e.to_string())?;
+    let (consent_tx, consent_rx) = consent::channel();
     let (engine, events): (Arc<dyn EngineBridge>, _) =
-        match Real::start(PluginHost::from_env(plugin.ctx())) {
+        match Real::start(PluginHost::from_env(plugin.ctx(), consent_tx)) {
             Ok((real, events)) => (Arc::new(real), Some(events)),
             Err(error) => (
                 Arc::new(Unavailable(format!(
@@ -26,6 +28,7 @@ fn run_plugin() -> Result<(), String> {
             ),
         };
     let app = transport::App::new(plugin.ctx(), engine);
+    consent::forward(&app, consent_rx);
     transport::attach_player(&app);
     if let Some(events) = events {
         transport::forward_engine_events(&app, events);

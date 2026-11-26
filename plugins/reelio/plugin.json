@@ -29,7 +29,8 @@
     {"path": "run", "executable": true},
     {"path": "Cargo.toml"},
     {"path": "Cargo.lock"},
-    {"path": "crates"}
+    {"path": "crates"},
+    {"path": "vendor"}
   ],
   "ui": {
     "protocol": 2,
@@ -46,6 +47,7 @@
       {"slot": "modal", "id": "about", "title": "About Reelio", "size": "small", "resizable": false, "modal": true},
       {"slot": "modal", "id": "quit", "title": "Close Reelio?", "size": "small", "resizable": false, "modal": true},
       {"slot": "modal", "id": "export_review", "title": "Export review", "size": "medium", "resizable": true, "modal": true},
+      {"slot": "modal", "id": "consent", "title": "Reelio confirmation", "size": "medium", "resizable": false, "modal": true},
       {"slot": "modal", "id": "download", "title": "Download", "size": "small", "resizable": false, "modal": true},
       {"slot": "command", "id": "project.new", "title": "New project", "shortcut": "Ctrl+N"},
       {"slot": "command", "id": "project.open", "title": "Open project", "shortcut": "Ctrl+Shift+O"},

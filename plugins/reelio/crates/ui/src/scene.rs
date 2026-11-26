@@ -39,6 +39,11 @@ fn text(id: &str, s: &str, style: &str) -> Value {
 }
 
 fn button(id: &str, label: &str, icon: Option<&str>, variant: &str, enabled: bool) -> Value {
+    let variant = if variant == "secondary" {
+        "default"
+    } else {
+        variant
+    };
     let mut v = node(
         id,
         "button",
@@ -315,7 +320,21 @@ fn viewer(s: &State) -> Value {
             "body",
         ),
     };
-    children.push(panel("viewer.frame.panel", vec![frame]));
+    let mut frame_layers = vec![frame];
+    let cues = s.subtitle_overlay();
+    if !cues.is_empty() {
+        frame_layers.push(node("viewer.captions", "column", json!({"justify":"end", "align":"center", "height":{"fill":1}, "children":[
+            node("viewer.caption", "text", json!({"text": cues.join("\n").chars().take(16000).collect::<String>(), "bg":"#000000cc", "fg":"#ffffff", "align":"center", "wrap":true, "padding": 6}))
+        ]})));
+    }
+    children.push(panel(
+        "viewer.frame.panel",
+        vec![node(
+            "viewer.frame.stack",
+            "stack",
+            json!({"children":frame_layers}),
+        )],
+    ));
     children.push(node(
         "viewer.seek",
         "slider",
@@ -830,18 +849,28 @@ fn artwork_studio(s: &State) -> Value {
     )
 }
 
-fn subtitle_studio(s: &State) -> Value {
-    let empty = crate::studio::Studio::default();
-    let st = s.studio.as_ref().unwrap_or(&empty);
-    let doc = &st.doc;
-    let rows: Vec<Value> = doc
+pub fn cue_rows(s: &State, first: u64, end: u64) -> (u64, Vec<Value>) {
+    let Some(st) = s.studio.as_ref() else {
+        return (0, vec![]);
+    };
+    let first = first.min(st.doc.cues.len() as u64);
+    let count = end.saturating_sub(first).min(200) as usize;
+    let rows = st
+        .doc
         .cues
         .iter()
         .enumerate()
-        .skip(st.window_start)
-        .take(crate::studio::CUE_WINDOW)
+        .skip(first as usize)
+        .take(count)
         .map(|(i, c)| {
-            let first = c.text.lines().next().unwrap_or("");
+            let first: String = c
+                .text
+                .lines()
+                .next()
+                .unwrap_or("")
+                .chars()
+                .take(200)
+                .collect();
             let mut b = button(
                 &format!("sub:select:{}", c.id),
                 &format!(
@@ -856,15 +885,33 @@ fn subtitle_studio(s: &State) -> Value {
                 true,
             );
             b["toggled"] = json!(st.selected.as_deref() == Some(c.id.as_str()));
+            if st.workflow.playing_cue.as_deref() == Some(&c.id) {
+                b["bg"] = json!("selection");
+            }
+            b["on"] = json!(["click", "key"]);
             b
         })
         .collect();
+    (first, rows)
+}
+
+fn subtitle_studio(s: &State) -> Value {
+    let empty = crate::studio::Studio::default();
+    let st = s.studio.as_ref().unwrap_or(&empty);
+    let doc = &st.doc;
+    let w = &st.workflow;
+    let editable = !s.studio_model_running();
+    let (start, rows) = cue_rows(
+        s,
+        st.window_start as u64,
+        (st.window_start + crate::studio::CUE_WINDOW) as u64,
+    );
     let list = node(
         "sub:list",
         "list",
         json!({
-            "count": doc.cues.len(), "row_height": 28, "key": "rows",
-            "window": {"start": st.window_start, "rows": rows}
+            "count": doc.cues.len(), "row_height": 28, "key": "rows", "on":["list.window", "key"],
+            "height":{"fill":1}, "window": {"start": start, "rows": rows}
         }),
     );
     let selected = st
@@ -888,7 +935,7 @@ fn subtitle_studio(s: &State) -> Value {
         fields.push(node(
             &format!("sub:text:{}", c.id),
             "text_input",
-            json!({"value": c.text, "rev": 0, "multiline": true, "commit": "change", "label": "Subtitle text"}),
+            json!({"value": c.text, "rev": 0, "multiline": true, "commit": "change", "label": "Subtitle text", "enabled": editable, "max_len":16384}),
         ));
         fields.push(row(
             "sub.cue_actions",
@@ -996,6 +1043,35 @@ fn subtitle_studio(s: &State) -> Value {
         6.0,
     );
     let notice = st.error.clone().or(st.notice.clone()).unwrap_or_default();
+    let mut right = vec![
+        column("sub.fields", fields, 6.0),
+        tools,
+        column("sub.issues", issue_nodes, 2.0),
+        studio_models(s, st),
+    ];
+    if w.saved_copy.is_some() {
+        right.push(button(
+            "sub:add_saved",
+            "Add saved SRT to project",
+            None,
+            "ghost",
+            editable,
+        ));
+    }
+    let responsive = if s.window_width < 880.0 {
+        "column"
+    } else {
+        "row"
+    };
+    let panes = node(
+        "sub.body",
+        responsive,
+        json!({"gap":10, "height":{"fill":1}, "children":[
+            node("sub.left","column", json!({"width":{"fill":1},"children":[list]})),
+            viewer(s),
+            node("sub.right", "scroll", json!({"axis":"vertical", "width":{"fill":1}, "height":{"fill":1}, "children":[column("sub.editing",right,6.0)]}))
+        ]}),
+    );
     column(
         "subtitles",
         vec![
@@ -1008,37 +1084,226 @@ fn subtitle_studio(s: &State) -> Value {
                 8.0,
             ),
             toolbar,
-            tools,
-            if notice.is_empty() {
-                text("sub.notice", "", "caption")
-            } else {
-                text("sub.notice", &notice, "caption")
-            },
-            row(
-                "sub.body",
-                vec![
-                    column("sub.left", vec![list], 4.0),
-                    column(
-                        "sub.right",
-                        vec![
-                            column("sub.fields", fields, 6.0),
-                            column("sub.issues", issue_nodes, 2.0),
-                        ],
-                        6.0,
-                    ),
-                ],
-                10.0,
+            button(
+                "sub:search_toggle",
+                "Search, import & preview",
+                Some("search"),
+                "ghost",
+                editable,
             ),
+            if w.search_open {
+                studio_search(s, st)
+            } else {
+                node("sub.search.hidden", "spacer", json!({"height":{"px":0}}))
+            },
+            text("sub.notice", &notice, "caption"),
+            panes,
         ],
         8.0,
     )
 }
 
-/// Lower workspace in the center column: timeline, poster & cover studio, or subtitle studio.
+fn studio_search(s: &State, st: &crate::studio::Studio) -> Value {
+    let w = &st.workflow;
+    let mut actions = vec![node(
+        "sub.provider",
+        "wrap",
+        json!({"gap":6, "children":[
+            input("sub:query", &w.query, "Movie title / year", "change"),
+            button("sub:search", "Search OpenSubtitles (browser)", Some("search"), "default", !w.query.trim().is_empty()),
+            input("sub:url", &w.url, "Public HTTPS subtitle/ZIP download URL", "change"),
+            button("sub:offer", "Review download", None, "default", !w.url.trim().is_empty()),
+        ]}),
+    )];
+    for (i, (name, _)) in w.files.iter().enumerate() {
+        actions.push(button(
+            &format!("sub:add_file:{i}"),
+            &format!("Add & test subtitle: {name}"),
+            None,
+            "ghost",
+            s.busy.is_none(),
+        ));
+    }
+    for track in s
+        .project()
+        .tracks
+        .iter()
+        .filter(|t| s.project().track_kind(t) == Some(Kind::Subtitle))
+        .take(64)
+    {
+        actions.push(button(
+            &format!("sub:test_track:{}", track.id),
+            &format!("Test {}", s.track_title(track)),
+            None,
+            "ghost",
+            s.busy.is_none(),
+        ));
+    }
+    if let Some(test) = &s.subtitle_test {
+        let end = s.source_duration_ms() as i64;
+        if end > 0 && test.cues.iter().any(|cue| cue.end > end) {
+            actions.push(text(
+                "sub.duration_warning",
+                "Some cues finish after the selected source ends.",
+                "caption",
+            ));
+        }
+        for (i, cue) in test.cues.iter().take(100).enumerate() {
+            let mut control = button(
+                &format!("sub:seek:{}:{i}", cue.start),
+                &format!(
+                    "{} → {}  {}",
+                    crate::subtitles::cue_clock(cue.start),
+                    crate::subtitles::cue_clock(cue.end),
+                    cue.text.chars().take(130).collect::<String>()
+                ),
+                None,
+                "ghost",
+                true,
+            );
+            control["tooltip"] = json!("Seek source to this subtitle cue");
+            actions.push(control);
+        }
+    }
+    node(
+        "sub.search",
+        "scroll",
+        json!({"axis":"vertical", "max_height":180,"children":[column("sub.search.content",actions,4.0)]}),
+    )
+}
+
+fn studio_models(s: &State, st: &crate::studio::Studio) -> Value {
+    let w = &st.workflow;
+    let running = s.studio_model_running();
+    let mut controls = vec![
+        text("sub.model.title", "Local translation (Ollama)", "title"),
+        button(
+            "sub:models",
+            "Refresh local models",
+            None,
+            "default",
+            !running,
+        ),
+    ];
+    if !w.models.is_empty() {
+        let opts = w.models.iter().map(|(name,installed)| json!({"value":name,"label":format!("{name} {}",if *installed { "(installed)" } else { "(not installed)" })})).collect::<Vec<_>>();
+        controls.extend([
+            node(
+                "sub:model",
+                "select",
+                json!({"label":"Local model","options":opts,"value":w.model,"enabled":!running}),
+            ),
+            button("sub:pull", "Download model plugin", None, "ghost", !running),
+            input("sub:language", &w.language, "Translate into", "change"),
+            button(
+                "sub:translate",
+                "Translate document",
+                None,
+                "primary",
+                !running && !st.doc.cues.is_empty() && !w.language.trim().is_empty(),
+            ),
+        ]);
+    }
+    if running {
+        controls.push(button(
+            "sub:model_cancel",
+            "Cancel model operation",
+            None,
+            "danger",
+            !w.starting,
+        ));
+    }
+    if !w.job.status.is_empty() {
+        controls.push(text(
+            "sub.model.status",
+            &format!(
+                "{}: {} · {} / {} · {}",
+                w.job.kind, w.job.status, w.job.done, w.job.total, w.job.message
+            ),
+            "caption",
+        ));
+    }
+    if let Some(review) = &w.review {
+        controls.push(button(
+            "sub:review",
+            "Review translated cues",
+            None,
+            "default",
+            !running,
+        ));
+        if w.review_open {
+            for cue in review
+                .document
+                .cues
+                .iter()
+                .filter(|c| review.translations.contains_key(&c.id))
+                .skip(w.review_page * 10)
+                .take(10)
+            {
+                controls.push(node(&format!("sub:review_accept:{}",cue.id), "checkbox", json!({"value":review.accepted.contains(&cue.id),"label":format!("Accept translation {}",cue.id)})));
+                controls.push(row(
+                    &format!("sub.review.pair:{}", cue.id),
+                    vec![
+                        text(
+                            &format!("sub.review.original:{}", cue.id),
+                            &cue.text,
+                            "body",
+                        ),
+                        text(
+                            &format!("sub.review.translated:{}", cue.id),
+                            &review.translations[&cue.id],
+                            "body",
+                        ),
+                    ],
+                    8.0,
+                ));
+            }
+            controls.push(row(
+                "sub.review.pager",
+                vec![
+                    button(
+                        "sub:review_prev",
+                        "Previous reviewed cues",
+                        None,
+                        "ghost",
+                        w.review_page > 0,
+                    ),
+                    button(
+                        "sub:review_next",
+                        "Next reviewed cues",
+                        None,
+                        "ghost",
+                        (w.review_page + 1) * 10 < review.translations.len(),
+                    ),
+                ],
+                4.0,
+            ));
+            controls.push(button(
+                "sub:review_apply",
+                "Apply selected translations",
+                None,
+                "primary",
+                !review.accepted.is_empty() && st.doc == review.document,
+            ));
+            if st.doc != review.document {
+                controls.push(text("sub.review.snapshot", "These results belong to a different draft. Replacing it will restore the reviewed source snapshot, with Undo available.","caption"));
+                controls.push(button(
+                    "sub:review_replace",
+                    "Replace with reviewed snapshot",
+                    None,
+                    "danger",
+                    !review.accepted.is_empty(),
+                ));
+            }
+        }
+    }
+    column("sub.models", controls, 6.0)
+}
+
+/// Lower workspace in the center column: timeline or poster & cover studio.
 fn lower(s: &State) -> Value {
     let body = match s.section {
         Section::Artwork => artwork_studio(s),
-        Section::Subtitles => subtitle_studio(s),
         _ => timeline(s),
     };
     node(
@@ -1050,7 +1315,11 @@ fn lower(s: &State) -> Value {
 
 /// Workspace view (`main`): the full central area (pool, viewer, lower workspace).
 pub fn main_view(s: &State) -> Value {
-    let mut center = vec![viewer(s), lower(s)];
+    let center = if s.section == Section::Subtitles {
+        vec![subtitle_studio(s)]
+    } else {
+        vec![viewer(s), lower(s)]
+    };
     let feedback = toasts(s);
     let mut top_children = vec![top_bar(s)];
     if let Some(busy) = &s.busy {
@@ -1058,13 +1327,13 @@ pub fn main_view(s: &State) -> Value {
     }
     top_children.extend(feedback);
     let mut body = vec![];
-    if !s.layout.left_collapsed {
+    if !s.layout.left_collapsed && s.section != Section::Subtitles {
         body.push(media_pool(s));
     }
     body.push(node(
         "center",
         "column",
-        json!({"fill": 1, "gap": 0, "children": std::mem::take(&mut center)}),
+        json!({"width": {"fill":1}, "height":{"fill":1}, "gap": 0, "children": center}),
     ));
     let chrome = node(
         "chrome",
@@ -1720,61 +1989,89 @@ pub fn modals(s: &State) -> BTreeMap<String, Value> {
             ),
         );
     }
-    if let Some(lines) = &s.dialogs.export_review {
-        let mut children = vec![text("review.title", "Export review", "title")];
-        children.extend(
-            lines
-                .iter()
-                .enumerate()
-                .map(|(i, l)| text(&format!("review.line:{i}"), l, "body")),
+    if let Some((id, title, message)) = &s.dialogs.engine_consent {
+        out.insert(
+            "modal.consent".into(),
+            confirm_scene(
+                title,
+                std::slice::from_ref(message),
+                &format!("consent:cancel:{id}"),
+                &format!("consent:approve:{id}"),
+                "Continue",
+                true,
+            ),
         );
-        children.push(row(
-            "review.actions",
-            vec![
-                button("export:review_cancel", "Cancel", None, "secondary", true),
-                button(
-                    "export:confirm",
-                    "Continue with export",
-                    None,
-                    "primary",
-                    true,
-                ),
-            ],
-            6.0,
-        ));
+    } else if let Some(lines) = &s.dialogs.export_review {
         out.insert(
             "modal.export_review".into(),
-            column("export_review", children, 10.0),
+            confirm_scene(
+                "Export review",
+                lines,
+                "export:review_cancel",
+                "export:confirm",
+                "Continue with export",
+                true,
+            ),
         );
-    }
-    if let Some(r) = s.resources.front() {
+    } else if let Some(r) = s.resources.front() {
         out.insert(
             "modal.download".into(),
-            column(
-                "download",
-                vec![
-                    text("download.title", &format!("Download {}?", r.name), "title"),
-                    text("download.host", &format!("From {}", r.host), "caption"),
-                    row(
-                        "download.actions",
-                        vec![
-                            button("resource:dismiss", "Cancel", None, "secondary", true),
-                            button(
-                                "resource:import",
-                                "Use this",
-                                None,
-                                "primary",
-                                s.busy.is_none(),
-                            ),
-                        ],
-                        6.0,
-                    ),
-                ],
-                10.0,
+            confirm_scene(
+                &format!("Download {}?", r.name),
+                &[format!(
+                    "From {}. The file is checked before it becomes available to import.",
+                    r.host
+                )],
+                &format!("resource:dismiss:{}", r.id),
+                &format!("resource:import:{}", r.id),
+                "Download and validate",
+                s.busy.is_none(),
             ),
         );
     }
     out
+}
+
+fn confirm_scene(
+    title: &str,
+    lines: &[String],
+    cancel: &str,
+    approve: &str,
+    action: &str,
+    enabled: bool,
+) -> Value {
+    let copy = lines
+        .iter()
+        .take(512)
+        .enumerate()
+        .map(|(i, line)| {
+            node(
+                &format!("confirm.line:{i}"),
+                "text",
+                json!({"text":line, "wrap":true}),
+            )
+        })
+        .collect::<Vec<_>>();
+    column(
+        "confirm",
+        vec![
+            text("confirm.title", title, "title"),
+            node(
+                "confirm.copy",
+                "scroll",
+                json!({"axis":"vertical", "max_height":380, "children":[column("confirm.lines",copy,6.0)]}),
+            ),
+            row(
+                "confirm.actions",
+                vec![
+                    button(cancel, "Cancel", None, "default", true),
+                    button(approve, action, None, "primary", enabled),
+                ],
+                6.0,
+            ),
+        ],
+        10.0,
+    )
 }
 
 /// All scenes for the slot instances, keyed by instance id.

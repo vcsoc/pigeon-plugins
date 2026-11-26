@@ -133,6 +133,7 @@ pub enum Effect {
     },
     /// Ask the host to close the plugin window (after the confirmation flow).
     CloseWindow,
+    ConsentDecision(bool),
     /// Set the preview element source/timeline position (host applies it to the media element).
     Seek {
         ms: f64,
@@ -188,8 +189,15 @@ pub enum Pending {
         path: String,
     },
     SubtitleOpen,
-    SubtitleChoose,
-    SubtitleSave,
+    SubtitleSave(crate::subtitles::SrtDocument),
+    Studio(crate::studio_workflow::StudioRequest),
+    TestSubtitleProbe {
+        path: String,
+    },
+    Download {
+        project_id: String,
+    },
+    QuitRecovery,
     UpdateCheck,
     SettingsFolder,
     PosterSearch,
@@ -224,6 +232,8 @@ pub struct Dialogs {
     pub about: bool,
     pub quit_confirm: bool,
     pub export_review: Option<Vec<String>>,
+    pub export_revision: u64,
+    pub engine_consent: Option<(u64, String, String)>,
     pub restore_confirm: Option<String>,
 }
 
@@ -534,6 +544,7 @@ impl State {
                 fast: write.fast,
             });
         }
+        self.studio_tick();
         if now - self.last_jobs_poll >= 1000.0 {
             self.last_jobs_poll = now;
             self.request(Request::JobsList, Pending::Jobs);
@@ -688,7 +699,10 @@ impl State {
                 }
             }
             Pending::SubtitleTest { track, revision } => {
-                let _ = revision;
+                self.busy = None;
+                if revision != self.project_rev {
+                    return;
+                }
                 match reply.and_then(|v| {
                     v.as_str()
                         .map(str::to_string)
@@ -713,8 +727,67 @@ impl State {
                     Err(e) => self.set_error(e),
                 }
             }
-            Pending::SubtitleOpen | Pending::SubtitleChoose | Pending::SubtitleSave => {
+            Pending::SubtitleOpen | Pending::SubtitleSave(_) => {
                 self.studio_reply(&pending, &reply);
+            }
+            Pending::Studio(workflow) => self.studio_workflow_reply(workflow, reply),
+            Pending::TestSubtitleProbe { path } => {
+                self.busy = None;
+                match reply.and_then(engine::decode::<Asset>) {
+                    Ok(asset)
+                        if asset
+                            .streams
+                            .iter()
+                            .any(|stream| stream.kind == Kind::Subtitle) =>
+                    {
+                        let id = asset.id.clone();
+                        self.finish_probe(path, Ok(asset));
+                        let track = self
+                            .project()
+                            .tracks
+                            .iter()
+                            .find(|t| {
+                                t.asset_id == id
+                                    && self.project().track_kind(t) == Some(Kind::Subtitle)
+                            })
+                            .map(|t| t.id.clone());
+                        if let Some(track) = track {
+                            self.select_track(&track);
+                        }
+                    }
+                    Ok(_) => self.set_error("No text subtitle stream was found in that file."),
+                    Err(e) => self.set_error(e),
+                }
+            }
+            Pending::Download { project_id } => {
+                self.busy = None;
+                if self.project().id != project_id {
+                    return;
+                }
+                match reply {
+                    Ok(v) if v["kind"] == "subtitles" => {
+                        self.studio_add_candidates(&v["files"]);
+                        self.set_notice(
+                            "Subtitle download validated. Choose Add & test subtitle to use it.",
+                        );
+                    }
+                    Ok(v) if v["kind"] == "artwork" => match engine::decode(v["artwork"].clone()) {
+                        Ok(artwork) => {
+                            self.incoming_artwork = Some(artwork);
+                            self.section = Section::Artwork;
+                        }
+                        Err(e) => self.set_error(e),
+                    },
+                    Ok(_) => self.set_error("Unrecognized download result."),
+                    Err(e) => self.set_error(e),
+                }
+            }
+            Pending::QuitRecovery => {
+                self.busy = None;
+                match reply {
+                    Ok(_) => self.outbox.push(Effect::CloseWindow),
+                    Err(e) => self.set_error(format!("Could not save subtitle recovery: {e}")),
+                }
             }
             Pending::PosterSearch | Pending::PosterImage | Pending::ArtworkEdit => {
                 self.poster_reply(&pending, &reply);
@@ -911,6 +984,29 @@ impl State {
     }
 
     /// Imports run one file at a time; the next probe starts when the previous one completes.
+    pub(crate) fn import_and_test_subtitle(&mut self, path: String) {
+        if let Some(track) = self
+            .project()
+            .tracks
+            .iter()
+            .find(|t| {
+                self.project()
+                    .track_asset(t)
+                    .is_some_and(|a| a.path == path)
+                    && self.project().track_kind(t) == Some(Kind::Subtitle)
+            })
+            .map(|t| t.id.clone())
+        {
+            self.select_track(&track);
+        } else if self.busy.is_none() {
+            self.busy = Some(format!("Inspecting {}", basename(&path)));
+            self.request(
+                Request::MediaProbe { path: path.clone() },
+                Pending::TestSubtitleProbe { path },
+            );
+        }
+    }
+
     fn continue_imports(&mut self) {
         if let Some(next) = self.import_queue.pop_front() {
             self.busy = Some(format!("Inspecting {}", basename(&next)));
@@ -980,7 +1076,10 @@ impl State {
     }
 
     fn quit(&mut self) {
-        if self.busy.is_some() {
+        if self.busy.is_some()
+            || self.studio_model_running()
+            || self.jobs.iter().any(|j| engine::job_is_active(&j.status))
+        {
             self.set_error("Finish the active operation before quitting Reelio.");
             return;
         }
@@ -996,8 +1095,17 @@ impl State {
             "project.new" => self.new_project(),
             "project.open" => self.open_project(),
             "project.open_media" => self.open_media(false),
+            "project.save" if self.section == Section::Subtitles => {
+                self.studio_action("save", Value::Null)
+            }
             "project.save" => self.save(),
             "export.validate" => self.validate_export(),
+            "edit.undo" if self.section == Section::Subtitles => {
+                self.studio_action("undo", Value::Null)
+            }
+            "edit.redo" if self.section == Section::Subtitles => {
+                self.studio_action("redo", Value::Null)
+            }
             "edit.undo" => self.undo(),
             "edit.redo" => self.redo(),
             "view.toggle_play" => self.toggle_play(),
@@ -1014,6 +1122,14 @@ impl State {
     }
 
     fn ui(&mut self, node: &str, value: Value) {
+        if let Some(control) = node.strip_prefix("viewer.") {
+            if control == "name" {
+                self.ui("name", value);
+            } else {
+                self.viewer(control, value);
+            }
+            return;
+        }
         let (verb, arg) = node
             .split_once(':')
             .map(|(a, b)| (a, b.to_string()))
@@ -1044,7 +1160,19 @@ impl State {
             }
             "nav" => {
                 if let Some(s) = Section::from_id(&arg) {
-                    self.section = s;
+                    if self.section == Section::Subtitles && s != Section::Subtitles {
+                        if self.studio_model_running() {
+                            return;
+                        }
+                        if self.playing {
+                            self.toggle_play();
+                        }
+                    }
+                    if s == Section::Subtitles {
+                        self.studio_enter();
+                    } else {
+                        self.section = s;
+                    }
                     if !matches!(s, Section::Timeline | Section::Artwork | Section::Subtitles) {
                         self.layout.right_collapsed = false;
                         self.persist_layout();
@@ -1052,6 +1180,7 @@ impl State {
                 }
             }
             "sub" => self.studio_action(&arg, value),
+            "sub.open" => self.studio_open_track(&arg),
             "art" => self.poster_action(&arg, value),
             "undo" => self.undo(),
             "redo" => self.redo(),
@@ -1149,6 +1278,41 @@ impl State {
                     }
                 }
             },
+            "consent" => {
+                if let Some((id, _, _)) = &self.dialogs.engine_consent {
+                    if let Some((action, nonce)) = arg.split_once(':') {
+                        if nonce.parse::<u64>().ok() == Some(*id)
+                            && matches!(action, "approve" | "cancel")
+                        {
+                            self.dialogs.engine_consent = None;
+                            self.outbox
+                                .push(Effect::ConsentDecision(action == "approve"));
+                        }
+                    }
+                }
+            }
+            "resource" => {
+                if let Some((action, id)) = arg.split_once(':') {
+                    if self.resources.front().is_some_and(|r| r.id == id) {
+                        if action == "dismiss" {
+                            self.resources.pop_front();
+                            self.request(
+                                Request::ResourceCancel { id: id.into() },
+                                Pending::Silent,
+                            );
+                        } else if action == "import" && self.busy.is_none() {
+                            self.resources.pop_front();
+                            self.busy = Some("Downloading and validating resource".into());
+                            self.request(
+                                Request::ResourceDownload { id: id.into() },
+                                Pending::Download {
+                                    project_id: self.project().id.clone(),
+                                },
+                            );
+                        }
+                    }
+                }
+            }
             "settings" => match arg.as_str() {
                 "open" => self.dialogs.settings = true,
                 "close" => self.dialogs.settings = false,
@@ -1236,8 +1400,37 @@ impl State {
             }
             "quit" => match arg.as_str() {
                 "confirm" => {
+                    if !self.dialogs.quit_confirm
+                        || self.studio_model_running()
+                        || self.busy.is_some()
+                    {
+                        return;
+                    }
+                    if self
+                        .studio
+                        .as_ref()
+                        .is_some_and(|st| st.workflow.draft_writing)
+                    {
+                        self.set_notice(
+                            "Wait for the subtitle recovery write to finish, then retry.",
+                        );
+                        return;
+                    }
                     self.dialogs.quit_confirm = false;
-                    self.outbox.push(Effect::CloseWindow);
+                    if let Some(st) = self.studio.as_mut().filter(|st| st.dirty()) {
+                        st.workflow.draft_due = None;
+                        let document = serde_json::to_value(&st.doc).ok();
+                        self.busy = Some("Saving subtitle recovery".into());
+                        self.request(
+                            Request::SubtitleEditorDraft {
+                                document,
+                                clear: false,
+                            },
+                            Pending::QuitRecovery,
+                        );
+                    } else {
+                        self.outbox.push(Effect::CloseWindow);
+                    }
                 }
                 "cancel" => self.dialogs.quit_confirm = false,
                 _ => {}
@@ -1380,9 +1573,10 @@ impl State {
         let Some(plan) = self.plan.clone() else {
             return;
         };
-        if !plan.errors.is_empty() || self.busy.is_some() {
+        if !self.export_enabled() || self.plan_due.is_some() {
             return;
         }
+        self.dialogs.export_revision = self.project_rev;
         let conversions: Vec<&engine::PlanTrack> = plan
             .tracks
             .iter()
@@ -1403,15 +1597,26 @@ impl State {
         if !conversions.is_empty() {
             review.push("Continuing authorizes the listed subtitle conversions (including possible styling loss) and timeline audio/video rendering.".into());
         }
-        if review.is_empty() {
-            self.dialogs.export_review = None;
+        let clean = review.is_empty();
+        self.dialogs.export_review = Some(review);
+        if clean {
             self.confirm_export();
-        } else {
-            self.dialogs.export_review = Some(review);
         }
     }
 
     fn confirm_export(&mut self) {
+        if self.dialogs.export_review.take().is_none() {
+            return;
+        }
+        if self.dialogs.export_revision != self.project_rev
+            || !self.export_enabled()
+            || self.plan_due.is_some()
+        {
+            self.set_error(
+                "The project changed. Review the current export plan before continuing.",
+            );
+            return;
+        }
         let Some(plan) = self.plan.clone() else {
             return;
         };
@@ -2091,6 +2296,9 @@ impl State {
     pub fn playback_clock(&mut self, ms: f64) {
         self.media_time = ms.clamp(0.0, self.source_duration_ms().max(0.0));
         self.playhead = self.media_time + self.video_offset() as f64;
+        if self.playing {
+            self.studio_follow();
+        }
     }
 
     fn toggle_play(&mut self) {
@@ -2099,7 +2307,7 @@ impl State {
         self.transport(playing);
     }
 
-    fn set_media_time(&mut self, ms: f64) {
+    pub(crate) fn set_media_time(&mut self, ms: f64) {
         let end = self.source_duration_ms();
         self.media_time = ms.clamp(0.0, end.max(0.0));
         self.playhead = self.media_time + self.video_offset() as f64;
@@ -2108,6 +2316,34 @@ impl State {
             ms: self.media_time,
             fast: false,
         });
+    }
+
+    pub fn subtitle_overlay(&self) -> Vec<&str> {
+        let ms = self.media_time as i64;
+        if self.section == Section::Subtitles {
+            if let Some(st) = self.studio.as_ref().filter(|st| !st.doc.cues.is_empty()) {
+                return st
+                    .doc
+                    .cues
+                    .iter()
+                    .filter(|cue| cue.start_ms <= ms && ms < cue.end_ms)
+                    .take(4)
+                    .map(|cue| cue.text.as_str())
+                    .collect();
+            }
+        }
+        self.subtitle_test
+            .as_ref()
+            .filter(|test| {
+                test.project_id == self.project().id
+                    && self.selected.as_ref() == Some(&test.track_id)
+            })
+            .into_iter()
+            .flat_map(|test| &test.cues)
+            .filter(|cue| cue.start <= ms && ms < cue.end)
+            .take(4)
+            .map(|cue| cue.text.as_str())
+            .collect()
     }
 
     /// Seek requested by the viewer seek bar (coalesced by the scheduler).

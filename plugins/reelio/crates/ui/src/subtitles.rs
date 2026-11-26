@@ -261,6 +261,9 @@ fn vtt_timestamp(text: &str) -> Result<i64, String> {
         return Err("Invalid WebVTT timestamp range".into());
     }
     let hours = if parts.len() == 3 { num(parts[0])? } else { 0 };
+    if hours > 8760 {
+        return Err("Subtitle timestamp exceeds the supported range".into());
+    }
     let total = ((hours * 60 + minutes) * 60 + seconds) * 1000 + num(millis)?;
     if total > 31_536_000_000 {
         return Err("Subtitle timestamp exceeds the supported range".into());

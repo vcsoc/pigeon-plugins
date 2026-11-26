@@ -78,8 +78,12 @@ pub enum Request {
     /// Former `subtitle_model_start`: translation of the current document with a local model.
     SubtitleModelStart {
         model: String,
-        document: Value,
+        document: Option<Value>,
         language: String,
+    },
+    SubtitleEditorDraft {
+        document: Option<Value>,
+        clear: bool,
     },
     /// Former `subtitle_model_status`.
     SubtitleModelStatus,
