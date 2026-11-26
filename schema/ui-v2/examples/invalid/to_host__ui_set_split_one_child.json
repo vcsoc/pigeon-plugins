@@ -1,0 +1,19 @@
+{
+  "v": 2,
+  "t": "ui.set",
+  "instance": "a/b",
+  "scene": {
+    "id": "root",
+    "kind": "split",
+    "direction": "horizontal",
+    "sizes": [
+      1
+    ],
+    "children": [
+      {
+        "id": "x",
+        "kind": "panel"
+      }
+    ]
+  }
+}

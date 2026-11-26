@@ -1,0 +1,11 @@
+{
+  "v": 2,
+  "t": "theme.changed",
+  "theme": {
+    "mode": "light",
+    "scale": 1.0,
+    "colors": {
+      "bg": "#ffffff"
+    }
+  }
+}

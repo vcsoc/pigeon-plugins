@@ -1,0 +1,17 @@
+{
+  "v": 2,
+  "t": "req",
+  "id": "s1",
+  "method": "source.list",
+  "params": {
+    "source": "cloud",
+    "node": "album-1",
+    "cursor": null,
+    "limit": 200,
+    "sort": {
+      "key": "taken_at",
+      "dir": "desc"
+    },
+    "filter": {}
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "v": 2,
+  "t": "hello",
+  "host": {
+    "name": "Pigeon",
+    "version": "0.4.1"
+  },
+  "protocol": {
+    "min": 2,
+    "max": 2
+  },
+  "theme": {
+    "mode": "dark",
+    "scale": 2.0,
+    "font": {
+      "ui": "Inter",
+      "mono": "JetBrains Mono"
+    },
+    "colors": {
+      "bg": "#1b1d22",
+      "accent": "#3b82f6",
+      "fg": "#e6e8ee"
+    },
+    "radius": 4,
+    "spacing": 4
+  },
+  "locale": "en",
+  "scale": 2.0,
+  "data_dir": "/Users/me/.pigeon/plugins/hello-ui/.data",
+  "session_dir": "/tmp/pigeon-session-1",
+  "features": [
+    "scene.patch",
+    "canvas",
+    "list.window",
+    "resources.file",
+    "source",
+    "search"
+  ]
+}

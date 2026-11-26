@@ -1,0 +1,10 @@
+{
+  "v": 2,
+  "t": "ui.event",
+  "instance": "a/b",
+  "node": "n",
+  "type": "pointer",
+  "phase": "hover",
+  "x": 1,
+  "y": 2
+}

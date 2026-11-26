@@ -1,0 +1,10 @@
+{
+  "v": 2,
+  "t": "search.status",
+  "mode_id": "semantic",
+  "status": {
+    "state": "indexing",
+    "done": 120,
+    "total": 900
+  }
+}

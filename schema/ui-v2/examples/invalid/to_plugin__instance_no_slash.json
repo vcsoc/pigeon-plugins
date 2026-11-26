@@ -1,0 +1,7 @@
+{
+  "v": 2,
+  "t": "ui.event",
+  "instance": "nojoin",
+  "node": "n",
+  "type": "click"
+}

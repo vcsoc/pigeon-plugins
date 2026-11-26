@@ -1,0 +1,17 @@
+{
+  "v": 2,
+  "t": "contribute",
+  "contributions": [
+    {
+      "slot": "asset.action",
+      "id": "x",
+      "title": "X",
+      "icon": "film",
+      "applies_to": {
+        "kinds": [
+          "video"
+        ]
+      }
+    }
+  ]
+}

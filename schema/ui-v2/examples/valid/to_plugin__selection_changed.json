@@ -1,0 +1,14 @@
+{
+  "v": 2,
+  "t": "selection.changed",
+  "ids": [
+    "a",
+    "b"
+  ],
+  "kinds": [
+    "video"
+  ],
+  "paths": [
+    "/x/a.mp4"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "v": 2,
+  "t": "req",
+  "id": "8",
+  "method": "progress.start",
+  "params": {
+    "title": "Exporting",
+    "cancellable": true
+  }
+}

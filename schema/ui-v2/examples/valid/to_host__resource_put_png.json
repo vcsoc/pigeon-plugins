@@ -1,0 +1,10 @@
+{
+  "v": 2,
+  "t": "resource.put",
+  "rid": "icon:logo",
+  "kind": "png",
+  "file": "/tmp/s/logo.png",
+  "w": 64,
+  "h": 64,
+  "seq": 1
+}

@@ -1,0 +1,11 @@
+{
+  "v": 2,
+  "t": "command",
+  "command": "show-hello",
+  "args": {},
+  "context": {
+    "ids": [
+      "a"
+    ]
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "v": 2,
+  "t": "ui.focus",
+  "instance": "hello-ui/main",
+  "node": "name"
+}

@@ -1,0 +1,9 @@
+{
+  "v": 2,
+  "t": "res",
+  "id": "r2",
+  "error": {
+    "code": "permission_denied",
+    "message": "plugin lacks library.read"
+  }
+}

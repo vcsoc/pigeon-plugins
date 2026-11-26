@@ -1,0 +1,1407 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pigeon.app/schema/ui-v2/methods.schema.json",
+  "title": "Pigeon UI protocol v2: host service and provider methods",
+  "description": "Params and results for every req method. Host services (plugin to host, section 10): <method>.params validates req.params, <method>.result validates the res.result. Provider requests (host to plugin, section 8) use the same pair. Permission per method is in plugin-ui-protocol.md section 10.",
+  "$defs": {
+    "selection.get.params": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "selection.get.result": {
+      "type": "object",
+      "required": [
+        "ids",
+        "kinds",
+        "paths"
+      ],
+      "properties": {
+        "ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "kinds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "selection.subscribe.params": {
+      "type": "object"
+    },
+    "selection.subscribe.result": {
+      "type": "object",
+      "required": [
+        "subscribed"
+      ],
+      "properties": {
+        "subscribed": {
+          "type": "boolean"
+        }
+      }
+    },
+    "library.query.params": {
+      "type": "object",
+      "properties": {
+        "filter": {
+          "type": "object"
+        },
+        "sort": {
+          "type": "object"
+        },
+        "cursor": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5000
+        }
+      }
+    },
+    "library.query.result": {
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "kind"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "image",
+                  "video",
+                  "audio",
+                  "document",
+                  "folder",
+                  "other"
+                ]
+              },
+              "size": {
+                "type": "integer"
+              },
+              "w": {
+                "type": "integer"
+              },
+              "h": {
+                "type": "integer"
+              },
+              "duration": {
+                "type": "number"
+              },
+              "taken_at": {
+                "type": "string"
+              },
+              "modified": {
+                "type": "string"
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "favorite": {
+                "type": "boolean"
+              },
+              "thumb": {
+                "type": "object"
+              },
+              "meta": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "next": {
+          "type": "string"
+        },
+        "total": {
+          "type": "integer"
+        }
+      }
+    },
+    "library.get.params": {
+      "type": "object",
+      "required": [
+        "ids"
+      ],
+      "properties": {
+        "ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "library.get.result": {
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "kind"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "image",
+                  "video",
+                  "audio",
+                  "document",
+                  "folder",
+                  "other"
+                ]
+              },
+              "size": {
+                "type": "integer"
+              },
+              "w": {
+                "type": "integer"
+              },
+              "h": {
+                "type": "integer"
+              },
+              "duration": {
+                "type": "number"
+              },
+              "taken_at": {
+                "type": "string"
+              },
+              "modified": {
+                "type": "string"
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "favorite": {
+                "type": "boolean"
+              },
+              "thumb": {
+                "type": "object"
+              },
+              "meta": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "library.import.params": {
+      "type": "object",
+      "required": [
+        "paths",
+        "mode"
+      ],
+      "properties": {
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "mode": {
+          "enum": [
+            "copy",
+            "reference",
+            "derive"
+          ]
+        },
+        "derive_of": {
+          "type": "string"
+        },
+        "collection": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "library.import.result": {
+      "type": "object",
+      "required": [
+        "ids"
+      ],
+      "properties": {
+        "ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "library.set_tags.params": {
+      "type": "object",
+      "required": [
+        "ids"
+      ],
+      "properties": {
+        "ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "add": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "remove": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "library.set_tags.result": {
+      "type": "object"
+    },
+    "library.set_meta.params": {
+      "type": "object",
+      "required": [
+        "id",
+        "meta"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "meta": {
+          "type": "object"
+        }
+      }
+    },
+    "library.set_meta.result": {
+      "type": "object"
+    },
+    "library.reveal.params": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      }
+    },
+    "library.reveal.result": {
+      "type": "object"
+    },
+    "settings.get.params": {
+      "type": "object",
+      "required": [
+        "key"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        }
+      }
+    },
+    "settings.get.result": {
+      "type": "object",
+      "properties": {
+        "value": {}
+      }
+    },
+    "settings.set.params": {
+      "type": "object",
+      "required": [
+        "key",
+        "value"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {}
+      }
+    },
+    "settings.set.result": {
+      "type": "object"
+    },
+    "settings.delete.params": {
+      "type": "object",
+      "required": [
+        "key"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        }
+      }
+    },
+    "settings.delete.result": {
+      "type": "object"
+    },
+    "secrets.get.params": {
+      "type": "object",
+      "required": [
+        "key"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        }
+      }
+    },
+    "secrets.get.result": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "secrets.set.params": {
+      "type": "object",
+      "required": [
+        "key",
+        "value"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      }
+    },
+    "secrets.set.result": {
+      "type": "object"
+    },
+    "secrets.delete.params": {
+      "type": "object",
+      "required": [
+        "key"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        }
+      }
+    },
+    "secrets.delete.result": {
+      "type": "object"
+    },
+    "dialog.open_file.params": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "filters": {
+          "type": "array"
+        },
+        "multiple": {
+          "type": "boolean"
+        }
+      }
+    },
+    "dialog.open_file.result": {
+      "type": "object",
+      "required": [
+        "paths"
+      ],
+      "properties": {
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "dialog.save_file.params": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "default_name": {
+          "type": "string"
+        },
+        "filters": {
+          "type": "array"
+        }
+      }
+    },
+    "dialog.save_file.result": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "dialog.pick_folder.params": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        }
+      }
+    },
+    "dialog.pick_folder.result": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "clipboard.read.params": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "text",
+            "files",
+            "image"
+          ]
+        }
+      }
+    },
+    "clipboard.read.result": {
+      "type": "object"
+    },
+    "clipboard.write.params": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "text",
+            "files",
+            "image"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "file": {
+          "type": "string"
+        }
+      }
+    },
+    "clipboard.write.result": {
+      "type": "object"
+    },
+    "shell.open_url.params": {
+      "type": "object",
+      "required": [
+        "url"
+      ],
+      "properties": {
+        "url": {
+          "type": "string",
+          "pattern": "^(https?|mailto):"
+        }
+      }
+    },
+    "shell.open_url.result": {
+      "type": "object"
+    },
+    "shell.open_path.params": {
+      "type": "object",
+      "required": [
+        "path"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      }
+    },
+    "shell.open_path.result": {
+      "type": "object"
+    },
+    "shell.reveal.params": {
+      "type": "object",
+      "required": [
+        "path"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      }
+    },
+    "shell.reveal.result": {
+      "type": "object"
+    },
+    "notify.toast.params": {
+      "type": "object",
+      "required": [
+        "level",
+        "text"
+      ],
+      "properties": {
+        "level": {
+          "enum": [
+            "info",
+            "success",
+            "warning",
+            "error"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "action": {
+          "type": "object",
+          "required": [
+            "id",
+            "label"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "notify.toast.result": {
+      "type": "object"
+    },
+    "progress.start.params": {
+      "type": "object",
+      "required": [
+        "title"
+      ],
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "cancellable": {
+          "type": "boolean"
+        },
+        "total": {
+          "type": "number"
+        }
+      }
+    },
+    "progress.start.result": {
+      "type": "object",
+      "required": [
+        "job"
+      ],
+      "properties": {
+        "job": {
+          "type": "string"
+        }
+      }
+    },
+    "progress.update.params": {
+      "type": "object",
+      "required": [
+        "job"
+      ],
+      "properties": {
+        "job": {
+          "type": "string"
+        },
+        "value": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "progress.update.result": {
+      "type": "object"
+    },
+    "progress.end.params": {
+      "type": "object",
+      "required": [
+        "job"
+      ],
+      "properties": {
+        "job": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "ok": {
+          "type": "boolean"
+        }
+      }
+    },
+    "progress.end.result": {
+      "type": "object"
+    },
+    "window.open_modal.params": {
+      "type": "object",
+      "required": [
+        "contribution"
+      ],
+      "properties": {
+        "contribution": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "props": {
+          "type": "object"
+        }
+      }
+    },
+    "window.open_modal.result": {
+      "type": "object",
+      "properties": {
+        "instance": {
+          "type": "string"
+        }
+      }
+    },
+    "window.close_modal.params": {
+      "type": "object",
+      "required": [
+        "instance"
+      ],
+      "properties": {
+        "instance": {
+          "type": "string"
+        }
+      }
+    },
+    "window.close_modal.result": {
+      "type": "object"
+    },
+    "window.set_title.params": {
+      "type": "object",
+      "required": [
+        "title"
+      ],
+      "properties": {
+        "title": {
+          "type": "string"
+        }
+      }
+    },
+    "window.set_title.result": {
+      "type": "object"
+    },
+    "drag.begin.params": {
+      "type": "object",
+      "required": [
+        "paths"
+      ],
+      "properties": {
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "drag.begin.result": {
+      "type": "object"
+    },
+    "theme.get.params": {
+      "type": "object"
+    },
+    "theme.get.result": {
+      "type": "object",
+      "required": [
+        "theme"
+      ],
+      "properties": {
+        "theme": {
+          "$ref": "common.schema.json#/$defs/theme"
+        }
+      }
+    },
+    "locale.get.params": {
+      "type": "object"
+    },
+    "locale.get.result": {
+      "type": "object",
+      "required": [
+        "locale"
+      ],
+      "properties": {
+        "locale": {
+          "type": "string"
+        }
+      }
+    },
+    "log.params": {
+      "type": "object",
+      "required": [
+        "level",
+        "message"
+      ],
+      "properties": {
+        "level": {
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ]
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "log.result": {
+      "type": "object"
+    },
+    "source.describe.params": {
+      "type": "object",
+      "required": [
+        "source"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        }
+      }
+    },
+    "source.describe.result": {
+      "type": "object",
+      "required": [
+        "title",
+        "icon",
+        "root",
+        "capabilities"
+      ],
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "root": {
+          "type": "object",
+          "required": [
+            "id",
+            "title"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "icon": {
+              "type": "string"
+            },
+            "children": {
+              "type": "boolean"
+            },
+            "count": {
+              "type": "integer"
+            },
+            "kind": {
+              "type": "string"
+            }
+          }
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "browse",
+              "search",
+              "upload",
+              "download",
+              "metadata_write",
+              "tags",
+              "delete",
+              "albums",
+              "live"
+            ]
+          }
+        }
+      }
+    },
+    "source.children.params": {
+      "type": "object",
+      "required": [
+        "source",
+        "node"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "node": {
+          "type": "string"
+        },
+        "cursor": {
+          "type": "string"
+        }
+      }
+    },
+    "source.children.result": {
+      "type": "object",
+      "required": [
+        "nodes"
+      ],
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "title"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "icon": {
+                "type": "string"
+              },
+              "children": {
+                "type": "boolean"
+              },
+              "count": {
+                "type": "integer"
+              },
+              "kind": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "next": {
+          "type": "string"
+        }
+      }
+    },
+    "source.list.params": {
+      "type": "object",
+      "required": [
+        "source",
+        "node"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "node": {
+          "type": "string"
+        },
+        "cursor": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sort": {
+          "type": "object"
+        },
+        "filter": {
+          "type": "object"
+        }
+      }
+    },
+    "source.list.result": {
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "kind"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "image",
+                  "video",
+                  "audio",
+                  "document",
+                  "folder",
+                  "other"
+                ]
+              },
+              "size": {
+                "type": "integer"
+              },
+              "w": {
+                "type": "integer"
+              },
+              "h": {
+                "type": "integer"
+              },
+              "duration": {
+                "type": "number"
+              },
+              "taken_at": {
+                "type": "string"
+              },
+              "modified": {
+                "type": "string"
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "favorite": {
+                "type": "boolean"
+              },
+              "thumb": {
+                "type": "object"
+              },
+              "meta": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "next": {
+          "type": "string"
+        },
+        "total": {
+          "type": "integer"
+        }
+      }
+    },
+    "source.thumbnail.params": {
+      "type": "object",
+      "required": [
+        "source",
+        "id",
+        "size"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        }
+      }
+    },
+    "source.thumbnail.result": {
+      "type": "object",
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        }
+      }
+    },
+    "source.open.params": {
+      "type": "object",
+      "required": [
+        "source",
+        "id",
+        "purpose"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "purpose": {
+          "enum": [
+            "view",
+            "edit",
+            "export"
+          ]
+        }
+      }
+    },
+    "source.open.result": {
+      "type": "object",
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "stream_url": {
+          "type": "string"
+        }
+      }
+    },
+    "source.upload.params": {
+      "type": "object",
+      "required": [
+        "source",
+        "node",
+        "files"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "node": {
+          "type": "string"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "options": {
+          "type": "object"
+        }
+      }
+    },
+    "source.upload.result": {
+      "type": "object",
+      "required": [
+        "job"
+      ],
+      "properties": {
+        "job": {
+          "type": "string"
+        }
+      }
+    },
+    "source.download.params": {
+      "type": "object",
+      "required": [
+        "source",
+        "ids",
+        "dest"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "dest": {
+          "type": "string"
+        }
+      }
+    },
+    "source.download.result": {
+      "type": "object",
+      "required": [
+        "job"
+      ],
+      "properties": {
+        "job": {
+          "type": "string"
+        }
+      }
+    },
+    "source.write_meta.params": {
+      "type": "object",
+      "required": [
+        "source",
+        "id",
+        "meta"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "meta": {
+          "type": "object"
+        }
+      }
+    },
+    "source.write_meta.result": {
+      "type": "object"
+    },
+    "source.delete.params": {
+      "type": "object",
+      "required": [
+        "source",
+        "ids"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "source.delete.result": {
+      "type": "object"
+    },
+    "source.search.params": {
+      "type": "object",
+      "required": [
+        "source",
+        "query"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "query": {
+          "type": "string"
+        },
+        "cursor": {
+          "type": "string"
+        }
+      }
+    },
+    "source.search.result": {
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "kind"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "image",
+                  "video",
+                  "audio",
+                  "document",
+                  "folder",
+                  "other"
+                ]
+              },
+              "size": {
+                "type": "integer"
+              },
+              "w": {
+                "type": "integer"
+              },
+              "h": {
+                "type": "integer"
+              },
+              "duration": {
+                "type": "number"
+              },
+              "taken_at": {
+                "type": "string"
+              },
+              "modified": {
+                "type": "string"
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "favorite": {
+                "type": "boolean"
+              },
+              "thumb": {
+                "type": "object"
+              },
+              "meta": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "next": {
+          "type": "string"
+        }
+      }
+    },
+    "search.query.params": {
+      "type": "object",
+      "required": [
+        "mode_id",
+        "query"
+      ],
+      "properties": {
+        "mode_id": {
+          "type": "string"
+        },
+        "query": {
+          "type": "string"
+        },
+        "filters": {
+          "type": "object"
+        },
+        "cursor": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "search.query.result": {
+      "type": "object",
+      "required": [
+        "results"
+      ],
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "ref"
+            ],
+            "properties": {
+              "ref": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "source",
+                      "id"
+                    ]
+                  }
+                ]
+              },
+              "score": {
+                "type": "number"
+              },
+              "snippet": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "next": {
+          "type": "string"
+        },
+        "status": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}

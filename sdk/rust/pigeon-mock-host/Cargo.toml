@@ -1,0 +1,6 @@
+[package]
+name = "pigeon-mock-host"
+description = "Headless Pigeon host for plugin tests: validation, events, scene recording, PNG rendering, conformance."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true

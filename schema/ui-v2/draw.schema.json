@@ -1,0 +1,765 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pigeon.app/schema/ui-v2/draw.schema.json",
+  "title": "Pigeon UI protocol v2: canvas draw ops",
+  "description": "Canvas node props and every draw op (section 7). Coordinates are logical px from the canvas top-left. Path commands are arrays: [\"M\",x,y] [\"L\",x,y] [\"Q\",cx,cy,x,y] [\"C\",c1x,c1y,c2x,c2y,x,y] [\"Z\"]. A canvas holds at most 20,000 ops and 4 MiB of JSON.",
+  "$defs": {
+    "canvas_node": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "$ref": "common.schema.json#/$defs/size"
+        },
+        "height": {
+          "$ref": "common.schema.json#/$defs/size"
+        },
+        "cursor": {
+          "type": "string"
+        },
+        "interactive": {
+          "type": "object",
+          "properties": {
+            "pointer": {
+              "type": "boolean"
+            },
+            "wheel": {
+              "type": "boolean"
+            },
+            "keys": {
+              "type": "boolean"
+            },
+            "drop": {
+              "type": "boolean"
+            },
+            "focusable": {
+              "type": "boolean"
+            },
+            "coalesce": {
+              "enum": [
+                "none",
+                "move"
+              ]
+            }
+          }
+        },
+        "draw": {
+          "$ref": "#/$defs/draw_list"
+        }
+      }
+    },
+    "draw_list": {
+      "type": "object",
+      "required": [
+        "frame",
+        "ops"
+      ],
+      "properties": {
+        "frame": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "clear": {
+          "$ref": "common.schema.json#/$defs/color"
+        },
+        "ops": {
+          "type": "array",
+          "maxItems": 20000,
+          "items": {
+            "$ref": "#/$defs/op"
+          }
+        }
+      }
+    },
+    "op": {
+      "type": "object",
+      "required": [
+        "op"
+      ],
+      "oneOf": [
+        {
+          "$ref": "#/$defs/op_rect"
+        },
+        {
+          "$ref": "#/$defs/op_line"
+        },
+        {
+          "$ref": "#/$defs/op_polyline"
+        },
+        {
+          "$ref": "#/$defs/op_polygon"
+        },
+        {
+          "$ref": "#/$defs/op_path"
+        },
+        {
+          "$ref": "#/$defs/op_circle"
+        },
+        {
+          "$ref": "#/$defs/op_ellipse"
+        },
+        {
+          "$ref": "#/$defs/op_arc"
+        },
+        {
+          "$ref": "#/$defs/op_text"
+        },
+        {
+          "$ref": "#/$defs/op_image"
+        },
+        {
+          "$ref": "#/$defs/op_clip"
+        },
+        {
+          "$ref": "#/$defs/op_unclip"
+        },
+        {
+          "$ref": "#/$defs/op_translate"
+        },
+        {
+          "$ref": "#/$defs/op_scale"
+        },
+        {
+          "$ref": "#/$defs/op_save"
+        },
+        {
+          "$ref": "#/$defs/op_restore"
+        },
+        {
+          "$ref": "#/$defs/op_shadow"
+        },
+        {
+          "$ref": "#/$defs/op_gradient"
+        }
+      ]
+    },
+    "paint": {
+      "$ref": "common.schema.json#/$defs/color"
+    },
+    "op_rect": {
+      "properties": {
+        "op": {
+          "const": "rect"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "w": {
+          "type": "number"
+        },
+        "h": {
+          "type": "number"
+        },
+        "fill": {
+          "$ref": "#/$defs/paint"
+        },
+        "stroke": {
+          "$ref": "#/$defs/paint"
+        },
+        "stroke_w": {
+          "type": "number",
+          "minimum": 0
+        },
+        "radius": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "op",
+        "x",
+        "y",
+        "w",
+        "h"
+      ]
+    },
+    "op_line": {
+      "properties": {
+        "op": {
+          "const": "line"
+        },
+        "x1": {
+          "type": "number"
+        },
+        "y1": {
+          "type": "number"
+        },
+        "x2": {
+          "type": "number"
+        },
+        "y2": {
+          "type": "number"
+        },
+        "stroke": {
+          "$ref": "#/$defs/paint"
+        },
+        "stroke_w": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "op",
+        "x1",
+        "y1",
+        "x2",
+        "y2",
+        "stroke",
+        "stroke_w"
+      ]
+    },
+    "op_polyline": {
+      "properties": {
+        "op": {
+          "const": "polyline"
+        },
+        "pts": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "number"
+            }
+          }
+        },
+        "stroke": {
+          "$ref": "#/$defs/paint"
+        },
+        "stroke_w": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "op",
+        "pts",
+        "stroke",
+        "stroke_w"
+      ]
+    },
+    "op_polygon": {
+      "properties": {
+        "op": {
+          "const": "polygon"
+        },
+        "pts": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "number"
+            }
+          }
+        },
+        "fill": {
+          "$ref": "#/$defs/paint"
+        },
+        "stroke": {
+          "$ref": "#/$defs/paint"
+        },
+        "stroke_w": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "op",
+        "pts"
+      ]
+    },
+    "op_path": {
+      "properties": {
+        "op": {
+          "const": "path"
+        },
+        "cmds": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "oneOf": [
+              {
+                "prefixItems": [
+                  {
+                    "const": "M"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "minItems": 3,
+                "maxItems": 3
+              },
+              {
+                "prefixItems": [
+                  {
+                    "const": "L"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "minItems": 3,
+                "maxItems": 3
+              },
+              {
+                "prefixItems": [
+                  {
+                    "const": "Q"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "minItems": 5,
+                "maxItems": 5
+              },
+              {
+                "prefixItems": [
+                  {
+                    "const": "C"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "minItems": 7,
+                "maxItems": 7
+              },
+              {
+                "prefixItems": [
+                  {
+                    "const": "Z"
+                  }
+                ],
+                "minItems": 1,
+                "maxItems": 1
+              }
+            ]
+          }
+        },
+        "fill": {
+          "$ref": "#/$defs/paint"
+        },
+        "stroke": {
+          "$ref": "#/$defs/paint"
+        },
+        "stroke_w": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "op",
+        "cmds"
+      ]
+    },
+    "op_circle": {
+      "properties": {
+        "op": {
+          "const": "circle"
+        },
+        "cx": {
+          "type": "number"
+        },
+        "cy": {
+          "type": "number"
+        },
+        "r": {
+          "type": "number",
+          "minimum": 0
+        },
+        "fill": {
+          "$ref": "#/$defs/paint"
+        },
+        "stroke": {
+          "$ref": "#/$defs/paint"
+        },
+        "stroke_w": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "op",
+        "cx",
+        "cy",
+        "r"
+      ]
+    },
+    "op_ellipse": {
+      "properties": {
+        "op": {
+          "const": "ellipse"
+        },
+        "cx": {
+          "type": "number"
+        },
+        "cy": {
+          "type": "number"
+        },
+        "rx": {
+          "type": "number",
+          "minimum": 0
+        },
+        "ry": {
+          "type": "number",
+          "minimum": 0
+        },
+        "fill": {
+          "$ref": "#/$defs/paint"
+        },
+        "stroke": {
+          "$ref": "#/$defs/paint"
+        },
+        "stroke_w": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "op",
+        "cx",
+        "cy",
+        "rx",
+        "ry"
+      ]
+    },
+    "op_arc": {
+      "description": "Arc of a circle from start to end, radians, clockwise from +x.",
+      "properties": {
+        "op": {
+          "const": "arc"
+        },
+        "cx": {
+          "type": "number"
+        },
+        "cy": {
+          "type": "number"
+        },
+        "r": {
+          "type": "number",
+          "minimum": 0
+        },
+        "start": {
+          "type": "number"
+        },
+        "end": {
+          "type": "number"
+        },
+        "fill": {
+          "$ref": "#/$defs/paint"
+        },
+        "stroke": {
+          "$ref": "#/$defs/paint"
+        },
+        "stroke_w": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "op",
+        "cx",
+        "cy",
+        "r",
+        "start",
+        "end"
+      ]
+    },
+    "op_text": {
+      "properties": {
+        "op": {
+          "const": "text"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "text": {
+          "type": "string"
+        },
+        "size": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "weight": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 900
+        },
+        "color": {
+          "$ref": "#/$defs/paint"
+        },
+        "align": {
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ]
+        },
+        "baseline": {
+          "enum": [
+            "top",
+            "middle",
+            "alphabetic",
+            "bottom"
+          ]
+        },
+        "max_w": {
+          "type": "number",
+          "minimum": 0
+        },
+        "font": {
+          "enum": [
+            "ui",
+            "mono"
+          ]
+        }
+      },
+      "required": [
+        "op",
+        "x",
+        "y",
+        "text",
+        "size"
+      ]
+    },
+    "op_image": {
+      "properties": {
+        "op": {
+          "const": "image"
+        },
+        "rid": {
+          "type": "string",
+          "minLength": 1
+        },
+        "src": {
+          "$ref": "common.schema.json#/$defs/rect"
+        },
+        "dst": {
+          "$ref": "common.schema.json#/$defs/rect"
+        },
+        "tint": {
+          "$ref": "#/$defs/paint"
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "op",
+        "rid",
+        "dst"
+      ]
+    },
+    "op_clip": {
+      "properties": {
+        "op": {
+          "const": "clip"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "w": {
+          "type": "number",
+          "minimum": 0
+        },
+        "h": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "op",
+        "x",
+        "y",
+        "w",
+        "h"
+      ]
+    },
+    "op_unclip": {
+      "properties": {
+        "op": {
+          "const": "unclip"
+        }
+      },
+      "required": [
+        "op"
+      ]
+    },
+    "op_translate": {
+      "properties": {
+        "op": {
+          "const": "translate"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "op",
+        "x",
+        "y"
+      ]
+    },
+    "op_scale": {
+      "properties": {
+        "op": {
+          "const": "scale"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "op",
+        "x",
+        "y"
+      ]
+    },
+    "op_save": {
+      "properties": {
+        "op": {
+          "const": "save"
+        }
+      },
+      "required": [
+        "op"
+      ]
+    },
+    "op_restore": {
+      "properties": {
+        "op": {
+          "const": "restore"
+        }
+      },
+      "required": [
+        "op"
+      ]
+    },
+    "op_shadow": {
+      "properties": {
+        "op": {
+          "const": "shadow"
+        },
+        "dx": {
+          "type": "number"
+        },
+        "dy": {
+          "type": "number"
+        },
+        "blur": {
+          "type": "number",
+          "minimum": 0
+        },
+        "color": {
+          "$ref": "#/$defs/paint"
+        }
+      },
+      "required": [
+        "op",
+        "dx",
+        "dy",
+        "blur",
+        "color"
+      ]
+    },
+    "op_gradient": {
+      "properties": {
+        "op": {
+          "const": "gradient"
+        },
+        "x0": {
+          "type": "number"
+        },
+        "y0": {
+          "type": "number"
+        },
+        "x1": {
+          "type": "number"
+        },
+        "y1": {
+          "type": "number"
+        },
+        "stops": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "prefixItems": [
+              {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              {
+                "$ref": "#/$defs/paint"
+              }
+            ],
+            "items": false
+          }
+        }
+      },
+      "required": [
+        "op",
+        "x0",
+        "y0",
+        "x1",
+        "y1",
+        "stops"
+      ]
+    }
+  }
+}

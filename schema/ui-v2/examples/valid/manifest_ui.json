@@ -1,0 +1,23 @@
+{
+  "protocol": 2,
+  "activation": "visible",
+  "contributions": [
+    {
+      "slot": "sidebar.entry",
+      "id": "nav",
+      "title": "Hello UI",
+      "icon": "sparkle",
+      "opens": "main"
+    },
+    {
+      "slot": "workspace.view",
+      "id": "main",
+      "title": "Hello UI",
+      "icon": "sparkle"
+    }
+  ],
+  "permissions": [
+    "selection",
+    "dialogs"
+  ]
+}

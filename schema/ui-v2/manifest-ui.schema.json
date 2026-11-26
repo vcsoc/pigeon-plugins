@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pigeon.app/schema/ui-v2/manifest-ui.schema.json",
+  "title": "plugin.json `ui` block (protocol v2)",
+  "description": "The part of a plugin manifest that lets the host show placeholders and menus before the process starts. The host reads it without starting the plugin.",
+  "type": "object",
+  "required": [
+    "protocol",
+    "activation",
+    "contributions"
+  ],
+  "properties": {
+    "protocol": {
+      "const": 2
+    },
+    "activation": {
+      "enum": [
+        "startup",
+        "visible",
+        "manual"
+      ]
+    },
+    "contributions": {
+      "type": "array",
+      "items": {
+        "$ref": "contribution.schema.json"
+      }
+    },
+    "permissions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "selection",
+          "library.read",
+          "library.write",
+          "secrets",
+          "dialogs",
+          "clipboard",
+          "shell",
+          "windows",
+          "drag"
+        ]
+      }
+    },
+    "theme_override": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  }
+}

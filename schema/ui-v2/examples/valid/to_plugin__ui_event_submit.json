@@ -1,0 +1,9 @@
+{
+  "v": 2,
+  "t": "ui.event",
+  "instance": "hello-ui/main",
+  "node": "name",
+  "type": "submit",
+  "value": "Clip 2",
+  "rev": 3
+}

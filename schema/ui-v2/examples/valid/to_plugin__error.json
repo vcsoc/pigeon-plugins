@@ -1,0 +1,7 @@
+{
+  "v": 2,
+  "t": "error",
+  "code": "canvas_too_large",
+  "message": "canvas has 21000 ops (max 20000)",
+  "ref": "tl"
+}
