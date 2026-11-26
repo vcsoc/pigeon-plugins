@@ -33,7 +33,7 @@
         "id": "immich",
         "title": "Immich",
         "icon": "cloud",
-        "root": "root",
+        "root": {"id": "root", "title": "Immich", "children": true},
         "capabilities": [
           "browse",
           "upload",

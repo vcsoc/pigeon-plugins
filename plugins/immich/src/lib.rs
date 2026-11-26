@@ -21,7 +21,7 @@ use serde_json::{json, Value};
 pub fn contributions() -> Value {
     json!([
         {"slot":"preferences.page","id":"settings","title":"Immich","icon":"cloud","order":60},
-        {"slot":"library.source","id":"immich","title":"Immich","icon":"cloud","root":"root",
+        {"slot":"library.source","id":"immich","title":"Immich","icon":"cloud","root":{"id":"root","title":"Immich","children":true},
          "capabilities":["browse","upload","download","metadata_write","tags"]},
         {"slot":"statusbar.item","id":"status","align":"right","order":50},
         {"slot":"modal","id":"transfer","title":"Verified Immich transfers","size":"medium","resizable":true,"modal":true},
