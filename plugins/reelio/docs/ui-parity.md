@@ -1,239 +1,111 @@
-# Reelio plugin UI: parity checklist (WP5)
+# Reelio UI parity (WP5)
 
-## Status update (speed pass, latest commit on arch/reelio-ui)
+Reference: the read-only Reelio desktop checkout, `README.md`, `docs/ui-styling.md`, feature docs,
+and the four `apps/desktop/e2e/*.spec.ts` files. This checklist compares the current plugin to the
+working desktop preview, not to unimplemented product-spec features. **The plugin is not yet at full
+parity**. Mock-host evidence does not imply real Pigeon GUI, native platform, or provider acceptance.
 
-Done since the first draft (each with tests unless noted):
-* Native dialogs and links: `EngineHost` served by the Pigeon host (`dialog.open_file`, `dialog.save_file`,
-  `dialog.pick_folder`, `shell.open_url`) from worker threads. **Not run against a real Pigeon host**;
-  the parameter shapes are the SDK's convention and the mock host is not used.
-* Engine events consumed (`preview:ready`, `dependencies:repair`, `notification`, `resource:*`, close).
-* Preview playback: ffmpeg RGBA decode of the engine preview URL, paced clock, resource ring via SDK,
-  exact paused seeks, ffplay audio with atempo (see `crates/app/src/player.rs`). Decode of the engine URL is
-  tested; the on-screen result is **not verified visually**; audio output is **not verified** (ffplay).
-* Timeline and project context menus with keyboard navigation (6 behavioural tests).
-* Subtitle Studio: engine open/choose/save/dirty, 40-step history, cue edits, split/merge/shift/replace,
-  virtualized cue window (9 studio tests). Provider search and translation are not wired.
-* Poster & cover studio: engine search with cached pages, filters, page sizes, use-this-cover with undo,
-  rotate/flip (5 poster tests). Thumbnails are not rendered; still-image import goes through probe.
-* Preferences (backend paths, default folder, image format) and About (update check) controls.
-* Four compact scenario ports (`crates/ui/tests/e2e_scenarios.rs`) replacing the Playwright specs.
+Status meanings: **verified** = the stated behavior has a passing reducer, engine or mock-host test;
+**unverified** = implemented but not exercised for the named dependency/platform; **partial** = some
+reference behavior is missing or materially different; **missing** = no working UI path;
+**host-owned** = outside the plugin under protocol v2.
 
-Not done in this pass (honest): mock-host (SDK) driven tests, scene-to-PNG renders and any pixel
-comparison, the dependency panel and export-history progress UI, toasts as a separate overlay (current
-toasts are in-scene with reducer timers), cover drop on the inspector, double-click cover lane routing.
-Counts below are from the first draft and are stale for the rows listed above.
+**44 audited rows:** 23 verified, 14 partial, 4 unverified, 2 missing, 1 host-owned. Rows count
+specific acceptance groups, not a weighted percentage of parity.
 
-
-Reference: `reelio` apps/desktop (read only), README.md, docs/ui-styling.md, docs/subtitle-editor.md,
-docs/artwork-and-subtitles.md, Vitest tests and Playwright scenarios.
-
-Status legend:
-
-* **verified-by-test**: a Rust test in `crates/ui` or `crates/app` exercises the behaviour through the
-  reducer (`State::dispatch`) or the scene/protocol output. Test names are given.
-* **implemented-unverified**: code path exists (reducer and/or scene node) but no test asserts it.
-* **partial**: some of the behaviour exists; the rest is listed in the row.
-* **not-implemented**: not built in this revision.
-* **host-owned**: the Pigeon host provides the behaviour; the plugin does not reproduce it.
-* **not-verifiable-here**: needs the real engine, FFmpeg media on a real host, or a renderer.
-
-Visual (pixel) parity: **not measured**. The SDK mock-host PNG renderer is not on `arch/sdk` yet, so no
-golden images were produced and no pixel deltas are claimed. The palette and spacing are recorded in
-`plugin.json` (`ui.theme_override`) and `scene.rs`; they are unverified against the reference screenshot.
-
-Engine: `reelio-engine` (WP4) is not on `arch/reelio-engine` yet. The app ships `UnconnectedEngine`,
-which answers every command with an explicit error. Nothing here has run against real media.
-
-## Project model, store and undo
-
-| Reference behaviour | Status | Evidence / gap |
+| Area / behavior | Status | Evidence or remaining gap |
 |---|---|---|
-| Schema 3 project JSON, MP4 default container, `emptyProject` | verified-by-test | `model::empty_project`; serde field names match `types/index.ts` |
-| Adding a source names an empty project and adopts its metadata and chapters | verified-by-test | `model::image_assets_have_no_tracks_and_never_replace_movie_metadata` |
-| Duplicate path rejected with the reference message, no tracks added | verified-by-test | `model::duplicate_sources_are_rejected_without_tracks` |
-| Cover pictures (attached_pic) excluded from video mapping | verified-by-test | `model::cover_pictures_are_excluded_from_video_mapping` |
-| First audio stream is `mix`, others `separate` | verified-by-test | `model::first_audio_is_mix_and_others_are_separate` |
-| Still image classification (AVIF/PNG/WebP/JPEG) without tracks | verified-by-test | `model::image_assets...` |
-| Undo/redo, branching clears redo, no-op edits not recorded | verified-by-test | `store::edit_undo_redo_and_branching_clear_redo`, `state::undo_redo_round_trip_through_reducer` |
-| Snapshots never mutated by later edits | verified-by-test | `store::snapshots_are_not_mutated_by_later_edits` |
-| Dirty state; a late save of an older snapshot does not mark newer edits saved | verified-by-test | `store::dirty_tracks_saved_snapshot_and_late_saves_do_not_mark_later_edits_saved` |
-| History bounded to 100 steps | verified-by-test | `store::history_is_bounded` |
-| Each completed drag is one undo step; cancelled drags discarded | verified-by-test | `timeline_input::clip_drag_is_one_undo_step_and_cancel_discards`, `trim_drag_snaps...` |
-| Explicit output container saved; MP4 default | verified-by-test | `state::container_and_format_choices_are_saved_in_the_project` |
-| New project starts clean (no sources, covers, history) | implemented-unverified | `State::activate_project` |
-| Unsaved-change confirmation on quit | verified-by-test | `state::quitting_a_dirty_project_asks_first_and_busy_work_blocks_quit` |
-| Schema 1/2 upgrade and job snapshot restore | not-implemented | engine-side (WP4) and job restore UI not wired |
-| Relink source (same stream indices, else refuse) | not-implemented | `Relink source` button not in scene |
+| Schema 3, stable IDs and indices, blank MP4 default | verified | `model`, `store`, reducer tests; actual `.reelio` save through the mock host. |
+| Duplicate media, default audio roles, attached pictures and still-image classification | verified | Model tests; mock-host import of video, SRT and artwork. |
+| Path authorization, per-file import and Add tracks | verified | Mock-host setup, open-file dialog, drop and generated FFmpeg probe. |
+| Folder import | unverified | Engine non-recursive, 256-entry chooser path wired; not a WP5 mock scenario. |
+| `Open in Reelio` / bulk add from Pigeon asset menu | missing | Static contributions exist; host selection/context is not consumed by these commands. |
+| Project open/save/new, undo/redo and dirty guard | partial | Save, edit and undo verified; open/new controls and legacy upgrade wired; replacement prompts and returning to the prior workspace on cancel need more coverage. |
+| Job snapshot / legacy upgrade | verified | WP4 engine tests plus WP5 restore review and request tests. Native restore dialog not exercised. |
+| Relink missing source | missing | Not exposed in plugin scene. |
+| Workspace independent panel toggles and scoped layout settings | verified | Mock checks host persistence, reload fixture and non-dirty project. |
+| Left and viewer divider reset/resize; inspector width | partial | Left resize tested over protocol; viewer pointer/keyboard wired. Inspector position/width remains host-owned, and collapse blanks plugin contributions rather than closing host chrome. |
+| Shared lane scale, ruler ticks, pointer zoom and capped scroll | verified | Geometry/reducer and responsive width; real-host alignment and scroll rounding not exercised. |
+| Clip offset/trim, cancel, one undo step and exact magnetic end | verified | Mock pointer trim/undo; reducer tested quantization, source bounds, snap and Escape. |
+| Trim highlight, Home/End and double-click reset | partial | Snap value is tested; full focused-handle/reset/visual behavior still differs. |
+| Main video reference and Clip to video | verified | Reducer/geometry tests preserve stable reference, included/excluded behavior and offsets. |
+| Clip menu Include/Exclude/Remove and chapter Delete | verified | Reducer menu tests; native focus return and outside-click routing not proven. |
+| Chapter insertion, edit, sort, drag and derived ends | verified | Mock-host toolbar insert; reducer clock/drag/duplicate tests; engine warns of MP4/M4V Opening chapter. |
+| Preview frame resource and transport steps, jumps, speed ladder | verified | Mock host receives decoded FFmpeg RGBA and tests speed/step/stop/chapters; no native display qualification. |
+| Seek coalescing, release and stale reply protection | partial | Scheduler tested; slider submits exact position. Native pointer capture, release delivery and decoder-clock races are not fully proven. |
+| Audio preview | partial | ffplay follows media, speed and volume; independently mixed/offset/trimmed audio audition and hardware output were not verified and reference mix parity is incomplete. |
+| Source and subtitle audition | verified | Actual preview frames, timed subtitle overlay, source-clock boundary and cue-navigation tests. |
+| Media pool/imported image browser and inspector cover | verified | Mock-host media rows, still import, cover resource and drop. |
+| Track settings table, dispositions and output controls | partial | Include, default, language, order and selected-lane controls exist; complete raw stream-property and disposition UI not verified. |
+| Metadata fields and shortcuts | partial | Editable mapped/custom fields; project-only/container labels, Ctrl/Cmd+F focus and high-contrast selection need completion/host support. |
+| Subtitle Studio: open SRT, add/edit/split/merge/shift/replace, undo and save | verified | Mock opens 205 cues, windows and navigates list, edits, undoes and saves a non-overwriting copy. Reducer verifies editing operations. |
+| Subtitle recovery and quit | partial | Debounced draft persistence, recovery read and confirm-before-close are wired; normal quit closes the plugin workspace, not the Pigeon application. Host OS-close delivery and full restart recovery not qualified. |
+| Embedded text subtitle editable copy | unverified | Authorized zero-source-offset temporary WebVTT converted to an unsaved SRT draft; no mock scenario for embedded codec conversion. |
+| OpenSubtitles provider search | partial | Engine-generated focused search opens the system browser. Protocol has no isolated browser, navigation hook, browser download interception or cookie capture. Public HTTPS direct links and local-file fallback work without those. |
+| Confirmed downloads and bounded local subtitle import | verified | Policy-checked engine URL, offer ID confirmation/cancel, bounded local UTF-8, validated candidates and explicit add/test. Pending/download routing tested with fixture replies; live provider success not qualified. |
+| Ollama model pull/translate, cancellation and review | unverified | Engine-backed local service and shared approval scene, polling/progress, subset and snapshot review; reducer test proves accepted text changes and undo without changing timings. No Ollama service/model was available for a live run. |
+| Poster search, orientation, reciprocal ratio and 12/24/48 pagination | verified | Bounded four-batch pages, deduplication/caching and stale-result handling; reducer tests. Live Bing results were not exercised. |
+| Poster thumbnails and exact-ratio Apply | partial | Scene references validated JPEG thumbnail resources from three workers. Ratio forwarded and exact crop tested in artwork engine. Successful live thumbnail fetch was not qualified. |
+| Cover inspector drop, lane double-click and project undo | verified | Real PNG/JPEG-style cover workflow through mock slot, edited JPEG resource and preset dimensions; multiple/invalid-drop preservation tested in reducer. |
+| Crop drag/move/eight handles, presets, locks and image undo | verified | Crop geometry, atomic/cancelled gesture and lane reopening tests; mock confirms preset raster resource. |
+| Rotate/flip/resize/tonal preview and preview image save | partial | Engine validates and renders asynchronously; crop drag uses immediate canvas preview, but color preview is not the reference's independent immediate client raster. Engine save formats tested in WP4; native picker not exercised. |
+| Cover embedding and export source protection | verified | WP4 generated-media tests and no-overwrite checks; editor only applies through project edits. |
+| Dependencies inspection and repair confirmation | unverified | Panel shows capabilities, failures, supported packages and repair phase; unsupported repair is guarded and reducer-tested. No native Linux package manager was invoked. |
+| Export-time conversion/render review | verified | Modal reuses shared consent layout, checks plan revision and refuses stale or canceled review. Reducer approval and WP4 engine export/verification tests. |
+| Export progress, cancel, durable adjustment history and retry | verified | Current-project history with percentage/phase/details, crop/omission report and guarded restore; reducer tests and WP4 engine durability. End-to-end UI export progress against a real GUI was not run. |
+| Floating toast, dismiss and reading pause | verified | Mock host runs past the five-second timeout while hovered; reducer tests independent hover/focus pause and error timeout. Real-host pointer/focus event delivery not qualified. |
+| Preferences and About | partial | Engine settings, paths, default folder, image format and check-for-update available; native appearance/OS zoom, complete release download flow and precise desktop build identity are not qualified. |
+| Desktop title bar, OS close, host interface zoom | host-owned | Pigeon owns chrome, resize, focus and zoom. No second native title bar is emulated. |
+| Behavioural scenario ports | partial | Five actual subprocess cases: transport, subtitle/list, feedback/quit, workspace/trim/cover, layout reload. These cover core flows from the four Playwright suites and selected unit cases, not every assertion in the desktop suites. |
+| Protocol, resources and setup | verified | WP2 SDK from `6ef3e3b`, canonical slot IDs, settings/dialog/window services, RGBA/JPEG/list rows, schema-validated mock sessions and clean shutdown. Real host integration is separate. |
+| Visual parity | partial | One measured comparison pass below; mock renderer and Tauri do not share fonts, widgets, input, native chrome or rasterization. |
 
-## Timeline
+## Verification
 
-| Reference behaviour | Status | Evidence / gap |
-|---|---|---|
-| Lanes per audio/subtitle stream, shared zoom and scroll | partial | lanes and shared `timeline_view` implemented; scroll sync between lanes not verified |
-| Ruler interval, virtualized ticks | verified-by-test | `geometry::ruler_interval_is_a_nice_step`; ticks capped in `scene::canvas_draw` |
-| Alt+wheel zoom anchored at the pointer; `- / +` and percent reset | verified-by-test | `geometry::zoom_keeps_the_pointer_time_stationary`, `timeline_input::alt_wheel_zooms...` |
-| Clip drag in 10 ms steps, clamped to ±24 h | verified-by-test | `geometry::drags_quantize...`, `clip_drag_is_one_undo_step...` |
-| Arrow keys: 100 ms / Shift 1 s / Alt 10 ms | verified-by-test | `timeline_input::arrow_keys_move_clips...` |
-| Trim handles: source-bounded, no crossing, minimum 10 ms | verified-by-test | `geometry::trim_drag_never_crosses_edges...` |
-| Trim snaps to the video end within 8 px; aligned state; Escape discards | verified-by-test (snap value and discard) | `timeline_input::trim_drag_snaps_to_the_video_end...`; the blue "aligned" highlight is not in the scene |
-| Double-click a trim handle restores its boundary; Home/End keys | not-implemented | handle double-click and Home/End not wired |
-| Reset clip trims button | implemented-unverified | `lane.trim_reset` in `summary` panel |
-| Video-lane target/crosshair reference (undoable, saved by track id, excluded allowed) | verified-by-test (fit and snap) | `geometry::clip_to_video_...`, `geometry::snap_engages...`; toggle via `lane:ref` |
-| Clip to video (Ctrl+Alt-click, menu item), refusal reasons | partial | `geometry` rules tested; Ctrl+Alt click is in `timeline_input` but the menu item is not in a scene |
-| Include/Exclude, Remove keeps source, grey Excluded pill | partial | reducer actions `lane:include`, `lane:remove` implemented; grey pill drawn in canvas; no context menu |
-| Right-click / Shift+F10 clip context menu | not-implemented | no menu scene; keyboard focus rules not implemented |
-| Chapter markers: click video lane surface to add, drag, arrow keys, delete | verified-by-test (add, drag, no-op click) | `timeline_input::chapter_drag...`, `state::chapters_are_sorted...`; right-click Delete menu not implemented |
-| Automatic Opening chapter disclosure for MP4/M4V | not-implemented | |
-| Playback marker aligned by seek bar; reveal only when out of view | implemented-unverified | `State::reveal` set; host-side reveal not verified |
-| Ruler click seeks (accounting for video offset) | implemented-unverified | `State::seek_playhead` |
-| Excluded/muted lanes greyed | implemented-unverified | canvas colours |
-| Audio role select (mix/separate), mute, language input | implemented-unverified | `lane.role`, `lane.mute`, `lane.lang` |
-| Waveform analysis, clip splitting, compositing | not claimed by reference either | |
+From `plugins/reelio`, with `CARGO_TARGET_DIR=/tmp/pigeon-target-reelio-ui`:
 
-## Viewer and transport
+- `cargo test -q -p reelio-ui -p reelio-app`: **111 passed** (89 UI unit, 13 UI integration/reducer, 9 app).
+- `cargo test -q -p reelio-artwork ratio`: **1 passed**.
+- `cargo clippy -p reelio-ui -p reelio-app --all-targets --no-deps`: exit **0**; four lint sites
+  reported (one `Result::and_then` that could use `map`, three reverse-iterator opportunities in tests).
+- `cargo fmt -p reelio-ui -p reelio-app --check`: exit **0**.
+- WP2 mock host: **5 behavioral sessions and 1 populated render session passed**, all with zero
+  protocol violations, on the final visual pass (22.36 s). The harness is development-only; it
+  uses the sibling `pigeon-plugins-sdk` checkout and a temporary installed artifact layout.
 
-| Reference behaviour | Status | Evidence / gap |
-|---|---|---|
-| Play/pause, stop-and-rewind, beginning/end, frame steps | partial | reducer implemented; frame clamp verified-by-test (`playback::frame_steps_clamp_at_source_boundaries`) |
-| Nominal frame rate from `r_frame_rate`, 25 fps fallback | verified-by-test | `playback::frame_durations_use_nominal_rates_with_fallback` |
-| Speed ladder 0.10 to 10x | verified-by-test | `playback::speeds_cover_the_requested_ladder` |
-| Seek bar: 80 ms coalescing, immediate final release, stale completions ignored | verified-by-test | `playback::intermediate_seeks_coalesce...`, `duplicate_targets...`, `a_return_to_an_earlier_seek...` |
-| Volume starts at 5%, shows percentage | implemented-unverified | `State.volume` default 0.05 |
-| Chapter prev/next (500 ms tolerance) and Alt+Left/Right | implemented-unverified | `seek_chapter`; command shortcuts declared in manifest |
-| Add chapter at position from transport | implemented-unverified | `viewer:add_chapter` |
-| Source selector for multi-source projects | implemented-unverified | `viewer.source` |
-| Retry preview; preview disabled until components verified | partial | `viewer:retry`; components check via `DependenciesStatus` |
-| Real video frames | not-verifiable-here | frames come through `resource.put` (file ring); the frame producer is not connected |
-| Subtitle overlay on the source player (cue audition) | not-implemented | `inspectVtt` tested; overlay binding is host-side and not wired |
+```sh
+export CARGO_TARGET_DIR=/tmp/pigeon-target-reelio-ui
+cargo build -p reelio-app
+export REELIO_TEST_BIN="$CARGO_TARGET_DIR/debug/reelio"
+cargo test --manifest-path tests/mock-host/Cargo.toml --test scenarios -- --test-threads=2
+export REELIO_REFERENCE_PNG=/path/to/reelio/docs/images/reelio-workspace.png
+export REELIO_VISUAL_OUT=/tmp/reelio-workspace.png
+cargo test --manifest-path tests/mock-host/Cargo.toml --test scenarios workspace_visual_fixture -- --ignored
+```
 
-## Media pool
+## Visual comparison (E)
 
-| Reference behaviour | Status | Evidence / gap |
-|---|---|---|
-| Dropbox, file rows with kind label, add-to-timeline button | implemented-unverified | `scene::media_pool` |
-| Import one file at a time; per-file status; folder import | partial | queue in `State::import_paths`; folder import sends `folder: true` but the engine is not connected |
-| Native drop onto the window | implemented-unverified | `Event::Drop` / `drop` message |
-| Image assets open in Poster & cover | partial | `preview_asset` sends `ArtworkImport`; studio not wired |
-| Pool width persisted within 180..520 px | verified-by-test (clamp) | `layout::pool_and_inspector_widths_are_bounded`; not wired to a split node |
+Reference and captures: **1910 × 1046**, RGB channel mean absolute error (0–255), lower is better.
+The fixture loads a generated video using the reference's visible still, a synthetic SRT and a cover
+cropped from the reference. The WP2 renderer draws actual main and inspector slot snapshots, reading
+resource pixels from the mock host. The compositor arranges those slots side by side; it does not
+recreate host chrome. Before: `a0eedc3`; after: `acf4a4d`. Artifacts are
+`/tmp/pigeon-program/reelio-workspace-{before,after}.png`; `tests/visual_delta.py` measures both.
 
-## Inspector (summary and project tools)
+| Reference region | Before | After |
+|---|---:|---:|
+| Toolbar | 18.55 | 17.71 |
+| Media pool | 14.11 | 7.82 |
+| Viewer | 25.63 | 17.62 |
+| Video picture | 54.64 | 35.62 |
+| Timeline | 22.55 | 7.49 |
+| Inspector | 24.50 | 11.69 |
 
-| Reference behaviour | Status | Evidence / gap |
-|---|---|---|
-| Cover preview, Edit (opens Poster & cover), Remove | implemented-unverified | `summary` panel, `cover:edit`, `cover:remove` (removal sets a notice) |
-| Selected lane title, language, position, reset trims | implemented-unverified | `summary` panel |
-| Output container MKV/MP4/M4V buttons | verified-by-test | `state::container_and_format_choices...` |
-| At a glance: duration, source size, output tracks, video processing | implemented-unverified | `summary` panel |
-| Validation status from the plan | implemented-unverified | `summary` panel; plan from `ProjectValidate` (180 ms debounce) |
-| Track settings table (include, language, default, output, order) | implemented-unverified | `project_panel` track table |
-| Metadata editor (container-aware field list, project-only labels) | partial | fields and key set in scene; `project-only` and MP4-only labels not shown |
-| Chapters editor: title, HH:MM:SS.mmm time, delete, sort, at playhead | verified-by-test (clock and ends) | `chapters::*`, `state::chapters_are_sorted...`; scene present |
-| Export and history: review, approval, cancel, progress, restore settings | partial | review and approval verified-by-test (`state::export_review_requires_approval_for_conversions`); history restore not implemented |
-| Export review lists conversions and requires approval | verified-by-test | `state::export_review_requires_approval_for_conversions` |
-| Export notice counts timeline adjustments; failed job replaces stale start | verified-by-test (logic only) | `State::after_jobs_change` (no direct test yet) |
-
-## Subtitle Studio
-
-| Reference behaviour | Status | Evidence / gap |
-|---|---|---|
-| SRT clocks, strict parse, validation issues (overlap, empty, 25 cps, 42-char lines) | verified-by-test | `subtitles::clocks_round_trip...`, `issues_report_overlap...` |
-| Shift selected cues, split at caret, merge adjacent, literal replace | verified-by-test | `subtitles::shift_affects_only...`, `split_creates...`, `merge...`, `replace_is_literal_and_scoped` |
-| WebVTT preview inspection (strict timestamps, 10,000-cue limit) | verified-by-test | `subtitles::webvtt_inspection...`; preview request via `SubtitlePreview` |
-| Studio UI: cue list, fields, 40-step undo, save copy, add to project | not-implemented | `subtitle_studio` scene shows tracks and preview cues only; the SRT document editing state is not in `State` |
-| Left/Right cue navigation, playback-follow highlight | not-implemented | |
-| Translation (Ollama), model download | not-implemented | reference feature requires engine work (WP4) |
-
-## Poster & cover studio
-
-| Reference behaviour | Status | Evidence / gap |
-|---|---|---|
-| Crop sizing from a typed dimension; ratio lock; never 1 px; centred | verified-by-test | `crop::never_creates_a_one_pixel_crop`, `centres_and_locks...` |
-| Move without resizing; clamp every edge | verified-by-test | `crop::move_clamps_every_edge...` |
-| Resize from handles, opposite corner fixed, locked ratio | verified-by-test | `crop::resize_preserves...`, `resizing_one_edge...` |
-| Presets incl. 9:16 and 3:2 | verified-by-test | `crop::presets_include...` |
-| Poster orientation toggles flip reciprocal ratios | verified-by-test | `posters::orientation_toggles_flip_reciprocal_ratios` |
-| Pagination: 12/24/48, four batches per page, duplicate removal, cached pages, page limit | verified-by-test | `posters::pages_fill_across_batches...`, `sparse_searches...`, `a_stalled_cursor...`, `a_failed_continuation...` |
-| Results browser, Use this cover, live preview, rotate, flip, filters, undo, apply | not-implemented | the search request and thumbnails are not in the engine contract yet; image edit ops not ported |
-| Immediate colour preview (grayscale, negative, sepia order, clamping) | not-implemented | reference `LiveArtworkPreview` not ported in this pass |
-| Apply cover embeds JPEG and clears the video lane conflict | partial | `State::apply_cover` (artwork import path); no test |
-
-## Dependencies, preferences, about, updates
-
-| Reference behaviour | Status | Evidence / gap |
-|---|---|---|
-| Component check on start, recheck, repair (busy, protected) | implemented-unverified | `check_dependencies`, `dep:repair` |
-| Preferences dialog: appearance select (saved via `settings.set`) | implemented-unverified | `settings:theme` effect |
-| Default folder, image format, FFmpeg/FFprobe paths | not-implemented | |
-| Preferences page in Pigeon (`preferences.page`) | partial | manifest declares the page; the page scene is the same settings modal |
-| About Reelio: version/build, developer credit, GitHub link | partial | shows the plugin version (2.0.0), not the Reelio app build; link text only |
-| Check for updates (GitHub releases, verified download) | not-implemented | reference `updates` feature not ported |
-
-## Toasts, notices, closing
-
-| Reference behaviour | Status | Evidence / gap |
-|---|---|---|
-| Notices hide after 5 s, errors after 8 s, hover pauses | verified-by-test | `state::toasts_auto_hide_and_pause_while_hovered` |
-| Quit / Ctrl+W confirmation for dirty projects; busy work blocks quit | verified-by-test | `state::quitting_a_dirty_project...` |
-| OS close and window chrome, platform-specific controls | host-owned | Pigeon owns the window and its controls |
-| Interface zoom 50-200% (Ctrl+= / Ctrl+-) | host-owned | Pigeon owns interface zoom |
-| Browser preview banner | not-applicable | desktop-only concept in the reference |
-
-## Keyboard and commands
-
-| Reference behaviour | Status | Evidence / gap |
-|---|---|---|
-| Ctrl/Cmd+N, Ctrl/Cmd+Shift+O, Ctrl/Cmd+O, Ctrl/Cmd+S, Ctrl/Cmd+E, Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Space, Alt+arrows | partial | declared as `command` contributions with shortcuts; `State::command` dispatch implemented; not verified through the host |
-| Ctrl/Cmd+F focuses metadata title | not-implemented | |
-| Subtitle shortcuts scoped to the studio | not-implemented | |
-
-## Playwright scenarios (e2e/*.spec.ts), mapped
-
-| Scenario | Status | Notes |
-|---|---|---|
-| icon transport steps, stops, jumps, chapters, speeds | partial | speed ladder, frame clamp and seek scheduler verified; chapter insert and stop rewind implemented-unverified |
-| media pool resize persists without changing project state | partial | width clamp verified; persistence not wired |
-| workspace layout preferences persist; artwork in lower workspace | partial | `parse_workspace_layout` round trip verified; layout persist effect verified; artwork lower mode is a scene switch |
-| layout controls usable when storage is blocked | verified-by-test (defaults) | `layout::layout_defaults_...` |
-| project menu, toolbar tools, borderless title, interface zoom | host-owned / not-implemented | project menu is a command set; no menu scene |
-| browser preview boundary | not-applicable | |
-| workspace editing flow with mocked IPC | partial | reducer flows for import, trim, save are unit-tested; the engine is not connected |
-| subtitle cues without pagination, arrows, playback follow | not-implemented | |
-| embedded text subtitle context actions open an editable copy | not-implemented | |
-| SRT create/split/merge/undo/save copy/recover | partial | SRT logic verified; studio state not wired |
-| translation review and apply with undo | not-implemented | |
-| save feedback is a floating toast paused while reading | verified-by-test | toast timing tests |
-| window controls per platform (Omarchy, macOS, Windows) | host-owned | |
-| Quit and Ctrl+W on Omarchy, subtitle recovery draft | partial | quit confirmation verified; recovery draft not implemented |
-| crop size controls, native cover drop routing, interactive crop geometry | verified-by-test (geometry) | `crop::*`; native drop coordinate mapping is host-owned |
-| poster pagination | verified-by-test | `posters::*` |
-| immediate artwork colour preview | not-implemented | |
-| chapter start-only timing | verified-by-test | `chapters::*` |
-| SRT editor operations | verified-by-test | `subtitles::*` |
-| subtitle preview inspection | verified-by-test | `subtitles::webvtt_inspection...` |
-| responsive seeking | verified-by-test | `playback::*` |
-| persisted inspector width / media pool width / viewer height | verified-by-test (clamps) | `layout::*` |
-| viewer versus lower-workspace layout | partial | viewer height clamp verified |
-| stable excluded main video reference, magnetic snapping | verified-by-test | `geometry::*`, `timeline_input::trim_drag_snaps...` |
-| clip to video (5 scenarios) | verified-by-test | `geometry::clip_to_video_*`, `geometry::snap_engages...` |
-| native scroll rounding | host-owned | the plugin does not own scroll offsets; the host corrects WebKit rounding in Pigeon |
-| timeline zoom anchoring, playhead reveal | verified-by-test (zoom) / implemented-unverified (reveal) | `geometry::zoom_*`, `timeline_input::alt_wheel_zooms...` |
-| real-world retained timeline geometry | verified-by-test | `geometry::retained_interval_fit...` |
-| timeline positioning, trims, subtitle clipping | verified-by-test | `geometry::trim_drag...`, `geometry::subtitle_cues_clip_and_shift` |
-| persisted workspace layout / interface zoom | verified-by-test (layout) / host-owned (zoom) | `layout::*` |
-| preview transport rates and frames | verified-by-test | `playback::*` |
-| project editing (AVIF stills, lanes removal, new project, format, stable indices, trims in schema 3, duplicates, undo) | verified-by-test (most) | `model::*`, `store::*`, `state::*`, `timeline_input::*` |
-
-## Plugin host protocol (crates/app)
-
-| Item | Status | Evidence |
-|---|---|---|
-| `hello` to `ready` with manifest contributions | verified-by-test | `transport::hello_is_answered_with_ready...` |
-| `visibility` to `ui.set`; `ui.event` to reducer; `ping` to `pong` | verified-by-test | `transport::visible_workspace...`; binary smoke run over a pipe |
-| Canvas fast path (`canvas.draw` when only draw lists change) | verified-by-test | `transport::split_canvas_moves_draw_lists...` (split only; the send path is in `Pump::render`) |
-| Modals open/close through `window.open_modal` / `window.close_modal` | implemented-unverified | `Pump::render` |
-| Engine request workers (never on the loop thread) | implemented-unverified | `serve`, worker threads |
-| Persisted preferences via `settings.set` | implemented-unverified | `Effect::Persist` |
-| SDK (`pigeon-plugin-sdk`) use | verified-by-test (smoke) | vendored under `vendor/pigeon-plugin-sdk` (amendment 12); `transport.rs` runs the SDK runtime; binary smoke run: ready, ui.set, pong |
-| Engine (`reelio-engine`) use | verified-by-test | `engine_bridge::Real` maps all 23 UI requests onto `ReelioEngine`; `dropped_media_is_probed_by_the_real_engine_and_becomes_a_lane` runs ffmpeg-generated MP4 through drop, `media_dropped`, `media_probe` and the lane scene |
-| Amendments 1, 7, 9, 13 | verified-by-test | command push by `Incoming::Command`; controlled inputs get `rev` (`controlled_inputs_bump_rev...`); permissions list; two inspector panels ordered by `order` |
-| Real Pigeon host, conformance suite | not-verifiable-here | |
+The pass fixes the wide toolbar, letterboxed viewer, fixed left lane headers and full-width lane
+canvases, dark panel fills and clip colors. The saturated video-pixel mask `(left, top, right,
+bottom)` moved from `(400,357,520,425)` to `(670,83,1241,403)` versus `(668,112,1238,433)` in the
+reference: nearly the same size, still 29–30 px higher (floating feedback instead of an old
+in-flow banner, plus renderer spacing). Remaining differences include font/glyphs, selected title
+field styling, composition of host inspector/chrome, absent screenshot-specific chapter markers
+and source size, and native responsive render behavior. These measurements are not a pixel-parity
+certificate.

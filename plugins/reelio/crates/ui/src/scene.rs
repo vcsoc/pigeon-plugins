@@ -79,14 +79,6 @@ fn column(id: &str, children: Vec<Value>, gap: f64) -> Value {
     node(id, "column", json!({"gap": gap, "children": children}))
 }
 
-fn panel(id: &str, children: Vec<Value>) -> Value {
-    node(
-        id,
-        "panel",
-        json!({"children": [column(&format!("{id}.body"), children, 8.0)], "padding": 10}),
-    )
-}
-
 fn section_title(id: &str, title: &str) -> Value {
     node(
         id,
