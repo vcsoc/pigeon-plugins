@@ -328,4 +328,36 @@ accessibility.
   range does not include the host's is shown disabled with an explanation.
 
 ## Amendments
-(none yet)
+
+Ratified by the lead (2026-11-26) from WP2's questions; the SDK schemas in `schema/ui-v2/` are the
+normative detail for everything listed here.
+
+1. Section 10 push `command` is `{"t":"command","command":"<contribution id>","args":{},"context":{}}`
+   (the envelope `id` stays the correlation id).
+2. The visibility push is `visibility {instance,visible}`; `ui.visible` is a deprecated alias that
+   hosts and SDKs both accept.
+3. Canvas op shapes are those in `schema/ui-v2/draw.schema.json` (line x1,y1,x2,y2; polyline/polygon
+   `pts:[[x,y]..]`; path `cmds` as arrays `["M",x,y]`, `["L",x,y]`, `["Q",cx,cy,x,y]`,
+   `["C",c1x,c1y,c2x,c2y,x,y]`, `["Z"]`; arc cx,cy,r,start,end in radians clockwise from +x; text
+   weight 100-900; shadow/gradient apply to following fills until `restore`).
+4. `mods` is `{shift,ctrl,alt,meta}`; pointer/wheel events carry `coalesced` (count of merged events).
+5. `canvas.draw.region` is an optional damage hint; `ops` always replaces the whole list.
+6. Enumerations: `split.direction` horizontal|vertical; `scroll.axis` vertical|horizontal|both;
+   `align` start|center|end|stretch|left|right; `justify` start|center|end|space_between|space_around;
+   `ui.scroll_to align` start|center|end|nearest.
+7. All controlled inputs (checkbox, switch, slider, select, text, number) use `change`/`submit`/`blur`
+   events with `value` and `rev`.
+8. `list.window` is a `ui.event` with `type:"list.window"`; the answer is a `list.rows` message.
+9. Manifest permissions: selection, library.read, library.write, secrets, dialogs, clipboard, shell,
+   windows, drag. settings, notify, progress, theme, locale and log need no permission.
+10. `theme.changed` carries the theme object under `theme`; `ping` carries an optional `id`, `pong` echoes it.
+11. **Launching.** The host always runs `run --setup` when a plugin is enabled (idempotent), before the
+    first `run --plugin`. `--plugin` before setup fails fast with a JSON error on stdout.
+12. **Self-containment of SDKs.** Because only the plugin's own folder is installed, every plugin
+    vendors its SDK: Python plugins get `pigeon_plugin/` copied into the plugin folder; Rust plugins
+    get the `pigeon-plugin-sdk` crate vendored under `<plugin>/vendor/pigeon-plugin-sdk` (workspace
+    `[patch]`/path dependency inside the plugin). A sync script (`sdk/sync_sdk.py`, WP2) copies the
+    current SDK into plugins that declare it, and CI checks the copies are current, exactly like
+    `shared/run` and `plugin_runtime.py`.
+13. **Inspector panels.** A plugin may contribute several `inspector.panel`s; the host shows them as
+    tabs/sections ordered by `order`. A plugin that wants one panel with internal tabs may use `tabs`.
