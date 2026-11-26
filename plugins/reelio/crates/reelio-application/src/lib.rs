@@ -388,9 +388,11 @@ mod tests {
     #[test]
     fn project_roundtrip_relative_paths() {
         let d = tempfile::tempdir().unwrap();
+        // Authorized paths are canonical; macOS temp dirs live behind the /var -> /private/var link.
+        let root = fs::canonicalize(d.path()).unwrap();
         let a = Application::new(&d.path().join("db")).unwrap();
         let mut p = Project::default();
-        let source = d.path().join("source.mkv");
+        let source = root.join("source.mkv");
         fs::write(&source, "fixture").unwrap();
         p.assets.push(Asset {
             id: id(),
@@ -403,7 +405,7 @@ mod tests {
             metadata: Default::default(),
             chapters: vec![],
         });
-        let path = d.path().join("x.reelio");
+        let path = root.join("x.reelio");
         a.save_project(&p, &path).unwrap();
         let raw: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         assert_eq!(raw["assets"][0]["path"], "source.mkv");

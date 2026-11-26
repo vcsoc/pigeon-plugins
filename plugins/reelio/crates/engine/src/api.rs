@@ -27,7 +27,12 @@ pub trait Engine: Send + Sync {
     fn close_requested(&self) -> CloseDecision;
     /// Former drag-and-drop handler: authorizes up to 256 dropped regular files, emits
     /// `MediaDropped`, and returns the authorized canonical paths.
-    fn media_dropped(&self, paths: Vec<PathBuf>, position: Point, viewport: Option<Size>) -> Vec<String>;
+    fn media_dropped(
+        &self,
+        paths: Vec<PathBuf>,
+        position: Point,
+        viewport: Option<Size>,
+    ) -> Vec<String>;
 
     // ---- backend and runtime components ----
 
@@ -113,6 +118,14 @@ pub trait Engine: Send + Sync {
     fn resource_download(&self, id: String) -> EngineResult<ImportResult>;
     /// Former `search_browser_open`: opens the isolated browser via the host.
     fn search_browser_open(&self, request: SearchBrowserRequest) -> EngineResult<()>;
+    /// Navigation/popup policy for the isolated search browser (former `resources::allowed_url`).
+    fn search_browser_allows(&self, url: String) -> bool;
+    /// Former browser download hook: queues a download offer for local confirmation. Emits
+    /// `ResourceDownloadRequested` or `ResourceError`. Web content never downloads directly.
+    fn search_browser_download(
+        &self,
+        request: SearchBrowserDownloadRequest,
+    ) -> EngineResult<PendingInfo>;
 
     // ---- updates ----
 
@@ -126,13 +139,19 @@ pub trait Engine: Send + Sync {
     // ---- subtitle editor and local models ----
 
     /// Former `subtitle_editor_open`.
-    fn subtitle_editor_open(&self, path: Option<PathBuf>) -> EngineResult<Option<SubtitleEditorOpened>>;
+    fn subtitle_editor_open(
+        &self,
+        path: Option<PathBuf>,
+    ) -> EngineResult<Option<SubtitleEditorOpened>>;
     /// Former `subtitle_editor_save`: new SRT copy via host save dialog.
     fn subtitle_editor_save(&self, document: Document) -> EngineResult<Option<String>>;
     /// Former `subtitle_editor_dirty`: marks unsaved subtitle work for close protection.
     fn subtitle_editor_dirty(&self, dirty: bool);
     /// Former `subtitle_editor_draft`.
-    fn subtitle_editor_draft(&self, request: SubtitleEditorDraftRequest) -> EngineResult<Option<Document>>;
+    fn subtitle_editor_draft(
+        &self,
+        request: SubtitleEditorDraftRequest,
+    ) -> EngineResult<Option<Document>>;
     /// Former `subtitle_models`.
     fn subtitle_models(&self) -> EngineResult<Value>;
     /// Former `subtitle_model_start`.

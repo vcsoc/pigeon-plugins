@@ -137,6 +137,16 @@ pub struct SubtitleEditorDraftRequest {
     pub clear: bool,
 }
 
+/// Host-side hand-off of a download captured by the isolated search browser (`search_browser_download`).
+/// `cookie` is a transient session cookie header for the original download host only; it is
+/// never logged or persisted.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchBrowserDownloadRequest {
+    pub kind: SearchKind,
+    pub url: String,
+    pub cookie: String,
+}
+
 /// Argument bundle for `subtitle_model_start`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubtitleModelStartRequest {

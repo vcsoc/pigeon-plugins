@@ -312,7 +312,9 @@ fn command_is_structured_and_maps_exact_indices() {
         .iter()
         .map(|s| s.to_string_lossy().into_owned())
         .collect::<Vec<_>>();
-    assert!(strings.contains(&source.to_string_lossy().into_owned()));
+    // probe() canonicalizes asset paths (macOS temp dirs live behind /var -> /private/var).
+    let canonical = fs::canonicalize(&source).unwrap();
+    assert!(strings.contains(&canonical.to_string_lossy().into_owned()));
     let mappings = strings
         .windows(2)
         .filter(|w| w[0] == "-map")

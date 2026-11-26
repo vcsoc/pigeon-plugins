@@ -11,8 +11,18 @@
 
 pub mod api;
 pub mod host;
+pub mod runtime;
 pub mod types;
+
+pub(crate) mod context;
+pub(crate) mod preferences;
+pub(crate) mod preview;
+pub(crate) mod resources;
+pub(crate) mod subtitles;
+pub(crate) mod updates;
+pub(crate) mod version;
 
 pub use api::Engine;
 pub use host::{ConfirmDialog, ConfirmKind, EngineHost, FileDialog};
+pub use runtime::{ReelioEngine, HOMEPAGE_URL};
 pub use types::*;

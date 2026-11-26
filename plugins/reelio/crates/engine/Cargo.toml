@@ -16,6 +16,10 @@ reelio-subtitles.workspace = true
 reelio-updates.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+uuid.workspace = true
+tracing = "=0.1.44"
+url = "=2.5.8"
 
 [dev-dependencies]
 tempfile.workspace = true
+reelio-domain.workspace = true

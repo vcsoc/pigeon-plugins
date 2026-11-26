@@ -10,12 +10,14 @@ use std::path::PathBuf;
 pub struct FileDialog {
     /// Dialog title. `None` lets the host use its default.
     pub title: Option<String>,
-    /// Start directory (already resolved by the engine through the default-folder setting).
-    pub directory: PathBuf,
+    /// Start directory (resolved by the engine through the default-folder setting); `None` lets the host decide.
+    pub directory: Option<PathBuf>,
     /// Suggested file name for save dialogs.
     pub file_name: Option<String>,
     /// Extension filters as `(label, extensions without dot)`.
     pub filters: Vec<(String, Vec<String>)>,
+    /// Allow selecting several files (only meaningful for `pick_files`).
+    pub multiple: bool,
 }
 
 /// Severity of a yes/no confirmation.
@@ -38,7 +40,7 @@ pub trait EngineHost: Send + Sync + 'static {
     /// Private, per-plugin data directory (database, subtitle drafts, downloads, caches).
     fn data_dir(&self) -> PathBuf;
 
-    /// The operating system's Videos folder, if known.
+    /// The operating system's Videos folder (the host applies its home-folder fallback), if known.
     fn videos_dir(&self) -> Option<PathBuf>;
 
     /// Open dialog for one or more existing files.
