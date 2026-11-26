@@ -1,10 +1,14 @@
 {
   "id": "semantic-search",
   "name": "Local Semantic Search",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "category": "Search",
-  "kind": "semantic-index",
-  "description": "Private multimodal similarity search, knowledge-graph clustering and tag suggestions using EmbeddingGemma 2 (768-dim embeddings of text, images and video), computed on this computer. Setup downloads about 1.5 GB once. Runs as a standalone engine that Pigeon talks to over a simple line protocol.",
+  "kind": "app",
+  "provides": [
+    "search",
+    "ops"
+  ],
+  "description": "Private multimodal similarity search, knowledge-graph clustering and tag suggestions using EmbeddingGemma 2 (768-dim embeddings of text, images and video), computed on this computer. Setup downloads about 1.5 GB once. The plugin runs its indexing engine locally.",
   "author": "Pigeon",
   "licence": "Apache-2.0",
   "operations": [
@@ -14,7 +18,7 @@
     "runtime": "python3",
     "python": ">=3.10,<3.14",
     "entry": "run",
-    "protocol": 1,
+    "protocol": 2,
     "standalone": true,
     "requires": [
       "sentence-transformers",
@@ -25,10 +29,12 @@
       "setup": "run --setup",
       "health": "run --health [--verify]",
       "selfTest": "run --self-test",
-      "serve": "run --serve <index.db>",
-      "request": "run  (JSON on stdin)"
+      "request": "run  (JSON on stdin)",
+      "plugin": "run --plugin",
+      "uninstall": "run --uninstall"
     }
   },
+  "sdk": "python",
   "files": [
     {
       "path": "plugin.json"
@@ -42,6 +48,12 @@
     },
     {
       "path": "worker.py"
+    },
+    {
+      "path": "ui.py"
+    },
+    {
+      "path": "ui_support.py"
     },
     {
       "path": "semantic-engine.py"
@@ -179,5 +191,72 @@
     "files.pythonhosted.org"
   ],
   "privacy": "Setup downloads the Python packages and the model once. Your files and queries stay on this computer; nothing is sent anywhere. Not a generative chatbot.",
-  "source": "google/embeddinggemma-2 on Hugging Face (Apache-2.0), pinned to a commit"
+  "source": "google/embeddinggemma-2 on Hugging Face (Apache-2.0), pinned to a commit",
+  "ui": {
+    "protocol": 2,
+    "activation": "startup",
+    "contributions": [
+      {
+        "slot": "inspector.panel",
+        "id": "index",
+        "title": "Semantic index",
+        "icon": "sparkles",
+        "order": 40,
+        "applies_to": {"kinds": ["image", "video", "audio", "document"], "min": 1}
+      },
+      {
+        "slot": "statusbar.item",
+        "id": "status",
+        "title": "Semantic index",
+        "align": "right",
+        "order": 30
+      },
+      {
+        "slot": "search.provider",
+        "id": "meaning",
+        "title": "Meaning",
+        "icon": "sparkles",
+        "mode_id": "semantic",
+        "order": 10
+      },
+      {
+        "slot": "asset.action",
+        "id": "similar",
+        "title": "Find similar",
+        "icon": "sparkles",
+        "applies_to": {
+          "kinds": [
+            "image",
+            "video",
+            "audio",
+            "document"
+          ],
+          "min": 1,
+          "max": 1
+        },
+        "selection": "one",
+        "group": "AI"
+      },
+      {
+        "slot": "modal",
+        "id": "similar-results",
+        "title": "Similar items",
+        "size": "medium",
+        "resizable": true,
+        "modal": false
+      },
+      {
+        "slot": "preferences.page",
+        "id": "prefs",
+        "title": "Semantic search",
+        "icon": "sparkles",
+        "order": 50
+      }
+    ],
+    "permissions": [
+      "selection",
+      "library.read",
+      "windows"
+    ]
+  }
 }
