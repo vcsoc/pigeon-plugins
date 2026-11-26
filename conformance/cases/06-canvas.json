@@ -1,0 +1,140 @@
+{
+  "id": "06-canvas",
+  "title": "Canvas: pointer drag moves a clip, wheel zooms, keys move the playhead, all via canvas.draw",
+  "steps": [
+    {
+      "ready": {}
+    },
+    {
+      "show": "hello-ui/main"
+    },
+    {
+      "wait_node": {
+        "instance": "hello-ui/main",
+        "node": "timeline"
+      }
+    },
+    {
+      "expect_canvas": {
+        "instance": "hello-ui/main",
+        "node": "timeline",
+        "min_ops": 20
+      }
+    },
+    {
+      "event": {
+        "instance": "hello-ui/main",
+        "node": "timeline",
+        "type": "pointer",
+        "phase": "down",
+        "x": 20,
+        "y": 20,
+        "button": 0,
+        "buttons": 1,
+        "mods": {},
+        "clicks": 1,
+        "pointer_id": 1,
+        "coalesced": 1
+      }
+    },
+    {
+      "event": {
+        "instance": "hello-ui/main",
+        "node": "timeline",
+        "type": "pointer",
+        "phase": "move",
+        "x": 60,
+        "y": 20,
+        "button": 0,
+        "buttons": 1,
+        "mods": {},
+        "clicks": 0,
+        "pointer_id": 1,
+        "coalesced": 3
+      }
+    },
+    {
+      "event": {
+        "instance": "hello-ui/main",
+        "node": "timeline",
+        "type": "pointer",
+        "phase": "move",
+        "x": 200,
+        "y": 20,
+        "button": 0,
+        "buttons": 1,
+        "mods": {},
+        "clicks": 0,
+        "pointer_id": 1,
+        "coalesced": 5
+      }
+    },
+    {
+      "event": {
+        "instance": "hello-ui/main",
+        "node": "timeline",
+        "type": "pointer",
+        "phase": "up",
+        "x": 200,
+        "y": 20,
+        "button": 0,
+        "buttons": 0,
+        "mods": {},
+        "clicks": 0,
+        "pointer_id": 1,
+        "coalesced": 1
+      }
+    },
+    {
+      "expect_canvas": {
+        "instance": "hello-ui/main",
+        "node": "timeline",
+        "min_ops": 20,
+        "contains": {
+          "op": "rect",
+          "fill": "accent"
+        }
+      }
+    },
+    {
+      "event": {
+        "instance": "hello-ui/main",
+        "node": "timeline",
+        "type": "wheel",
+        "dx": 0,
+        "dy": -3,
+        "x": 10,
+        "y": 10,
+        "mods": {},
+        "coalesced": 2
+      }
+    },
+    {
+      "event": {
+        "instance": "hello-ui/main",
+        "node": "timeline",
+        "type": "key",
+        "phase": "down",
+        "key": "ArrowRight",
+        "code": "ArrowRight",
+        "text": "",
+        "mods": {},
+        "repeat": false
+      }
+    },
+    {
+      "expect_canvas": {
+        "instance": "hello-ui/main",
+        "node": "timeline",
+        "min_ops": 20,
+        "contains": {
+          "op": "line",
+          "stroke": "danger"
+        }
+      }
+    },
+    {
+      "expect_no_violations": true
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "id": "10-permission",
+  "title": "A host service without a declared permission answers permission_denied and the plugin handles it",
+  "steps": [
+    {
+      "ready": {}
+    },
+    {
+      "show": "hello-ui/main"
+    },
+    {
+      "wait_node": {
+        "instance": "hello-ui/main",
+        "node": "shell-denied"
+      }
+    },
+    {
+      "event": {
+        "instance": "hello-ui/main",
+        "node": "shell-denied",
+        "type": "click"
+      }
+    },
+    {
+      "expect_toast": {
+        "text_contains": "permission_denied"
+      }
+    }
+  ]
+}

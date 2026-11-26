@@ -1,0 +1,40 @@
+{
+  "id": "02-main-view",
+  "title": "Showing the workspace view renders its scene",
+  "steps": [
+    {
+      "ready": {}
+    },
+    {
+      "show": "hello-ui/main"
+    },
+    {
+      "wait_node": {
+        "instance": "hello-ui/main",
+        "node": "go"
+      }
+    },
+    {
+      "expect_node": {
+        "instance": "hello-ui/main",
+        "node": "go",
+        "props": {
+          "label": "Click me",
+          "variant": "primary"
+        }
+      }
+    },
+    {
+      "expect_node": {
+        "instance": "hello-ui/main",
+        "node": "tabs",
+        "props": {
+          "active": "nodes"
+        }
+      }
+    },
+    {
+      "expect_no_violations": true
+    }
+  ]
+}

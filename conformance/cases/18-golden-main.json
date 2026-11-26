@@ -1,0 +1,29 @@
+{
+  "id": "18-golden-main",
+  "title": "Golden image of the workspace view (advisory visual check)",
+  "steps": [
+    {
+      "ready": {}
+    },
+    {
+      "show": "hello-ui/main"
+    },
+    {
+      "wait_node": {
+        "instance": "hello-ui/main",
+        "node": "go"
+      }
+    },
+    {
+      "golden": {
+        "instance": "hello-ui/main",
+        "file": "hello-ui-main.png",
+        "size": [
+          960,
+          1200
+        ],
+        "max_fraction": 0.0
+      }
+    }
+  ]
+}

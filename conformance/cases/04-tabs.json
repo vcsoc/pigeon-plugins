@@ -1,0 +1,36 @@
+{
+  "id": "04-tabs",
+  "title": "Tabs change the active tab",
+  "steps": [
+    {
+      "ready": {}
+    },
+    {
+      "show": "hello-ui/main"
+    },
+    {
+      "wait_node": {
+        "instance": "hello-ui/main",
+        "node": "tabs"
+      }
+    },
+    {
+      "event": {
+        "instance": "hello-ui/main",
+        "node": "tabs",
+        "type": "change",
+        "value": "services",
+        "rev": 1
+      }
+    },
+    {
+      "expect_node": {
+        "instance": "hello-ui/main",
+        "node": "tabs",
+        "props": {
+          "active": "services"
+        }
+      }
+    }
+  ]
+}

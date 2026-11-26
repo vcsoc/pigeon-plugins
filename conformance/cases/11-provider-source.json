@@ -1,0 +1,66 @@
+{
+  "id": "11-provider-source",
+  "title": "library.source provider requests are answered (describe, list, thumbnail)",
+  "steps": [
+    {
+      "ready": {}
+    },
+    {
+      "provider": {
+        "method": "source.describe",
+        "params": {
+          "source": "demo-source"
+        },
+        "expect": {
+          "title": "Hello Demo",
+          "capabilities": [
+            "browse",
+            "search"
+          ]
+        }
+      }
+    },
+    {
+      "provider": {
+        "method": "source.list",
+        "params": {
+          "source": "demo-source",
+          "node": "root",
+          "limit": 5,
+          "sort": {
+            "key": "name",
+            "dir": "asc"
+          },
+          "filter": {}
+        },
+        "expect": {
+          "total": 240
+        }
+      }
+    },
+    {
+      "provider": {
+        "method": "source.thumbnail",
+        "params": {
+          "source": "demo-source",
+          "id": "hello-1",
+          "size": 64
+        },
+        "expect": {}
+      }
+    },
+    {
+      "provider": {
+        "method": "source.children",
+        "params": {
+          "source": "demo-source",
+          "node": "root"
+        },
+        "expect": {}
+      }
+    },
+    {
+      "expect_no_violations": true
+    }
+  ]
+}

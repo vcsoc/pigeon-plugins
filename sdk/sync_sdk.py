@@ -44,7 +44,8 @@ def source_files(lang):
     """(relative path inside the vendored folder, source path) pairs for one language."""
     if lang == "python":
         base = HERE / "python" / "pigeon_plugin"
-        return [(f"pigeon_plugin/{p.name}", p) for p in sorted(base.glob("*.py"))]
+        # schemas.py is the repository's test helper (it reads schema/ui-v2); plugins ship the runtime only.
+        return [(p.name, p) for p in sorted(base.glob("*.py")) if p.name != "schemas.py"]
     base = HERE / "rust" / "pigeon-plugin-sdk"
     files = [("Cargo.toml", base / "Cargo.toml")]
     files += [(f"src/{p.relative_to(base / 'src').as_posix()}", p) for p in sorted((base / "src").rglob("*.rs"))]

@@ -1,0 +1,30 @@
+{
+  "id": "08-toast",
+  "title": "Host service: notify.toast is permitted and recorded",
+  "steps": [
+    {
+      "ready": {}
+    },
+    {
+      "show": "hello-ui/main"
+    },
+    {
+      "wait_node": {
+        "instance": "hello-ui/main",
+        "node": "toast"
+      }
+    },
+    {
+      "event": {
+        "instance": "hello-ui/main",
+        "node": "toast",
+        "type": "click"
+      }
+    },
+    {
+      "expect_toast": {
+        "text_contains": "Hello, Clip 01"
+      }
+    }
+  ]
+}
