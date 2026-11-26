@@ -5,14 +5,14 @@ use serde_json::{json, Value};
 
 pub const CLR_RULER_TEXT: &str = "#8f95a6";
 pub const CLR_RULER_TICK: &str = "#3a3d46";
-pub const CLR_LANE: &str = "#1d1f25";
+pub const CLR_LANE: &str = "#1c1d24";
 pub const CLR_PLAYHEAD: &str = "#f16d7a";
 pub const CLR_CHAPTER: &str = "#e6bd79";
-pub const CLR_VIDEO: &str = "#2d4a7f";
+pub const CLR_VIDEO: &str = "#395278";
 pub const CLR_VIDEO_EDGE: &str = "#5688ff";
 pub const CLR_AUDIO: &str = "#24513f";
 pub const CLR_AUDIO_EDGE: &str = "#8bd3ac";
-pub const CLR_SUBTITLE: &str = "#5d4a25";
+pub const CLR_SUBTITLE: &str = "#725f3a";
 pub const CLR_SUBTITLE_EDGE: &str = "#e6bd79";
 pub const CLR_EXCLUDED: &str = "#34363d";
 pub const CLR_TEXT: &str = "#e8eaf0";
@@ -109,8 +109,8 @@ pub fn lane_ops(d: &LaneDraw) -> Vec<Value> {
     } else {
         "#4a4e58"
     };
-    let top = RULER_H + 6.0;
-    let h = d.height - top - 6.0;
+    let top = RULER_H + 2.0;
+    let h = d.height - top - 10.0;
     ops.push(rect(
         d.clip_left,
         top,

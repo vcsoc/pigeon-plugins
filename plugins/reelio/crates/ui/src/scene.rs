@@ -162,52 +162,95 @@ fn top_bar(s: &State) -> Value {
         })
         .collect();
     let edit_ok = s.store.can_undo();
-    row(
-        "top",
-        vec![
-            icon_button(
-                "project:menu",
-                "menu",
-                "Project menu: New, Open, Open media, Save, Quit",
-                true,
-            ),
-            icon_button(
-                "layout:left",
-                "panel-left",
-                "Collapse or expand the media pool",
-                true,
-            ),
-            node(
-                "tools",
-                "wrap",
-                json!({"gap": 2.0, "width":{"fill":1}, "children": tabs}),
-            ),
-            icon_button(
-                "layout:right",
-                "panel-right",
-                "Collapse or expand the inspector",
-                true,
-            ),
-            node("top.spacer", "spacer", json!({"width": {"fill": 1}})),
-            icon_button("undo", "undo", "Undo (Ctrl/Cmd+Z)", edit_ok),
-            icon_button(
-                "redo",
-                "redo",
-                "Redo (Ctrl/Cmd+Shift+Z)",
-                s.store.can_redo(),
-            ),
-            icon_button("settings:open", "settings", "Preferences", true),
-            icon_button("dep:open", "info", "Required components", true),
-            button(
-                "export:validate",
-                "Export",
-                Some("download"),
-                "primary",
-                s.busy.is_none(),
-            ),
-        ],
-        6.0,
-    )
+    let compact = s.window_width < 1050.;
+    let tools = if compact {
+        let icons = [
+            "layers", "info", "list", "captions", "volume-2", "tag", "image", "bookmark",
+            "download",
+        ];
+        let buttons = Section::ALL
+            .into_iter()
+            .zip(icons)
+            .map(|(section, icon)| {
+                let mut control = icon_button(
+                    &format!("nav:{}", section.id()),
+                    icon,
+                    section.label(),
+                    true,
+                );
+                control["toggled"] = json!(s.section == section);
+                control
+            })
+            .collect::<Vec<_>>();
+        node(
+            "tools",
+            "row",
+            json!({"gap":2,"width":{"fill":1},"children":buttons}),
+        )
+    } else {
+        node(
+            "tools",
+            "row",
+            json!({"gap":2,"width":{"fill":1},"children":tabs}),
+        )
+    };
+    let mut controls = vec![
+        node(
+            "top.brand",
+            "row",
+            json!({"width":{"px":if compact{82}else{(s.pool_width-64.).clamp(90.,302.) as u32}},"gap":6,"children":[node("top.brand.icon","icon",json!({"icon":"film"})),text("top.brand.title","reelio","body")]}),
+        ),
+        icon_button(
+            "project:menu",
+            "menu",
+            "Project menu: New, Open, Open media, Save, Quit",
+            true,
+        ),
+        icon_button(
+            "layout:left",
+            "panel-left",
+            "Collapse or expand the media pool",
+            true,
+        ),
+        tools,
+        icon_button(
+            "layout:right",
+            "panel-right",
+            "Collapse or expand the inspector",
+            true,
+        ),
+        node("top.spacer", "spacer", json!({"width": {"fill": 1}})),
+        icon_button("undo", "undo", "Undo (Ctrl/Cmd+Z)", edit_ok),
+        icon_button(
+            "redo",
+            "redo",
+            "Redo (Ctrl/Cmd+Shift+Z)",
+            s.store.can_redo(),
+        ),
+        icon_button("settings:open", "settings", "Preferences", true),
+        icon_button("dep:open", "info", "Required components", true),
+        button(
+            "export:validate",
+            "Export",
+            Some("download"),
+            "primary",
+            s.busy.is_none(),
+        ),
+    ];
+    if compact && s.window_width < 700. {
+        let tools = controls.remove(3);
+        node(
+            "top",
+            "column",
+            json!({"width":{"fill":1},"height":{"px":58},"gap":2,"children":[row("top.actions",controls,5.),tools]}),
+        )
+    } else {
+        node(
+            "top",
+            "row",
+            json!({"width":{"fill":1},"height":{"px":28},"gap":5,"children":controls}),
+        )
+    }
 }
 
 /// Media pool: dropbox, one row per source with a separate add-to-timeline button.
@@ -233,18 +276,22 @@ fn media_pool(s: &State) -> Value {
                 json!({"label": basename(&a.path), "variant": "ghost", "on": ["click", "double_click"], "tooltip": a.path, "toggled": selected}),
             );
             open["kind_label"] = json!(kind);
-            row(
+            let mut asset_row = row(
                 &format!("pool.row:{}", a.id),
                 vec![
+                    node(&format!("pool.icon:{}",a.id),"icon",json!({"icon":match kind {"IMAGE"=>"image","VIDEO"=>"film","AUDIO"=>"volume-2",_=>"captions"}})),
                     column(
                         &format!("pool.body:{}", a.id),
                         vec![open, text(&format!("pool.kind:{}", a.id), kind, "caption")],
                         2.0,
                     ),
+                    node(&format!("pool.row.spacer:{}",a.id),"spacer",json!({"width":{"fill":1}})),
                     icon_button(&format!("pool.add:{}", a.id), "plus", "Add to timeline", s.busy.is_none()),
                 ],
                 6.0,
-            )
+            );
+            asset_row["width"]=json!({"fill":1});asset_row["height"]=json!({"px":51});asset_row["bg"]=json!("bg_input");asset_row["padding"]=json!(5);asset_row["radius"]=json!(4);
+            asset_row
         })
         .collect();
     let count = p.assets.len();
@@ -267,14 +314,10 @@ fn media_pool(s: &State) -> Value {
         node(
             "pool.dropbox",
             "button",
-            json!({"label": "Add video, audio or subtitles\nDrop files here or browse", "variant": "default", "on": ["click", "drop"], "enabled": s.busy.is_none()}),
+            json!({"label": "Add video, audio or subtitles\nDrop files here or browse", "variant": "ghost", "bg":"bg_input", "width":{"fill":1},"height":{"px":42}, "on": ["click", "drop"], "enabled": s.busy.is_none()}),
         ),
     ];
-    children.push(node(
-        "pool.list",
-        "scroll",
-        json!({"axis": "vertical", "children": [column("pool.rows", rows, 6.0)]}),
-    ));
+    children.push(node("pool.list","scroll",json!({"axis":"vertical","height":{"fill":1},"children":[node("pool.rows","column",json!({"width":{"fill":1},"children":rows,"gap":6}))]})));
     children.push(text(
         "pool.hint",
         "Drag to timeline · Sources stay untouched",
@@ -283,7 +326,7 @@ fn media_pool(s: &State) -> Value {
     node(
         "pool",
         "column",
-        json!({"gap": 8.0, "padding": 10, "width": {"px": crate::layout::clamp_pool_width(Some(s.pool_width),Some(s.window_width))}, "children": children}),
+        json!({"gap": 8.0, "padding": 9, "bg":"bg_panel","radius":0,"height":{"fill":1},"width": {"px": crate::layout::clamp_pool_width(Some(s.pool_width),Some(s.window_width))}, "children": children}),
     )
 }
 
@@ -293,14 +336,15 @@ fn viewer(s: &State) -> Value {
     let source = s.source_asset();
     let duration = s.source_duration_ms();
     let sources = s.preview_sources();
-    let mut children = vec![row(
+    let mut name = input("viewer.name", &p.name, "Project name", "change");
+    name["width"] = json!({"px":if s.window_width<700.{160}else{260}});
+    name["bg"] = json!("bg");
+    let mut children = vec![node(
         "viewer.head",
-        vec![
-            text("viewer.label", "VIDEO VIEWER", "caption"),
-            input("viewer.name", &p.name, "Project name", "change"),
-            pill("viewer.badge", "PREVIEW", "neutral"),
-        ],
-        8.0,
+        "row",
+        json!({"width":{"fill":1},"height":{"px":29},"gap":8,"children":[
+        text("viewer.label","VIDEO VIEWER","caption"),node("viewer.head.before","spacer",json!({"width":{"fill":1}})),name,
+        node("viewer.head.after","spacer",json!({"width":{"fill":1}})),pill("viewer.badge","PREVIEW","neutral")]}),
     )];
     if sources.len() > 1 {
         let options: Vec<Value> = sources
@@ -339,14 +383,12 @@ fn viewer(s: &State) -> Value {
             node("viewer.caption", "text", json!({"text": cues.join("\n").chars().take(16000).collect::<String>(), "bg":"#000000cc", "fg":"#ffffff", "align":"center", "wrap":true, "padding": 6}))
         ]})));
     }
-    children.push(panel(
-        "viewer.frame.panel",
-        vec![node(
-            "viewer.frame.stack",
-            "stack",
-            json!({"children":frame_layers}),
-        )],
-    ));
+    let frame_height = if s.section == Section::Subtitles {
+        (s.window_height * 0.32).clamp(120., 340.)
+    } else {
+        (s.upper_height() - 190.).clamp(90., 980.)
+    };
+    children.push(node("viewer.frame.panel","stack",json!({"children":frame_layers,"bg":"#131313","radius":0,"width":{"fill":1},"height":{"px":frame_height}})));
     children.push(node(
         "viewer.seek",
         "slider",
@@ -411,17 +453,16 @@ fn viewer(s: &State) -> Value {
         "secondary",
         source.is_some() && s.dependencies_ready(),
     ));
-    let mut viewer = node(
+    let height = if s.section == Section::Subtitles {
+        json!({"fill":1})
+    } else {
+        json!({"px":s.upper_height()})
+    };
+    node(
         "viewer",
         "column",
-        json!({"gap":8.0,"padding":10,"width":{"fill":1},"children":children}),
-    );
-    if s.section != Section::Subtitles {
-        if let Some(height) = s.viewer_height {
-            viewer["height"] = json!({"px":height});
-        }
-    }
-    viewer
+        json!({"gap":8,"padding":10,"width":{"fill":1},"height":height,"bg":"bg","radius":0,"children":children}),
+    )
 }
 
 /// One timeline lane: header controls plus a canvas that draws ruler, clip, handles and pins.
@@ -487,37 +528,31 @@ fn lane(s: &State, t: &Track, view_width: f64) -> Value {
     controls.push(node(
         &format!("lane.offset:{}", t.id),
         "number_input",
-        json!({"label": "Offset ms", "value": t.offset_ms, "min": -geometry::MAX_OFFSET, "max": geometry::MAX_OFFSET, "step": 10, "commit": "submit"}),
+        json!({"label": "Offset ms", "width":{"px":65}, "value": t.offset_ms, "min": -geometry::MAX_OFFSET, "max": geometry::MAX_OFFSET, "step": 10, "commit": "submit"}),
     ));
-    let heading = row(
+    let mut name = if t.title.is_empty() {
+        basename(&asset_path)
+    } else {
+        t.title.clone()
+    };
+    if name.chars().count() > 25 {
+        name = name.chars().take(22).collect::<String>() + "…";
+    }
+    let heading = node(
         &format!("lane.head:{}", t.id),
-        vec![
-            text(&format!("lane.letter:{}", t.id), letter, "title"),
-            node(
-                &format!("lane.select:{}", t.id),
-                "button",
-                json!({"label": if t.title.is_empty() { basename(&asset_path) } else { t.title.clone() }, "variant": "ghost", "tooltip": asset_path, "on": ["click"], "toggled": s.selected.as_deref() == Some(t.id.as_str())}),
-            ),
-            row(&format!("lane.options:{}", t.id), controls, 6.0),
-        ],
-        6.0,
+        "column",
+        json!({"width":{"px":s.lane_header_width()},"height":{"fill":1},"padding":6,"gap":5,"bg":"bg_panel","radius":0,"children":[
+            row(&format!("lane.label:{}",t.id),vec![text(&format!("lane.letter:{}",t.id),letter,"caption"),node(&format!("lane.select:{}",t.id),"button",json!({"label":name,"width":{"px":(s.lane_header_width()-28.).max(80.)},"height":{"px":22},"variant":"ghost","tooltip":asset_path,"on":["click"],"toggled":s.selected.as_deref()==Some(t.id.as_str())}))],2.),
+            row(&format!("lane.options:{}",t.id),controls,3.)
+        ]}),
     );
     let draw = canvas_draw(s, t, kind_str, view_width);
-    column(
+    node(
         &format!("lane:{}", t.id),
-        vec![
-            heading,
-            node(
-                &format!("lane.canvas:{}", t.id),
-                "canvas",
-                json!({
-                    "width": {"fill": 1}, "height": {"px": 56}, "cursor": "default",
-                    "interactive": {"pointer": true, "wheel": true, "keys": true, "focusable": true, "coalesce": "move"},
-                    "draw": draw,
-                }),
-            ),
-        ],
-        4.0,
+        "row",
+        json!({"width":{"fill":1},"height":{"px":96},"children":[heading,node(&format!("lane.canvas:{}",t.id),"canvas",json!({
+            "width":{"fill":1},"height":{"px":96},"cursor":"default","interactive":{"pointer":true,"wheel":true,"keys":true,"focusable":true,"coalesce":"move"},"draw":draw
+        }))]}),
     )
 }
 
@@ -562,7 +597,7 @@ pub fn canvas_draw(s: &State, t: &Track, kind: &str, width: f64) -> Value {
     };
     let draw = LaneDraw {
         width,
-        height: 56.0,
+        height: 96.0,
         kind: kind.into(),
         enabled: t.enabled && !t.muted,
         selected: s.selected.as_deref() == Some(t.id.as_str()),
@@ -596,7 +631,7 @@ pub fn canvas_draw(s: &State, t: &Track, kind: &str, width: f64) -> Value {
 /// Timeline editor: header with zoom controls, one lane per included stream, optional cover lane.
 fn timeline(s: &State) -> Value {
     let p = s.project();
-    let view_width = 700.0;
+    let view_width = s.timeline_view_width();
     let shown: Vec<&Track> = p
         .tracks
         .iter()
@@ -620,6 +655,11 @@ fn timeline(s: &State) -> Value {
         let mut cover = row(
             "cover:lane",
             vec![
+                node(
+                    "cover:lane:label",
+                    "column",
+                    json!({"width":{"px":s.lane_header_width()},"height":{"fill":1},"padding":8,"bg":"bg_panel","on":["double_click"],"children":[text("cover.lane.heading","C  Cover","title"),text("cover.lane.note","Container artwork","caption")]}),
+                ),
                 node(
                     "cover:lane:thumbnail",
                     "image",
@@ -651,8 +691,11 @@ fn timeline(s: &State) -> Value {
             8.0,
         );
         cover["on"] = json!(["double_click"]);
-        cover["children"][1]["id"] = json!("cover:lane:label");
-        cover["children"][1]["on"] = json!(["double_click"]);
+        cover["children"][2]["on"] = json!(["double_click"]);
+        cover["width"] = json!({"fill":1});
+        cover["height"] = json!({"px":96});
+        cover["bg"] = json!("bg_raised");
+        cover["radius"] = json!(0);
         lanes.push(cover);
     }
     let zoom_pct = format!("{}%", (s.timeline_view.zoom * 100.0).round());
@@ -684,17 +727,15 @@ fn timeline(s: &State) -> Value {
         ],
         8.0,
     );
-    column(
+    let mut head = head;
+    head["width"] = json!({"fill":1});
+    head["padding"] = json!(5);
+    head["height"] = json!({"px":34});
+    node(
         "timeline",
-        vec![
-            head,
-            node(
-                "timeline.lanes",
-                "scroll",
-                json!({"axis": "vertical", "children": [column("timeline.list", lanes, 8.0)]}),
-            ),
-        ],
-        6.0,
+        "column",
+        json!({"width":{"fill":1},"height":{"fill":1},"bg":"#1c1d24","radius":0,"children":[head,
+        node("timeline.lanes","scroll",json!({"axis":"vertical","width":{"fill":1},"height":{"fill":1},"children":[node("timeline.list","column",json!({"width":{"fill":1},"gap":1,"children":lanes}))]}))]}),
     )
 }
 
@@ -1468,7 +1509,7 @@ fn lower(s: &State) -> Value {
     node(
         "lower",
         "column",
-        json!({"fill": 1, "gap": 8, "padding": 10, "children": [body]}),
+        json!({"width":{"fill":1},"height":{"fill":1},"children": [body]}),
     )
 }
 
@@ -1490,7 +1531,7 @@ pub fn main_view(s: &State) -> Value {
             node(
                 "upper",
                 "row",
-                json!({"width":{"fill":1}, "children":[media_pool(s),divider("pool",true),viewer(s)]}),
+                json!({"width":{"fill":1}, "height":{"px":s.upper_height()}, "children":[media_pool(s),divider("pool",true),viewer(s)]}),
             )
         } else {
             viewer(s)
@@ -1514,26 +1555,39 @@ pub fn main_view(s: &State) -> Value {
         "column",
         json!({"width": {"fill":1}, "height":{"fill":1}, "gap": 0, "children": center}),
     ));
+    let chrome_height =
+        if s.window_width < 700. { 66 } else { 36 } + if s.busy.is_some() { 18 } else { 0 };
     let chrome = node(
         "chrome",
         "column",
-        json!({"gap": 6, "padding": 8, "children": top_children}),
+        json!({"width":{"fill":1},"height":{"px":chrome_height},"gap":2,"padding":4,"bg":"#1b1c1e","radius":0,"children":top_children}),
     );
     let body_row = node(
         "body",
         "row",
-        json!({"fill": 1, "gap": 0, "children": body}),
+        json!({"width":{"fill":1},"height":{"fill":1},"gap":0,"children":body}),
     );
     let workspace = node(
         "workspace",
         "column",
-        json!({"fill": 1, "gap": 6, "children": [chrome, body_row]}),
+        json!({"width":{"fill":1},"height":{"fill":1},"children":[chrome,body_row]}),
     );
     // Menus overlay the workspace (z-order `stack`).
     let mut children = vec![workspace];
     let feedback = toasts(s);
     if !feedback.is_empty() {
-        children.push(node("toast.overlay","column",json!({"width":{"fill":1},"height":{"fill":1},"align":"end","justify":"end","padding":14,"gap":8,"children":feedback})));
+        let cards=feedback.into_iter().enumerate().map(|(i, card)|node(&format!("toast.align:{i}"),"row",json!({"width":{"fill":1},"height":{"px":42},"children":[node(&format!("toast.space:{i}"),"spacer",json!({"width":{"fill":1}})),card]}))).collect::<Vec<_>>();
+        let mut overlay = vec![node(
+            "toast.space.vertical",
+            "spacer",
+            json!({"height":{"fill":1}}),
+        )];
+        overlay.extend(cards);
+        children.push(node(
+            "toast.overlay",
+            "column",
+            json!({"width":{"fill":1},"height":{"fill":1},"padding":14,"gap":8,"children":overlay}),
+        ));
     }
     children.extend(menu_overlay(s));
     json!({"id": "root", "kind": "stack", "children": children})
@@ -1587,7 +1641,7 @@ pub fn summary_panel(s: &State) -> Value {
     let p = s.project();
     let mut children = vec![section_title("summary.cover.title", "POSTER / COVER")];
     children.push(match &p.artwork {
-        Some(_) => node("cover:preview", "image", json!({"resource":"cover:project", "fit":"contain", "height":{"px":140}, "on":["double_click","context","drop"], "tooltip":"Drop one still image to apply it as cover"})),
+        Some(_) => node("cover:preview", "image", json!({"resource":"cover:project", "fit":"contain", "width":{"fill":1},"height":{"px":144},"bg":"bg_input","border":"border", "on":["double_click","context","drop"], "tooltip":"Drop one still image to apply it as cover"})),
         None => node("cover:preview", "button", json!({"label":"Select a cover", "variant":"ghost", "on":["click","drop"], "tooltip":"Drop one still image to apply it as cover"})),
     });
     children.push(row(
@@ -1739,7 +1793,7 @@ pub fn summary_panel(s: &State) -> Value {
     node(
         "summary",
         "column",
-        json!({"gap": 8, "padding": 12, "children": children}),
+        json!({"width":{"fill":1},"height":{"fill":1}, "bg":"bg_panel","radius":0,"gap":10,"padding":12,"children":children}),
     )
 }
 

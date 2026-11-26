@@ -385,10 +385,16 @@ pub fn wheel(state: &mut State, dx: f64, dy: f64, x: f64, alt: bool) {
     if alt {
         let duration = geometry::timeline_viewport_duration(state.project());
         let playhead = state.playhead;
-        state.timeline_view =
-            geometry::zoom_timeline(state.timeline_view, dy, 700.0, duration, playhead, Some(x));
+        state.timeline_view = geometry::zoom_timeline(
+            state.timeline_view,
+            dy,
+            state.timeline_view_width(),
+            duration,
+            playhead,
+            Some(x),
+        );
     } else {
-        let max = 700.0 * (state.timeline_view.zoom - 1.0).max(0.0);
+        let max = state.timeline_view_width() * (state.timeline_view.zoom - 1.0).max(0.0);
         state.timeline_view.scroll = (state.timeline_view.scroll + dx + dy).clamp(0.0, max);
     }
 }

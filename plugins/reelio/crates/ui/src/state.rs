@@ -306,6 +306,8 @@ pub struct State {
     pub seek: SeekScheduler,
     pub import_queue: VecDeque<String>,
     pub window_width: f64,
+    pub window_height: f64,
+    pub measured_workspace: bool,
     pub now: f64,
     pub last_jobs_poll: f64,
     next_request: u64,
@@ -363,6 +365,8 @@ impl State {
             seek: SeekScheduler::new(),
             import_queue: VecDeque::new(),
             window_width: 1440.0,
+            window_height: 960.0,
+            measured_workspace: false,
             now: 0.0,
             last_jobs_poll: f64::NEG_INFINITY,
             next_request: 1,
@@ -2265,7 +2269,7 @@ impl State {
     /// Pixels per millisecond of the timeline at the current zoom and a 700 px viewport.
     pub fn timeline_scale(&self) -> f64 {
         let end = timeline_viewport_duration(self.project());
-        (700.0 / end) * self.timeline_view.zoom
+        (self.timeline_view_width() / end) * self.timeline_view.zoom
     }
 
     fn patch_track(&mut self, id: &str, patch: TrackPatch) {
@@ -2667,7 +2671,7 @@ impl State {
         self.timeline_view = geometry::zoom_timeline(
             self.timeline_view,
             delta,
-            700.0,
+            self.timeline_view_width(),
             duration,
             self.playhead,
             pointer,
@@ -2704,8 +2708,42 @@ impl State {
 
     /// Current window size used for responsive clamps (pool/inspector/viewer).
     pub fn set_window(&mut self, width: f64) {
-        self.window_width = width;
-        // Keep the persisted width; the view clamps it to the current workspace.
+        self.window_width = width.max(1.);
+        self.measured_workspace = true;
+    }
+
+    pub fn timeline_view_width(&self) -> f64 {
+        if !self.measured_workspace {
+            return 700.;
+        }
+        let pool = if self.layout.full_height_left && !self.layout.left_collapsed {
+            layout::clamp_pool_width(Some(self.pool_width), Some(self.window_width)) + 6.
+        } else {
+            0.
+        };
+        (self.window_width - pool - self.lane_header_width()).max(80.)
+    }
+
+    pub fn lane_header_width(&self) -> f64 {
+        if self.window_width < 700. {
+            142.
+        } else {
+            190.
+        }
+    }
+
+    pub fn upper_height(&self) -> f64 {
+        let default = self.window_height
+            * if self.section == Section::Artwork {
+                0.34
+            } else {
+                0.50
+            };
+        layout::clamp_viewer_height(
+            Some(self.viewer_height.unwrap_or(default)),
+            Some(self.window_height),
+        )
+        .unwrap_or(default)
     }
 
     /// Cover asset (for the C lane) when one exists.

@@ -622,8 +622,11 @@ pub fn handle(app: &Arc<App>, msg: Incoming) {
             };
             update(app, move |core| core.state.dispatch(drop));
         }
-        Incoming::Resize { w, instance, .. } if contribution_id(&instance) == "main" => {
-            update(app, move |core| core.state.set_window(w as f64))
+        Incoming::Resize { w, h, instance, .. } if contribution_id(&instance) == "main" => {
+            update(app, move |core| {
+                core.state.set_window(w as f64);
+                core.state.window_height = f64::from(h).max(1.);
+            })
         }
         Incoming::Focus { has: false } => update(app, |core| {
             for t in [&mut core.state.notice, &mut core.state.error]
