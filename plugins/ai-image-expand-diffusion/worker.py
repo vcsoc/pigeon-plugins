@@ -293,7 +293,9 @@ def expand(request):
                        'right': (a.transpose(1, 0, 2) if a.ndim == 3 else a.T)[::-1]}
     pix, kn = views(canvas), views(known)
     count = 0
-    for side, y0, cur, d, wh, a0, b0, x, tw in plan(wfull, sm):
+    tiles = list(plan(wfull, sm))
+    for side, y0, cur, d, wh, a0, b0, x, tw in tiles:
+        rt.progress(request, count / len(tiles), f'Tile {count + 1} of {len(tiles)} ({side} edge)')
         arr, kmask = pix[side], kn[side]
         tile = arr[y0:y0 + wh, x:x + tw]
         tile_known = kmask[y0:y0 + wh, x:x + tw]
@@ -332,4 +334,7 @@ def self_test(tmp):
 
 
 if __name__ == '__main__':
+    if '--plugin' in sys.argv[1:]:          # protocol v2: the UI process (ui.py) drives this file
+        import ui
+        sys.exit(ui.main())
     rt.main({'expand': expand}, self_test=self_test, device=describe_device)
