@@ -190,6 +190,8 @@ pub enum Pending {
     SubtitleOpen,
     SubtitleChoose,
     SubtitleSave,
+    UpdateCheck,
+    SettingsFolder,
     PosterSearch,
     PosterImage,
     ArtworkEdit,
@@ -717,6 +719,35 @@ impl State {
             Pending::PosterSearch | Pending::PosterImage | Pending::ArtworkEdit => {
                 self.poster_reply(&pending, &reply);
             }
+            Pending::UpdateCheck => {
+                self.busy = None;
+                match reply {
+                    Ok(v) => {
+                        let text = v
+                            .get("message")
+                            .and_then(Value::as_str)
+                            .map(str::to_string)
+                            .unwrap_or_else(|| v.to_string());
+                        self.set_notice(text);
+                    }
+                    Err(e) => self.set_error(e.clone()),
+                }
+            }
+            Pending::SettingsFolder => match reply {
+                Ok(v) if v.is_string() => {
+                    self.settings.default_folder = v.as_str().map(str::to_string);
+                    let folder = self.settings.default_folder.clone().unwrap_or_default();
+                    self.engine_request_with(
+                        Request::SettingsUpdate {
+                            key: "default_folder".into(),
+                            value: serde_json::json!(folder),
+                        },
+                        Pending::Silent,
+                    );
+                }
+                Ok(_) => {}
+                Err(e) => self.set_error(e.clone()),
+            },
             Pending::Silent => {}
             Pending::Other => {
                 self.busy = None;
@@ -1134,13 +1165,75 @@ impl State {
                     );
                 }
                 "check_deps" => self.check_dependencies(),
+                "ffmpeg" | "ffprobe" => self.ui(&format!("backend:{arg}"), value),
+                "image_format" => self.ui("image_format", value),
                 _ => {}
             },
             "about" => match arg.as_str() {
                 "open" => self.dialogs.about = true,
                 "close" => self.dialogs.about = false,
+                "check_updates" => {
+                    self.busy = Some("Checking GitHub releases".into());
+                    self.engine_request_with(Request::UpdateCheck, Pending::UpdateCheck);
+                }
                 _ => {}
             },
+            "backend" => {
+                let text = value.as_str().unwrap_or("").to_string();
+                match arg.as_str() {
+                    "ffmpeg" => {
+                        self.settings
+                            .backend
+                            .get_or_insert_with(Default::default)
+                            .ffmpeg = Some(text)
+                    }
+                    "ffprobe" => {
+                        self.settings
+                            .backend
+                            .get_or_insert_with(Default::default)
+                            .ffprobe = Some(text)
+                    }
+                    "save" => {
+                        let b = self.settings.backend.clone().unwrap_or_default();
+                        self.engine_request_with(
+                            Request::SettingsUpdate { key: "backend".into(), value: serde_json::json!({"ffmpeg": b.ffmpeg, "ffprobe": b.ffprobe}) },
+                            Pending::Silent,
+                        );
+                        self.set_notice("Backend paths saved. Restart Reelio to apply them.");
+                    }
+                    _ => {}
+                }
+            }
+            "folder" => match arg.as_str() {
+                "choose" => {
+                    self.engine_request_with(
+                        Request::SettingsChooseFolder,
+                        Pending::SettingsFolder,
+                    );
+                }
+                "reset" => {
+                    self.settings.default_folder = None;
+                    self.engine_request_with(
+                        Request::SettingsUpdate {
+                            key: "default_folder".into(),
+                            value: Value::Null,
+                        },
+                        Pending::Silent,
+                    );
+                }
+                _ => {}
+            },
+            "image_format" => {
+                let format = value.as_str().unwrap_or("png").to_string();
+                self.settings.image_format = Some(format.clone());
+                self.engine_request_with(
+                    Request::SettingsUpdate {
+                        key: "image_format".into(),
+                        value: serde_json::json!(format),
+                    },
+                    Pending::Silent,
+                );
+            }
             "quit" => match arg.as_str() {
                 "confirm" => {
                     self.dialogs.quit_confirm = false;

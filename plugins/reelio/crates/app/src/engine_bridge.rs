@@ -206,6 +206,8 @@ impl EngineBridge for Real {
                 .and_then(|(artwork, edits)| {
                     encode(e.artwork_edit(reelio_engine::ArtworkEditRequest { artwork, edits }))
                 }),
+            Request::UpdateCheck => encode(e.update_check()),
+            Request::UpdateDownload { offer_id } => encode(e.update_download(offer_id)),
             Request::SubtitleEditorDirty { dirty } => {
                 e.subtitle_editor_dirty(dirty);
                 Ok(Value::Null)

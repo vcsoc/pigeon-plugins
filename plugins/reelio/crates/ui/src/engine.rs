@@ -53,6 +53,12 @@ pub enum Request {
         artwork: Value,
         edits: Value,
     },
+    /// Former `update_check`: manual check against published GitHub releases.
+    UpdateCheck,
+    /// Former `update_download`: verified download of an offer (host save dialog).
+    UpdateDownload {
+        offer_id: String,
+    },
     /// Authorizes dropped files (engine `media_dropped`); returns the authorized canonical paths.
     MediaDropped {
         paths: Vec<String>,

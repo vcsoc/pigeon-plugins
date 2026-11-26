@@ -1659,6 +1659,27 @@ pub fn modals(s: &State) -> BTreeMap<String, Value> {
             ),
         );
     }
+    // Preferences: backend paths, default folder and image format (reference settings dialog).
+    if let Some(Value::Array(children)) = out
+        .get_mut("modal.settings")
+        .and_then(|m| m.get_mut("children"))
+    {
+        let b = s.settings.backend.clone().unwrap_or_default();
+        let formats: Vec<Value> = ["png", "jpeg", "webp"]
+            .iter()
+            .map(|f| json!({"value": f, "label": f.to_uppercase()}))
+            .collect();
+        children.extend([
+            input("settings:ffmpeg", b.ffmpeg.as_deref().unwrap_or(""), "FFmpeg executable (absolute path)", "change"),
+            input("settings:ffprobe", b.ffprobe.as_deref().unwrap_or(""), "FFprobe executable (absolute path)", "change"),
+            button("backend:save", "Save backend paths", None, "secondary", s.busy.is_none()),
+            row("settings.folder_actions", vec![
+                button("folder:choose", "Browse folder", None, "secondary", s.busy.is_none()),
+                button("folder:reset", "Reset to Videos", None, "ghost", s.busy.is_none()),
+            ], 6.0),
+            node("settings:image_format", "select", json!({"label": "Default image format", "value": s.settings.image_format.clone().unwrap_or_else(|| "png".into()), "options": formats})),
+        ]);
+    }
     if s.dialogs.about {
         out.insert(
             "modal.about".into(),
@@ -1673,6 +1694,13 @@ pub fn modals(s: &State) -> BTreeMap<String, Value> {
                     ),
                     text("about.credit", "Developed by Chris Visser", "body"),
                     text("about.link", "github.com/vcsoc/reelio", "caption"),
+                    button(
+                        "about:check_updates",
+                        "Check for updates",
+                        None,
+                        "secondary",
+                        s.busy.is_none(),
+                    ),
                     button("about:close", "Close", None, "primary", true),
                 ],
                 10.0,
