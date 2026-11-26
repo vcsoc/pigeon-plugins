@@ -1,0 +1,91 @@
+#!/bin/sh
+# Pigeon plugin launcher for the native Immich plugin (pigeon-immich, Rust). Self-contained: it needs only this
+# folder. Private state (binary, build tree, catalogue, cache, settings) lives in ./.data, or in
+# $PIGEON_PLUGIN_DATA. Uninstall with `run --uninstall` (the host calls it first), then delete the folder.
+#
+#   run --setup        install the plugin binary: a verified artifact from plugin.json for this platform, or a
+#                      build from the pinned source (Cargo.lock, --locked) with cargo when none matches
+#   run --plugin       protocol v2 session (the host starts this; JSON lines on stdin/stdout)
+#   run --uninstall    remove keychain entries (through the host) and this plugin's local data
+#   run --health       readiness as JSON
+#   run --self-test    local checks without a server
+#   run --version
+set -eu
+HERE=$(cd "$(dirname "$0")" && pwd -P)
+DATA=${PIGEON_PLUGIN_DATA:-$HERE/.data}
+BIN_DIR=$DATA/bin
+BIN=$BIN_DIR/pigeon-immich
+PATH="$PATH:$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+export PATH PIGEON_PLUGIN_DATA="$DATA"
+
+fail() { printf '{"version":1,"ok":false,"error":"%s"}\n' "$1"; exit 1; }
+
+target_triple() {
+  case "$(uname -s)-$(uname -m)" in
+    Darwin-arm64) echo aarch64-apple-darwin ;;
+    Darwin-x86_64) echo x86_64-apple-darwin ;;
+    Linux-x86_64) echo x86_64-unknown-linux-gnu ;;
+    Linux-aarch64) echo aarch64-unknown-linux-gnu ;;
+    *) echo unknown ;;
+  esac
+}
+
+# Downloads the artifact listed for this platform in plugin.json (if any), verifies its SHA-256 and installs it.
+# Prints "installed" or "none"; any mismatch is an error (the file is discarded).
+install_artifact() {
+  command -v python3 >/dev/null 2>&1 || { echo none; return 0; }
+  TRIPLE=$(target_triple)
+  LINE=$(python3 - "$HERE/plugin.json" "$TRIPLE" <<'PY'
+import json, sys
+manifest = json.load(open(sys.argv[1]))
+for artifact in manifest.get("artifacts", []):
+    if artifact.get("target") == sys.argv[2]:
+        print("%s %s %s" % (artifact["url"], artifact["sha256"], artifact.get("bytes", 0)))
+        break
+PY
+)
+  [ -n "$LINE" ] || { echo none; return 0; }
+  set -- $LINE
+  URL=$1; SHA=$2
+  mkdir -p "$BIN_DIR"
+  TMP=$BIN.download
+  command -v curl >/dev/null 2>&1 || fail "curl is required to download the plugin binary"
+  curl -fsSL --proto '=https' --tlsv1.2 -o "$TMP" "$URL" || fail "downloading the plugin binary failed"
+  GOT=$(shasum -a 256 "$TMP" 2>/dev/null | cut -d' ' -f1 || sha256sum "$TMP" | cut -d' ' -f1)
+  [ "$GOT" = "$SHA" ] || { rm -f "$TMP"; fail "the downloaded plugin binary does not match its SHA-256"; }
+  mv "$TMP" "$BIN"
+  chmod 755 "$BIN"
+  echo installed
+}
+
+build_from_source() {
+  command -v cargo >/dev/null 2>&1 || fail "cargo (Rust) is required to build the Immich plugin from source"
+  cargo build --release --locked --manifest-path "$HERE/Cargo.toml" --target-dir "$DATA/target" >&2 \
+    || fail "building the Immich plugin with cargo failed"
+  mkdir -p "$BIN_DIR"
+  cp "$DATA/target/release/pigeon-immich" "$BIN"
+  chmod 755 "$BIN"
+}
+
+case "${1:-}" in
+  --setup)
+    mkdir -p "$DATA"
+    if [ "$(install_artifact)" = none ]; then build_from_source; fi
+    printf '{"version":1,"ok":true,"ready":true,"binary":"%s"}\n' "$BIN"
+    exit 0
+    ;;
+  --health)
+    if [ ! -x "$BIN" ]; then
+      printf '{"version":1,"ok":false,"ready":false,"error":"not set up: run the plugin with --setup"}\n'
+      exit 1
+    fi
+    exec "$BIN" --health
+    ;;
+  --plugin|--uninstall|--self-test|--version)
+    [ -x "$BIN" ] || fail "plugin is not set up: run it once with --setup"
+    exec "$BIN" "$1"
+    ;;
+  *)
+    fail "usage: run --setup | --plugin | --uninstall | --self-test | --health | --version"
+    ;;
+esac
