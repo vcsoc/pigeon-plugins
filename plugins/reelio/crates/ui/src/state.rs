@@ -190,6 +190,9 @@ pub enum Pending {
     SubtitleOpen,
     SubtitleChoose,
     SubtitleSave,
+    PosterSearch,
+    PosterImage,
+    ArtworkEdit,
     /// Fire-and-forget request (its reply is ignored).
     Silent,
     OpenProject,
@@ -230,6 +233,8 @@ pub struct State {
     pub menu: Option<crate::menus::Menu>,
     /// Subtitle Studio document and history (see `studio`).
     pub studio: Option<crate::studio::Studio>,
+    /// Poster & cover studio (see `poster`).
+    pub poster: Option<crate::poster::PosterState>,
     /// Live feedback for the gesture in progress; never part of the undo history.
     pub drafts: crate::timeline_input::Drafts,
     pub project_rev: u64,
@@ -284,6 +289,7 @@ impl State {
             gesture: None,
             menu: None,
             studio: None,
+            poster: None,
             drafts: Default::default(),
             project_rev: 0,
             section: Section::Timeline,
@@ -398,7 +404,7 @@ impl State {
         self.toast(text, true);
     }
 
-    fn set_notice(&mut self, text: impl Into<String>) {
+    pub(crate) fn set_notice(&mut self, text: impl Into<String>) {
         self.toast(text, false);
     }
 
@@ -708,6 +714,9 @@ impl State {
             Pending::SubtitleOpen | Pending::SubtitleChoose | Pending::SubtitleSave => {
                 self.studio_reply(&pending, &reply);
             }
+            Pending::PosterSearch | Pending::PosterImage | Pending::ArtworkEdit => {
+                self.poster_reply(&pending, &reply);
+            }
             Pending::Silent => {}
             Pending::Other => {
                 self.busy = None;
@@ -1012,6 +1021,7 @@ impl State {
                 }
             }
             "sub" => self.studio_action(&arg, value),
+            "art" => self.poster_action(&arg, value),
             "undo" => self.undo(),
             "redo" => self.redo(),
             "project" => match arg.as_str() {

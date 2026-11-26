@@ -15,6 +15,7 @@ pub mod layout;
 pub mod menus;
 pub mod model;
 pub mod playback;
+pub mod poster;
 pub mod posters;
 pub mod scene;
 pub mod state;

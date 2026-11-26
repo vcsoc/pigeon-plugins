@@ -658,54 +658,172 @@ fn timeline(s: &State) -> Value {
 }
 
 fn artwork_studio(s: &State) -> Value {
-    let p = s.project();
-    let cover = match &p.artwork {
-        Some(_) => node("art.preview", "image", json!({"resource": "cover:project", "fit": "contain", "height": {"px": 260}})),
-        None => text("art.empty", "No cover applied. Find artwork or drop a JPEG, PNG, WebP or AVIF image on the inspector.", "body"),
-    };
-    let presets: Vec<Value> = crate::crop::CROP_PRESETS
+    let empty = crate::poster::PosterState::default();
+    let p = s.poster.as_ref().unwrap_or(&empty);
+    let page: &[Value] = p.pages.get(p.page).map(|v| v.as_slice()).unwrap_or(&[]);
+    let rows: Vec<Value> = page
         .iter()
         .enumerate()
-        .map(|(i, (name, _, _))| button(&format!("art.preset:{i}"), name, None, "ghost", true))
-        .collect();
-    column(
-        "artwork",
-        vec![
+        .map(|(i, r)| {
+            let title = r.get("title").and_then(Value::as_str).unwrap_or("Untitled");
+            let host = r.get("source_host").and_then(Value::as_str).unwrap_or("");
+            let w = r.get("width").and_then(Value::as_u64).unwrap_or(0);
+            let h = r.get("height").and_then(Value::as_u64).unwrap_or(0);
             row(
-                "art.search",
+                &format!("art:row:{i}"),
                 vec![
-                    input("art.query", "", "Movie title and year", "submit"),
+                    column(
+                        &format!("art:info:{i}"),
+                        vec![
+                            text(&format!("art:title:{i}"), title, "body"),
+                            text(
+                                &format!("art:meta:{i}"),
+                                &format!("{host} · {w} × {h}"),
+                                "caption",
+                            ),
+                        ],
+                        2.0,
+                    ),
                     button(
-                        "art.search_go",
-                        "Search posters",
-                        Some("search"),
+                        &format!("art:use:{i}"),
+                        "Use this cover",
+                        None,
                         "primary",
                         s.busy.is_none(),
                     ),
-                    node(
-                        "art.orient.landscape",
-                        "icon_button",
-                        json!({"icon": "landscape", "tooltip": "Landscape", "on": ["click"]}),
-                    ),
-                    node(
-                        "art.orient.portrait",
-                        "icon_button",
-                        json!({"icon": "portrait", "tooltip": "Portrait", "on": ["click"]}),
-                    ),
                 ],
                 6.0,
+            )
+        })
+        .collect();
+    let orient = |id: &str, label: &str, dir: &str| {
+        let mut b = icon_button(&format!("art:orient:{dir}"), id, label, true);
+        b["toggled"] = json!(
+            p.proportion.orientation()
+                == Some(if dir == "landscape" {
+                    crate::posters::Orientation::Landscape
+                } else {
+                    crate::posters::Orientation::Portrait
+                })
+        );
+        b
+    };
+    let ratio_options: Vec<Value> = crate::posters::Proportion::ALL
+        .iter()
+        .map(|r| json!({"value": crate::poster::proportion_key(*r), "label": r.label()}))
+        .collect();
+    let search = row(
+        "art.search",
+        vec![
+            input("art:query", &p.query, "Movie title and year", "submit"),
+            button(
+                "art:search",
+                "Search posters",
+                Some("search"),
+                "primary",
+                s.busy.is_none(),
             ),
-            row(
-                "art.body",
-                vec![cover, column("art.controls", presets, 4.0)],
-                12.0,
+            orient("sparkle", "Landscape", "landscape"),
+            orient("sparkle", "Portrait", "portrait"),
+            node(
+                "art:ratio",
+                "select",
+                json!({"label": "Image proportions", "value": crate::poster::proportion_key(p.proportion), "options": ratio_options}),
+            ),
+            node(
+                "art:size",
+                "select",
+                json!({"label": "Results per page", "value": p.page_size, "options": [12, 24, 48]}),
+            ),
+        ],
+        6.0,
+    );
+    let pager = row(
+        "art.pager",
+        vec![
+            button("art:prev", "Previous", None, "ghost", p.page > 0),
+            text(
+                "art.page",
+                &format!("Page {} of {}", p.page + 1, p.pages.len().max(1)),
+                "caption",
             ),
             button(
-                "art.apply",
+                "art:next",
+                "Next",
+                None,
+                "ghost",
+                p.page + 1 < p.pages.len() || (p.has_more && p.pages.len() < 40),
+            ),
+        ],
+        8.0,
+    );
+    let cover = match &s.project().artwork {
+        Some(_) => node("art.preview", "image", json!({"resource": "cover:project", "fit": "contain", "height": {"px": 260}})),
+        None => text("art.empty", "No cover applied. Search posters, import an image, or drop a JPEG, PNG, WebP or AVIF image on the inspector.", "body"),
+    };
+    let edit_tools = row(
+        "art.edit",
+        vec![
+            button(
+                "art:rotate:left",
+                "Rotate left",
+                Some("rotate-ccw"),
+                "ghost",
+                s.project().artwork.is_some(),
+            ),
+            button(
+                "art:rotate:right",
+                "Rotate right",
+                Some("rotate-cw"),
+                "ghost",
+                s.project().artwork.is_some(),
+            ),
+            button(
+                "art:flip",
+                "Flip horizontal",
+                Some("flip-horizontal"),
+                "ghost",
+                s.project().artwork.is_some(),
+            ),
+            button(
+                "cover:remove",
+                "Remove cover",
+                None,
+                "danger",
+                s.project().artwork.is_some(),
+            ),
+        ],
+        6.0,
+    );
+    let notice = p.error.clone().or(p.notice.clone()).unwrap_or_default();
+    column(
+        "artwork",
+        vec![
+            search,
+            text("art.notice", &notice, "caption"),
+            row(
+                "art.body",
+                vec![
+                    column(
+                        "art.results",
+                        vec![node(
+                            "art.list",
+                            "scroll",
+                            json!({"axis": "vertical", "children": [column("art.rows", rows, 6.0)]}),
+                        )],
+                        6.0,
+                    ),
+                    column("art.current", vec![cover, edit_tools], 8.0),
+                ],
+                12.0,
+            ),
+            pager,
+            button(
+                "art:apply",
                 "Apply cover to project",
                 Some("check"),
                 "primary",
-                s.busy.is_none(),
+                s.project().artwork.is_some(),
             ),
         ],
         8.0,

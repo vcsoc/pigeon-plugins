@@ -177,6 +177,35 @@ impl EngineBridge for Real {
             }
             Request::SubtitleEditorSave { document } => decode::<reelio_engine::Document>(document)
                 .and_then(|d| encode(e.subtitle_editor_save(d))),
+            Request::PosterSearch {
+                query,
+                proportion,
+                offset,
+            } => {
+                decode::<reelio_engine::PosterProportion>(Value::String(proportion)).and_then(|p| {
+                    encode(e.poster_search(reelio_engine::PosterSearchRequest {
+                        query,
+                        proportion: p,
+                        offset,
+                    }))
+                })
+            }
+            Request::PosterImage { url, proportion } => {
+                let proportion = match proportion {
+                    Some(p) => {
+                        decode::<reelio_engine::PosterProportion>(Value::String(p)).map(Some)
+                    }
+                    None => Ok(None),
+                };
+                proportion.and_then(|proportion| {
+                    encode(e.poster_image(reelio_engine::PosterImageRequest { url, proportion }))
+                })
+            }
+            Request::ArtworkEdit { artwork, edits } => decode::<reelio_engine::Artwork>(artwork)
+                .and_then(|a| decode::<reelio_engine::ImageEdits>(edits).map(|edits| (a, edits)))
+                .and_then(|(artwork, edits)| {
+                    encode(e.artwork_edit(reelio_engine::ArtworkEditRequest { artwork, edits }))
+                }),
             Request::SubtitleEditorDirty { dirty } => {
                 e.subtitle_editor_dirty(dirty);
                 Ok(Value::Null)

@@ -37,6 +37,22 @@ pub enum Request {
     },
     /// Former `choose_subtitles`: host open dialog for standalone subtitle files.
     ChooseSubtitles,
+    /// Former `poster_search`: one provider batch at `offset` for the proportion filter.
+    PosterSearch {
+        query: String,
+        proportion: String,
+        offset: u32,
+    },
+    /// Former `poster_image`: download, validate and normalize one result into a cover.
+    PosterImage {
+        url: String,
+        proportion: Option<String>,
+    },
+    /// Former `artwork_edit`: crop/rotate/flip/tonal edits, returning a new cover JPEG.
+    ArtworkEdit {
+        artwork: Value,
+        edits: Value,
+    },
     /// Authorizes dropped files (engine `media_dropped`); returns the authorized canonical paths.
     MediaDropped {
         paths: Vec<String>,
