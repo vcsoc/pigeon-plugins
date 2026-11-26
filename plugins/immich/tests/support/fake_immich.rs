@@ -37,17 +37,21 @@ pub struct Response {
     pub status: u16,
     pub body: Vec<u8>,
     pub content_type: &'static str,
+    location: Option<&'static str>,
 }
 
 impl Response {
     pub fn json(value: Value) -> Response {
-        Response { status: 200, body: value.to_string().into_bytes(), content_type: "application/json" }
+        Response { status: 200, body: value.to_string().into_bytes(), content_type: "application/json", location: None }
     }
     pub fn status(status: u16) -> Response {
-        Response { status, body: b"{}".to_vec(), content_type: "application/json" }
+        Response { status, body: b"{}".to_vec(), content_type: "application/json", location: None }
     }
     pub fn bytes(body: Vec<u8>, content_type: &'static str) -> Response {
-        Response { status: 200, body, content_type }
+        Response { status: 200, body, content_type, location: None }
+    }
+    pub fn redirect(location: &'static str) -> Response {
+        Response { location: Some(location), ..Response::status(302) }
     }
 }
 
@@ -132,13 +136,17 @@ fn serve(stream: TcpStream, handler: Handler, record: Arc<Mutex<Vec<Recorded>>>)
     }
     let response = handler(&request);
     let mut stream = reader.into_inner();
-    let head = format!(
-        "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+    let mut head = format!(
+        "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n",
         response.status,
         if response.status == 200 { "OK" } else { "ERR" },
         response.content_type,
         response.body.len()
     );
+    if let Some(location) = response.location {
+        head.push_str(&format!("Location: {location}\r\n"));
+    }
+    head.push_str("\r\n");
     let _ = stream.write_all(head.as_bytes());
     let _ = stream.write_all(&response.body);
 }

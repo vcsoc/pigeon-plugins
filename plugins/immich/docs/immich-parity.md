@@ -11,7 +11,7 @@ Status legend:
 - **not live**: needs a real Immich server; the fake server in `tests/support/fake_immich.rs` stands in.
 - **intentional**: a deliberate difference, listed so it can be audited.
 
-Test evidence: `cargo test` in `plugins/immich` (35 unit, 31 integration) and `pigeon-mock run .`
+Test evidence: `cargo test` in `plugins/immich` (35 unit, 34 integration, including a targeted re-run of the 401 test) and `pigeon-mock run .`
 (official WP2 mock host: 0 schema violations, preferences scene validated).
 
 ## A. Accounts and connection
@@ -23,10 +23,10 @@ Test evidence: `cargo test` in `plugins/immich` (35 unit, 31 integration) and `p
 | A3 | Session-only login: password kept in memory, not persisted, no auto-reconnect at startup | in-memory only; `start()` reconnects only when a secret id exists | verified (nothing written) ; no-reconnect path implemented |
 | A4 | Unticking "remember" disables the previous remembered connection without deleting its keyring entry (so a restart does not reconnect with an older password) | `configure()` saves previous config with `enabled:false`, keeps `secret_history` | implemented (not tested) |
 | A5 | Login rejected message (HTTP 401) with guidance; no password in errors | same text; error bodies are never shown (status only) | verified (`wrong_password_*`) |
-| A6 | HTTP 401 during use: re-login with remembered password, once; session-only refuses with the same explanation | `with_auth` / `reauthenticate` | implemented (not tested) |
+| A6 | HTTP 401 during use: re-login with remembered password, once; session-only refuses with the same explanation | `with_auth` / `reauthenticate` | verified (`expired_sessions_retry_once_only_when_credentials_are_remembered`) |
 | A7 | Account identity = sha256(normalised URL, lower-cased email), so identities survive migration | `api::account_key`, `config::secret_key` | unit (`account_identity_is_case_insensitive_on_email`) |
 | A8 | Server URL: http/https only, no credentials, query or fragment; trailing `/api` removed | `api::normalize_server_url` | unit (`urls_are_normalised_and_unsafe_forms_rejected`) |
-| A9 | Redirects rejected (credentials never forwarded); 10 s timeouts; 20 MiB response cap | reqwest `Policy::none()`, same timeouts and cap | implemented; the built-in redirect/size tests are **not yet ported** |
+| A9 | Redirects rejected (credentials never forwarded); 10 s timeouts; 20 MiB response cap | reqwest `Policy::none()`, same timeouts and cap | verified for redirect rejection and advertised length (`authenticated_requests_reject_redirects`, `responses_over_the_size_limit_are_rejected`); timeouts not separately tested |
 | A10 | Keychain identifiers never reach the UI | `config::public` has no lookup id | unit (`settings_file_never_holds_a_password...`) |
 | A11 | No personal `.immich` configuration is read or copied | no such code path | verified by inspection |
 

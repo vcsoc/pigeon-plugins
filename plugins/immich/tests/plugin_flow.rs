@@ -6,9 +6,10 @@
 
 mod support;
 
+use pigeon_immich::api::{ImmichClient, MAX_BYTES};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
-use std::sync::{atomic::Ordering, mpsc, Arc};
+use std::sync::{atomic::{AtomicUsize, Ordering}, mpsc, Arc};
 use std::time::{Duration, Instant};
 use support::fake_immich::*;
 use support::mock_host::*;
@@ -25,11 +26,15 @@ struct Env {
 }
 
 fn env() -> Env {
+    env_with_handler(|handler| handler)
+}
+
+fn env_with_handler(wrap: impl FnOnce(Handler) -> Handler) -> Env {
     let dir = tempfile::tempdir().expect("tempdir");
     let data = dir.path().join("data");
     let session = dir.path().join("session");
     let fixture = new_fixture();
-    let server = FakeImmich::start(standard_handler(fixture.clone()));
+    let server = FakeImmich::start(wrap(standard_handler(fixture.clone())));
     Env { _dir: dir, data, session, server, fixture }
 }
 
@@ -144,6 +149,68 @@ fn wrong_password_is_reported_and_nothing_is_saved() {
     assert!(host.until(Duration::from_secs(20), |h| settings_text(h).contains("rejected (HTTP 401)")));
     assert!(host.secrets.lock().unwrap().is_empty());
     assert!(!env.data.join("immich.json").exists());
+}
+
+#[test]
+fn authenticated_requests_reject_redirects() {
+    let server = FakeImmich::start(Arc::new(|r| match r.path.as_str() {
+        "/api/auth/login" => Response::json(json!({"accessToken":"fixture-token"})),
+        "/api/tags" => Response::redirect("/redirect-target"),
+        _ => Response::json(json!([])),
+    }));
+    let client = ImmichClient::login(&server.url, "fixture@example.test", PASSWORD).unwrap();
+    assert!(client.list_tags().unwrap_err().contains("HTTP 302"));
+    let requests = server.recorded();
+    assert_eq!(requests.len(), 2, "the redirect destination was contacted");
+    assert_eq!(requests[1].path, "/api/tags");
+}
+
+#[test]
+fn responses_over_the_size_limit_are_rejected() {
+    let server = FakeImmich::start(Arc::new(|r| match r.path.as_str() {
+        "/api/auth/login" => Response::json(json!({"accessToken":"fixture-token"})),
+        _ => Response::bytes(vec![0; MAX_BYTES as usize + 1], "image/jpeg"),
+    }));
+    let client = ImmichClient::login(&server.url, "fixture@example.test", PASSWORD).unwrap();
+    assert!(client.thumbnail(ASSET).unwrap_err().contains("exceeds the size limit"));
+}
+
+#[test]
+fn expired_sessions_retry_once_only_when_credentials_are_remembered() {
+    for remember in [true, false] {
+        let env = env_with_handler(|standard| {
+            let logins = AtomicUsize::new(0);
+            Arc::new(move |r| {
+                if r.path == "/api/auth/login" && r.json()["password"] == PASSWORD {
+                    let login = logins.fetch_add(1, Ordering::SeqCst);
+                    return Response::json(json!({"accessToken": format!("fixture-{login}")}));
+                }
+                if r.path.contains("/thumbnail") && r.headers.get("authorization").is_some_and(|a| a == "Bearer fixture-0") {
+                    return Response::status(401);
+                }
+                standard(r)
+            })
+        });
+        let mut host = host(&env);
+        connect(&mut host, &env.server.url, remember);
+        let response = host.request("source.thumbnail", json!({"source":"immich","id":ASSET}));
+        if remember {
+            assert!(response["result"]["file"].is_string(), "{response}");
+        } else {
+            assert!(response["result"]["error"].as_str().is_some_and(|e| e.contains("session-only")), "{response}");
+        }
+        let requests = env.server.recorded();
+        let logins = requests.iter().filter(|r| r.path == "/api/auth/login").count();
+        let previews: Vec<_> = requests.iter().filter(|r| r.path.contains("/thumbnail"))
+            .map(|r| r.headers["authorization"].as_str()).collect();
+        if remember {
+            assert_eq!(logins, 2);
+            assert_eq!(previews, ["Bearer fixture-0", "Bearer fixture-1"]);
+        } else {
+            assert_eq!(logins, 1);
+            assert_eq!(previews, ["Bearer fixture-0"]);
+        }
+    }
 }
 
 #[test]
