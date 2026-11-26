@@ -143,6 +143,7 @@ pub struct Toast {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Pending {
     ChooseMedia,
+    Dropped,
     Probe { path: String },
     Save,
     Validate { revision: u64 },
@@ -427,7 +428,10 @@ impl State {
             Event::Tick { now } => self.tick(now),
             Event::Engine { id, reply } => self.engine_reply(id, reply),
             Event::Command { id } => self.command(&id),
-            Event::Drop { paths } => self.import_paths(paths),
+            Event::Drop { paths } => {
+                // The engine authorizes dropped files before any probe; imports follow the reply.
+                self.request(Request::MediaDropped { paths }, Pending::Dropped);
+            }
             Event::Quit => self.quit(),
             Event::Ui { node, value } => self.ui(&node, value),
         }
@@ -540,6 +544,11 @@ impl State {
                     Err(e) => self.set_error(e),
                 }
             }
+            Pending::Dropped => match reply.and_then(engine::decode::<Vec<String>>) {
+                Ok(paths) if !paths.is_empty() => self.import_paths(paths),
+                Ok(_) => {}
+                Err(e) => self.set_error(e),
+            },
             Pending::Probe { path } => {
                 let result = reply.and_then(engine::decode::<Asset>);
                 self.finish_probe(path, result);

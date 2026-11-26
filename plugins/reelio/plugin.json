@@ -69,6 +69,6 @@
       "radius": 4,
       "spacing": 4
     },
-    "permissions": ["selection", "library.read", "library.write", "dialogs", "shell", "windows", "notifications"]
+    "permissions": ["selection", "library.read", "library.write", "dialogs", "shell", "windows"]
   }
 }

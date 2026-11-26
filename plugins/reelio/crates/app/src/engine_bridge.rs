@@ -1,37 +1,266 @@
-//! Engine bridge. Maps each UI [`Request`] onto the Reelio engine. The real engine is WP4's
-//! `reelio-engine` crate; until it is published on `arch/reelio-engine` this build ships
-//! [`UnconnectedEngine`], which answers every command with an explicit, user-visible error so the
-//! UI degrades honestly (no silent success). Tests use their own fake implementing [`EngineBridge`].
+//! Engine bridge: maps every UI [`Request`] onto a `reelio_engine::Engine` method.
+//!
+//! The engine is blocking; the transport runs each request on its own worker thread, so the
+//! plugin's protocol loop never waits on media work. Native dialogs and URL opening belong to the
+//! Pigeon host (`dialogs.*`, `shell.*` services); until those services are wired through the SDK
+//! the [`PluginHost`] refuses them with an explicit message instead of guessing.
 
-use reelio_ui::engine::{Reply, Request, RuntimeDependencies};
-use serde_json::{json, Value};
+use reelio_engine::{
+    ConfirmDialog, Engine, EngineHost, ExportStartRequest, FileDialog, Project, ReelioEngine,
+    SettingsUpdateRequest, SubtitlePreviewRequest, WindowAction,
+};
+use reelio_ui::engine::{Reply, Request};
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+use serde_json::Value;
+use std::path::PathBuf;
+use std::sync::Arc;
 
-/// The engine seam. Implementations must be thread-safe: the host runs each request on a worker.
+/// The engine seam used by the transport. Implementations must be thread-safe.
 pub trait EngineBridge: Send + Sync + 'static {
     fn call(&self, request: Request) -> Reply;
 }
 
-/// Stand-in used until `reelio-engine` is linked in.
-pub struct UnconnectedEngine;
+/// Host services the engine needs. Dialogs are refused until the Pigeon host serves them.
+pub struct PluginHost {
+    data_dir: PathBuf,
+    videos_dir: Option<PathBuf>,
+}
 
-const NOT_CONNECTED: &str = "The Reelio engine is not connected in this plugin build. Install a Reelio engine build to edit media.";
-
-impl EngineBridge for UnconnectedEngine {
-    fn call(&self, request: Request) -> Reply {
-        match request {
-            Request::SettingsGet => Ok(json!({"theme": "dark", "recents": []})),
-            Request::BackendStatus => Err(NOT_CONNECTED.into()),
-            Request::DependenciesStatus => Ok(serde_json::to_value(RuntimeDependencies {
-                preview_available: false,
-                network_available: false,
-                backend_available: false,
-                missing_components: vec!["Reelio engine".into()],
-                repair_supported: false,
-                repair_hint: NOT_CONNECTED.into(),
-                packages: vec![],
-            })
-            .unwrap_or(Value::Null)),
-            _ => Err(NOT_CONNECTED.into()),
+impl PluginHost {
+    /// Test host: engine data under `data_dir`, no Movies folder.
+    #[cfg(test)]
+    pub fn new_for_tests(data_dir: PathBuf) -> Self {
+        Self {
+            data_dir,
+            videos_dir: None,
         }
+    }
+
+    pub fn from_env() -> Self {
+        let data_dir = std::env::var_os("PIGEON_PLUGIN_DATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(".data"));
+        Self {
+            data_dir,
+            videos_dir: std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Movies")),
+        }
+    }
+}
+
+impl EngineHost for PluginHost {
+    fn data_dir(&self) -> PathBuf {
+        self.data_dir.clone()
+    }
+    fn videos_dir(&self) -> Option<PathBuf> {
+        self.videos_dir.clone()
+    }
+    fn pick_files(&self, _request: &FileDialog) -> Option<Vec<PathBuf>> {
+        None
+    }
+    fn pick_folder(&self, _request: &FileDialog) -> Option<PathBuf> {
+        None
+    }
+    fn save_file(&self, _request: &FileDialog) -> Option<PathBuf> {
+        None
+    }
+    /// Destructive or approval prompts default to "no" until the host confirmation service exists.
+    fn confirm(&self, _request: &ConfirmDialog) -> bool {
+        false
+    }
+    fn open_url(&self, _url: &str) -> Result<(), String> {
+        Err("Opening links needs the Pigeon shell service, which this plugin build does not have yet.".into())
+    }
+    fn open_search_browser(&self, _url: &str) -> Result<(), String> {
+        Err("The isolated search browser needs the Pigeon host window service.".into())
+    }
+    fn window_control(&self, _action: WindowAction) -> Result<bool, String> {
+        Ok(false)
+    }
+    fn set_interface_zoom(&self, _factor: f64) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+/// The real engine (`reelio-engine`).
+pub struct Real {
+    engine: ReelioEngine,
+}
+
+impl Real {
+    pub fn start(host: PluginHost) -> Result<Self, String> {
+        let (engine, _events) = ReelioEngine::new(Arc::new(host))?;
+        // Engine events (job progress) are polled through `jobs_list`; the receiver is dropped here.
+        Ok(Self { engine })
+    }
+}
+
+fn decode<T: DeserializeOwned>(value: Value) -> Result<T, String> {
+    serde_json::from_value(value).map_err(|e| format!("Invalid project data: {e}"))
+}
+
+fn encode<T: Serialize>(result: Result<T, String>) -> Reply {
+    result.and_then(|v| serde_json::to_value(v).map_err(|e| e.to_string()))
+}
+
+impl EngineBridge for Real {
+    fn call(&self, request: Request) -> Reply {
+        let e = &self.engine;
+        match request {
+            Request::BackendStatus => encode(e.backend_status()),
+            Request::DependenciesStatus => encode(e.dependencies_status()),
+            Request::DependenciesRepair => encode(e.dependencies_repair()),
+            Request::SettingsGet => encode(e.settings_get()),
+            Request::SettingsUpdate { key, value } => encode(
+                e.settings_update(SettingsUpdateRequest { key, value })
+                    .map(|()| Value::Null),
+            ),
+            Request::SettingsChooseFolder => encode(e.settings_choose_folder()),
+            Request::ChooseMedia { folder } => encode(e.choose_media(folder)),
+            Request::MediaDropped { paths } => {
+                let paths = paths.into_iter().map(PathBuf::from).collect();
+                let point = reelio_engine::Point { x: 0.0, y: 0.0 };
+                encode(Ok(e.media_dropped(paths, point, None)))
+            }
+            Request::MediaProbe { path } => encode(e.media_probe(PathBuf::from(path))),
+            Request::ProjectValidate { project } => {
+                decode::<Project>(project).and_then(|p| encode(Ok(e.project_validate(p))))
+            }
+            Request::ProjectOpen => encode(e.project_open()),
+            Request::ProjectSave { project } => {
+                decode::<Project>(project).and_then(|p| encode(e.project_save(p)))
+            }
+            Request::ExportPlan { project } => {
+                decode::<Project>(project).and_then(|p| encode(e.export_plan(p)))
+            }
+            Request::ExportStart {
+                project,
+                approve_conversion,
+            } => decode::<Project>(project).and_then(|p| {
+                encode(e.export_start(ExportStartRequest {
+                    project: p,
+                    approve_conversion,
+                }))
+            }),
+            Request::ExportCancel { id } => encode(e.export_cancel(id).map(|()| Value::Null)),
+            Request::JobsList => encode(e.jobs_list()),
+            Request::JobProject { id } => encode(e.job_project(id)),
+            Request::ArtworkImport { path } => encode(e.artwork_import(PathBuf::from(path))),
+            Request::SubtitlePreview { project, track_id } => {
+                decode::<Project>(project).and_then(|p| {
+                    encode(e.subtitle_preview(SubtitlePreviewRequest {
+                        project: p,
+                        track_id,
+                    }))
+                })
+            }
+            Request::PreviewSource { path } => encode(e.preview_source(PathBuf::from(path))),
+            Request::ResourceDownload { id } => encode(e.resource_download(id)),
+            Request::ResourceCancel { id } => encode(e.resource_cancel(id).map(|()| Value::Null)),
+            Request::WindowAction { action } => decode::<WindowAction>(Value::String(action))
+                .and_then(|a| encode(e.window_action(a))),
+        }
+    }
+}
+
+/// Used when the engine cannot start (for example an unwritable data folder): every command
+/// reports the start-up error, so the UI shows it instead of pretending the engine works.
+pub struct Unavailable(pub String);
+
+impl EngineBridge for Unavailable {
+    fn call(&self, _request: Request) -> Reply {
+        Err(self.0.clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use reelio_ui::scene;
+    use reelio_ui::state::{Effect, Event, State};
+    use std::process::Command;
+
+    /// Synchronous mock host: applies each engine effect with the real engine, feeds replies back.
+    fn pump(state: &mut State, bridge: &dyn EngineBridge) {
+        loop {
+            let effects = state.drain();
+            if effects.is_empty() {
+                break;
+            }
+            for effect in effects {
+                if let Effect::Engine { id, request } = effect {
+                    let reply = bridge.call(request);
+                    state.dispatch(Event::Engine { id, reply });
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn dropped_media_is_probed_by_the_real_engine_and_becomes_a_lane() {
+        let Ok(ffmpeg) = Command::new("ffmpeg").arg("-version").output() else {
+            eprintln!("ffmpeg not installed; skipping generated-media flow");
+            return;
+        };
+        if !ffmpeg.status.success() {
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("reelio-e2e-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let media = dir.join("clip.mp4");
+        let status = Command::new("ffmpeg")
+            .args([
+                "-y",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc=duration=2:size=320x240:rate=25",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=440:duration=2",
+                "-shortest",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                "-c:a",
+                "aac",
+            ])
+            .arg(&media)
+            .status()
+            .unwrap();
+        assert!(status.success(), "ffmpeg generated the fixture");
+
+        let data = dir.join("data");
+        let bridge = match Real::start(PluginHost::new_for_tests(data.clone())) {
+            Ok(b) => b,
+            Err(e) => panic!("engine start: {e}"),
+        };
+        let mut state = State::new();
+        pump(&mut state, &bridge);
+        state.drain();
+        state.dispatch(Event::Drop {
+            paths: vec![media.to_string_lossy().into_owned()],
+        });
+        pump(&mut state, &bridge);
+
+        assert_eq!(
+            state.project().assets.len(),
+            1,
+            "probe result added as a source"
+        );
+        assert!(
+            state.project().tracks.iter().any(|t| t.enabled),
+            "video and audio lanes enabled"
+        );
+        let scene = scene::main_view(&state).to_string();
+        assert!(
+            scene.contains("lane.canvas:"),
+            "timeline lane rendered from real probe data"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

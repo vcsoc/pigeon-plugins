@@ -52,7 +52,7 @@ pub fn text(
 ) -> Value {
     let mut v = json!({
         "op": "text", "x": x, "y": y, "text": s, "size": size, "color": color,
-        "weight": "normal", "align": "left", "baseline": "top",
+        "weight": 400, "align": "left", "baseline": "top",
         "font": if mono { "mono" } else { "ui" }
     });
     if let Some(w) = max_w {

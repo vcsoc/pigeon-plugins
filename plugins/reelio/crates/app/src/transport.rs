@@ -1,45 +1,46 @@
-//! Protocol v2 transport: JSON Lines on stdin/stdout, a single UI-owning loop, and a canvas fast
-//! path. This is the thin adapter that stands in for `pigeon-plugin-sdk` until WP2 publishes it;
-//! all protocol knowledge that is Reelio-specific lives in `reelio-ui`.
+//! Plugin runtime on the Pigeon SDK (`pigeon-plugin-sdk`, vendored under `vendor/`).
 //!
-//! Threads: one stdin reader, one ticker (100 ms), one worker per engine request. The loop owns
-//! the state, so events are applied in arrival order and nothing blocks on the engine.
+//! The SDK's protocol threads answer `ping`, write scenes and deliver typed events. This module
+//! owns the Reelio state and turns SDK events into reducer events. Engine calls run on SDK worker
+//! threads (`Ctx::spawn`), so the handler never waits on media work. State lives behind one mutex;
+//! engine replies, the 100 ms tick and host events all update it through [`update`].
 
 use crate::engine_bridge::EngineBridge;
-use reelio_ui::engine::Reply;
+use pigeon_plugin_sdk::canvas::DrawOp;
+use pigeon_plugin_sdk::protocol::{Incoming, NodeEvent, PointerPhase};
+use pigeon_plugin_sdk::runtime::{Ctx, PluginSpec};
+use pigeon_plugin_sdk::{Contribution, DrawList, Node};
 use reelio_ui::scene;
 use reelio_ui::state::{Effect, Event, State};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
-use std::io::{self, BufRead, Write};
-use std::sync::{mpsc, Arc};
-use std::thread;
-use std::time::Duration;
+use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::{Duration, Instant};
 
-/// The embedded manifest is the single source of truth for `ready.contributions`.
+/// The embedded manifest is the single source of truth for the static contributions.
 pub const MANIFEST: &str = include_str!("../../../plugin.json");
 
-pub enum Inbound {
-    Host(Value),
-    Engine { id: u64, reply: Reply },
-    Tick,
-    Eof,
-}
-
-/// Build the `ready` message from the embedded manifest.
-pub fn ready_message() -> Value {
-    let manifest: Value = serde_json::from_str(MANIFEST).unwrap_or(Value::Null);
-    json!({
-        "v": 2,
-        "t": "ready",
-        "plugin": {"id": "reelio", "version": manifest["version"]},
-        "protocol": 2,
-        "contributions": manifest["ui"]["contributions"],
-    })
+/// Plugin spec (id, version and static contributions from `plugin.json`).
+pub fn spec() -> Result<PluginSpec, String> {
+    let manifest: Value = serde_json::from_str(MANIFEST).map_err(|e| e.to_string())?;
+    let mut spec = PluginSpec::new(
+        manifest["id"].as_str().unwrap_or("reelio"),
+        manifest["version"].as_str().unwrap_or("0.0.0"),
+    );
+    let items = manifest["ui"]["contributions"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    for item in items {
+        let c: Contribution =
+            serde_json::from_value(item).map_err(|e| format!("bad contribution: {e}"))?;
+        spec = spec.contribution(c);
+    }
+    Ok(spec)
 }
 
 /// Split a scene into its structure and the canvas draw lists, keyed by node id. Structure-only
-/// equality lets the loop send cheap `canvas.draw` messages instead of whole scenes.
+/// equality lets the pump send cheap canvas draws instead of whole scenes.
 pub fn split_canvas(scene: &Value) -> (Value, Vec<(String, Value)>) {
     let mut draws = vec![];
     let mut stripped = scene.clone();
@@ -61,42 +62,71 @@ fn strip(v: &mut Value, draws: &mut Vec<(String, Value)>) {
         draws.push((id, draw));
     }
     match v {
-        Value::Object(map) => {
-            for value in map.values_mut() {
-                strip(value, draws);
-            }
-        }
-        Value::Array(items) => {
-            for item in items {
-                strip(item, draws);
-            }
-        }
+        Value::Object(map) => map.values_mut().for_each(|value| strip(value, draws)),
+        Value::Array(items) => items.iter_mut().for_each(|item| strip(item, draws)),
         _ => {}
     }
 }
 
-/// Per-instance memory of what the host last received.
+/// Controlled inputs carry a `rev` (amendment 7): it rises whenever the plugin changes the value,
+/// so the host adopts the new text and ignores stale edits.
+const CONTROLLED: [&str; 7] = [
+    "text_input",
+    "number_input",
+    "slider",
+    "select",
+    "checkbox",
+    "switch",
+    "range_slider",
+];
+
+fn stamp_revs(v: &mut Value, instance: &str, revs: &mut BTreeMap<(String, String), (Value, u64)>) {
+    if let Value::Object(map) = v {
+        let kind = map
+            .get("kind")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        if CONTROLLED.contains(&kind.as_str()) {
+            if let (Some(id), Some(value)) = (
+                map.get("id").and_then(Value::as_str).map(str::to_string),
+                map.get("value").cloned(),
+            ) {
+                let key = (instance.to_string(), id);
+                let rev = match revs.get(&key) {
+                    Some((old, rev)) if *old == value => *rev,
+                    Some((_, rev)) => rev + 1,
+                    None => 1,
+                };
+                revs.insert(key, (value, rev));
+                map.insert("rev".into(), json!(rev));
+            }
+        }
+        for value in map.values_mut() {
+            stamp_revs(value, instance, revs);
+        }
+    } else if let Value::Array(items) = v {
+        for item in items {
+            stamp_revs(item, instance, revs);
+        }
+    }
+}
+
+/// What the host last received, per instance.
 #[derive(Default)]
 pub struct Pump {
     sent_structure: BTreeMap<String, Value>,
     sent_draws: BTreeMap<(String, String), Value>,
+    revs: BTreeMap<(String, String), (Value, u64)>,
     visible: BTreeSet<String>,
     open_modals: BTreeSet<String>,
     frame: u64,
-    request_id: u64,
 }
 
 impl Pump {
-    fn request(&mut self, method: &str, params: Value) -> Value {
-        self.request_id += 1;
-        json!({"v": 2, "t": "req", "id": self.request_id.to_string(), "method": method, "params": params})
-    }
-
-    /// Messages needed to bring the host up to date with the current scenes.
-    pub fn render(&mut self, state: &State) -> Vec<Value> {
-        let mut out = vec![];
+    /// Push whatever changed to the host through the SDK.
+    pub fn render(&mut self, ctx: &Ctx, state: &State) {
         let scenes = scene::all(state);
-        // Modals open and close through host services; other instances follow visibility.
         for name in scenes
             .keys()
             .filter(|k| k.starts_with("modal."))
@@ -105,10 +135,11 @@ impl Pump {
         {
             if self.open_modals.insert(name.clone()) {
                 let short = name.trim_start_matches("modal.").to_string();
-                out.push(self.request(
+                ctx.call_async(
                     "window.open_modal",
                     json!({"contribution": short, "instance": name, "props": {}}),
-                ));
+                    |_, _| {},
+                );
             }
         }
         let gone: Vec<String> = self
@@ -120,25 +151,29 @@ impl Pump {
         for name in gone {
             self.open_modals.remove(&name);
             self.sent_structure.remove(&name);
-            out.push(self.request("window.close_modal", json!({"instance": name})));
+            ctx.call_async("window.close_modal", json!({"instance": name}), |_, _| {});
         }
-        for (instance, scene) in &scenes {
-            if !instance.starts_with("modal.") && !self.visible.contains(instance) {
+        for (instance, mut scene) in scenes {
+            if !instance.starts_with("modal.") && !self.visible.contains(&instance) {
                 continue;
             }
-            let (structure, draws) = split_canvas(scene);
-            let same_structure = self.sent_structure.get(instance) == Some(&structure);
-            if same_structure {
+            stamp_revs(&mut scene, &instance, &mut self.revs);
+            let (structure, draws) = split_canvas(&scene);
+            if self.sent_structure.get(&instance) == Some(&structure) {
                 for (node, draw) in draws {
                     let key = (instance.clone(), node.clone());
                     if self.sent_draws.get(&key) != Some(&draw) {
                         self.frame += 1;
-                        out.push(json!({
-                            "v": 2, "t": "canvas.draw", "instance": instance, "node": node,
-                            "frame": self.frame,
-                            "clear": draw.get("clear").cloned().unwrap_or(Value::Null),
-                            "ops": draw.get("ops").cloned().unwrap_or(json!([])),
-                        }));
+                        if let Ok(ops) = serde_json::from_value::<Vec<DrawOp>>(
+                            draw.get("ops").cloned().unwrap_or(json!([])),
+                        ) {
+                            let _ = ctx.canvas_draw(
+                                instance.clone(),
+                                node,
+                                self.frame,
+                                DrawList { clear: None, ops },
+                            );
+                        }
                         self.sent_draws.insert(key, draw);
                     }
                 }
@@ -147,243 +182,257 @@ impl Pump {
                     self.sent_draws.insert((instance.clone(), node), draw);
                 }
                 self.sent_structure.insert(instance.clone(), structure);
-                out.push(json!({"v": 2, "t": "ui.set", "instance": instance, "scene": scene}));
-            }
-        }
-        out
-    }
-}
-
-/// Map one host event onto a reducer event. Unknown messages are ignored (forward compatibility).
-pub fn map_host(msg: &Value, state: &mut State, pump: &mut Pump) -> Option<Vec<Value>> {
-    let kind = msg.get("t")?.as_str()?;
-    match kind {
-        "hello" => Some(vec![ready_message()]),
-        "ping" => Some(vec![
-            json!({"v": 2, "t": "pong", "id": msg.get("id").cloned().unwrap_or(Value::Null)}),
-        ]),
-        "visibility" | "ui.visible" => {
-            let instance = msg.get("instance")?.as_str()?.to_string();
-            let visible = msg.get("visible").and_then(Value::as_bool).unwrap_or(true);
-            if visible {
-                pump.visible.insert(instance.clone());
-                pump.sent_structure.remove(&instance);
-            } else {
-                pump.visible.remove(&instance);
-            }
-            Some(vec![])
-        }
-        "resize" => {
-            if let Some(w) = msg.get("w").and_then(Value::as_f64) {
-                state.set_window(w);
-            }
-            Some(vec![])
-        }
-        "ui.event" => {
-            let node = msg.get("node")?.as_str()?.to_string();
-            let ty = msg.get("type").and_then(Value::as_str).unwrap_or("click");
-            let value = if matches!(ty, "pointer" | "key" | "wheel" | "drop" | "hover") {
-                let mut v = msg.clone();
-                v["type"] = json!(ty);
-                v
-            } else {
-                let mut v = msg.get("value").cloned().unwrap_or(Value::Null);
-                if ty == "focus" || ty == "blur" {
-                    v = json!(ty == "focus");
-                }
-                v
-            };
-            state.dispatch(Event::Ui { node, value });
-            Some(vec![])
-        }
-        "command" => {
-            let id = msg.get("id")?.as_str()?.to_string();
-            state.dispatch(Event::Command { id });
-            Some(vec![])
-        }
-        "drop" => {
-            let paths: Vec<String> = msg
-                .get("paths")
-                .and_then(Value::as_array)
-                .map(|a| {
-                    a.iter()
-                        .filter_map(|p| p.as_str().map(str::to_string))
-                        .collect()
-                })
-                .unwrap_or_default();
-            state.dispatch(Event::Drop { paths });
-            Some(vec![])
-        }
-        "shutdown" => Some(vec![json!({"__shutdown": true})]),
-        _ => None,
-    }
-}
-
-fn write_msg(out: &mut impl Write, msg: &Value) -> io::Result<()> {
-    serde_json::to_writer(&mut *out, msg)?;
-    out.write_all(b"\n")?;
-    out.flush()
-}
-
-/// Run the protocol until `shutdown` or end of input.
-pub fn serve<R, W>(input: R, mut output: W, engine: Arc<dyn EngineBridge>) -> io::Result<()>
-where
-    R: BufRead + Send + 'static,
-    W: Write,
-{
-    let (tx, rx) = mpsc::channel::<Inbound>();
-    let reader_tx = tx.clone();
-    thread::spawn(move || {
-        for line in input.lines() {
-            let Ok(line) = line else { break };
-            let Ok(value) = serde_json::from_str::<Value>(&line) else {
-                continue;
-            };
-            if reader_tx.send(Inbound::Host(value)).is_err() {
-                return;
-            }
-        }
-        let _ = reader_tx.send(Inbound::Eof);
-    });
-    let ticker_tx = tx.clone();
-    thread::spawn(move || loop {
-        thread::sleep(Duration::from_millis(100));
-        if ticker_tx.send(Inbound::Tick).is_err() {
-            break;
-        }
-    });
-
-    let mut state = State::new();
-    let mut pump = Pump::default();
-    let started = std::time::Instant::now();
-    while let Ok(msg) = rx.recv() {
-        let mut shutdown = false;
-        match msg {
-            Inbound::Host(value) => {
-                if let Some(replies) = map_host(&value, &mut state, &mut pump) {
-                    for reply in replies {
-                        if reply.get("__shutdown").is_some() {
-                            shutdown = true;
-                        } else {
-                            write_msg(&mut output, &reply)?;
+                match serde_json::from_value::<Node>(scene) {
+                    Ok(node) => {
+                        if let Err(e) = ctx.set_scene(instance.clone(), node) {
+                            ctx.log("warn", &format!("scene {instance} rejected: {e}"));
                         }
                     }
+                    Err(e) => ctx.log(
+                        "error",
+                        &format!("scene {instance} is not a valid node tree: {e}"),
+                    ),
                 }
             }
-            Inbound::Engine { id, reply } => state.dispatch(Event::Engine { id, reply }),
-            Inbound::Tick => state.dispatch(Event::Tick {
-                now: started.elapsed().as_secs_f64() * 1000.0,
-            }),
-            Inbound::Eof => break,
-        }
-        for effect in state.drain() {
-            match effect {
-                Effect::Engine { id, request } => {
-                    let engine = engine.clone();
-                    let tx = tx.clone();
-                    thread::spawn(move || {
-                        let reply = engine.call(request);
-                        let _ = tx.send(Inbound::Engine { id, reply });
-                    });
-                }
-                Effect::Persist { key, value } => {
-                    let req = pump.request("settings.set", json!({"key": key, "value": value}));
-                    write_msg(&mut output, &req)?;
-                }
-                Effect::CloseWindow => {
-                    let req = pump.request(
-                        "log",
-                        json!({"level": "info", "message": "close requested by the user"}),
-                    );
-                    write_msg(&mut output, &req)?;
-                }
-                // The preview element is driven by the engine's frame ring once it is connected.
-                Effect::Seek { .. } | Effect::SetPlaying(_) => {}
-            }
-        }
-        for message in pump.render(&state) {
-            write_msg(&mut output, &message)?;
-        }
-        if shutdown {
-            break;
         }
     }
-    Ok(())
+}
+
+/// Shared plugin core: Reelio state plus the pump that mirrors it to the host.
+pub struct Core {
+    pub state: State,
+    pump: Pump,
+    started: Instant,
+}
+
+/// Everything the SDK callbacks need. Engine and ctx are immutable; the core is locked briefly.
+pub struct App {
+    pub ctx: Ctx,
+    pub engine: Arc<dyn EngineBridge>,
+    core: Mutex<Core>,
+}
+
+impl App {
+    pub fn new(ctx: Ctx, engine: Arc<dyn EngineBridge>) -> Arc<App> {
+        Arc::new(App {
+            ctx,
+            engine,
+            core: Mutex::new(Core {
+                state: State::new(),
+                pump: Pump::default(),
+                started: Instant::now(),
+            }),
+        })
+    }
+
+    fn lock(&self) -> MutexGuard<'_, Core> {
+        self.core
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+}
+
+/// Apply `f` to the core, render the result, then start any engine requests on worker threads.
+pub fn update(app: &Arc<App>, f: impl FnOnce(&mut Core) + Send + 'static) {
+    update_boxed(app, Box::new(f));
+}
+
+/// Non-generic core of [`update`]; keeps the worker closure type fixed (no polymorphic recursion).
+fn update_boxed(app: &Arc<App>, f: Box<dyn FnOnce(&mut Core) + Send>) {
+    let requests = {
+        let mut core = app.lock();
+        f(&mut core);
+        let mut requests = vec![];
+        loop {
+            let effects = core.state.drain();
+            if effects.is_empty() {
+                break;
+            }
+            for effect in effects {
+                match effect {
+                    Effect::Engine { id, request } => requests.push((id, request)),
+                    Effect::Persist { key, value } => {
+                        app.ctx.call_async(
+                            "settings.set",
+                            json!({"key": key, "value": value}),
+                            |_, _| {},
+                        );
+                    }
+                    Effect::CloseWindow => app.ctx.log("info", "close requested by the user"),
+                    // The preview element is driven by the engine's frame ring once it is wired.
+                    Effect::Seek { .. } | Effect::SetPlaying(_) => {}
+                }
+            }
+        }
+        let Core { state, pump, .. } = &mut *core;
+        pump.render(&app.ctx, state);
+        requests
+    };
+    for (id, request) in requests {
+        let app = app.clone();
+        app.ctx.clone().spawn(move |_| {
+            let reply = app.engine.call(request);
+            update(&app, move |core| {
+                core.state.dispatch(Event::Engine { id, reply })
+            });
+        });
+    }
+}
+
+/// Convert an SDK node event into the reducer's `ui` event (`node`, `value`).
+pub fn ui_value(event: &NodeEvent) -> Option<Value> {
+    Some(match event {
+        NodeEvent::Click | NodeEvent::DoubleClick => Value::Null,
+        NodeEvent::Change { value, .. } | NodeEvent::Submit { value, .. } => value.clone(),
+        NodeEvent::Hover { .. } => json!(true),
+        NodeEvent::Blur { value, .. } if value.is_null() => json!(false),
+        NodeEvent::Blur { value, .. } => value.clone(),
+        NodeEvent::Pointer {
+            phase, x, y, mods, ..
+        } => {
+            let phase = match phase {
+                PointerPhase::Down => "down",
+                PointerPhase::Move => "move",
+                PointerPhase::Up => "up",
+                PointerPhase::Cancel => "cancel",
+                PointerPhase::Enter | PointerPhase::Leave => return None,
+            };
+            json!({"type": "pointer", "phase": phase, "x": x, "y": y, "mods": mods_json(mods)})
+        }
+        NodeEvent::Wheel {
+            dx, dy, x, y, mods, ..
+        } => {
+            json!({"type": "wheel", "dx": dx, "dy": dy, "x": x, "y": y, "mods": mods_json(mods)})
+        }
+        NodeEvent::Key {
+            phase, key, mods, ..
+        } => {
+            let phase = match phase {
+                pigeon_plugin_sdk::protocol::KeyPhase::Down => "down",
+                _ => "up",
+            };
+            json!({"type": "key", "phase": phase, "key": key, "mods": mods_json(mods)})
+        }
+        _ => return None,
+    })
+}
+
+fn mods_json(mods: &pigeon_plugin_sdk::protocol::Mods) -> Value {
+    let mut m = Map::new();
+    m.insert("shift".into(), json!(mods.shift));
+    m.insert("ctrl".into(), json!(mods.ctrl));
+    m.insert("alt".into(), json!(mods.alt));
+    m.insert("meta".into(), json!(mods.meta));
+    Value::Object(m)
+}
+
+/// Handle one SDK message. Runs on the SDK app thread; never blocks on engine work.
+pub fn handle(app: &Arc<App>, msg: Incoming) {
+    match msg {
+        Incoming::Visibility { instance, visible } => update(app, move |core| {
+            if visible {
+                core.pump.visible.insert(instance.clone());
+                core.pump.sent_structure.remove(&instance);
+            } else {
+                core.pump.visible.remove(&instance);
+            }
+        }),
+        Incoming::UiEvent { node, event, .. } => {
+            if let Some(value) = ui_value(&event) {
+                update(app, move |core| {
+                    core.state.dispatch(Event::Ui { node, value })
+                });
+            } else if let NodeEvent::Drop { paths, .. } = event {
+                update(app, move |core| core.state.dispatch(Event::Drop { paths }));
+            }
+        }
+        Incoming::Command { command, .. } => update(app, move |core| {
+            core.state.dispatch(Event::Command { id: command })
+        }),
+        Incoming::Drop { paths, .. } => {
+            update(app, move |core| core.state.dispatch(Event::Drop { paths }))
+        }
+        Incoming::Resize { w, .. } => update(app, move |core| core.state.set_window(w as f64)),
+        _ => {}
+    }
+}
+
+/// Periodic clock for toasts, polling and debounced validation.
+pub fn start_ticker(app: &Arc<App>) {
+    let app = app.clone();
+    let ctx = app.ctx.clone();
+    ctx.spawn(move |_| loop {
+        std::thread::sleep(Duration::from_millis(100));
+        if !app.ctx.is_open() {
+            break;
+        }
+        let now = app.lock().started.elapsed().as_secs_f64() * 1000.0;
+        update(&app, move |core| core.state.dispatch(Event::Tick { now }));
+    });
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine_bridge::UnconnectedEngine;
-    use std::io::Cursor;
-    use std::sync::Mutex;
-
-    /// Shared buffer so the test can read what the loop wrote.
-    #[derive(Clone, Default)]
-    struct Sink(Arc<Mutex<Vec<u8>>>);
-    impl Write for Sink {
-        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-            self.0.lock().unwrap().extend_from_slice(buf);
-            Ok(buf.len())
-        }
-        fn flush(&mut self) -> io::Result<()> {
-            Ok(())
-        }
-    }
-
-    fn run(script: &str) -> Vec<Value> {
-        let sink = Sink::default();
-        serve(
-            Cursor::new(script.as_bytes().to_vec()),
-            sink.clone(),
-            Arc::new(UnconnectedEngine),
-        )
-        .unwrap();
-        let bytes = sink.0.lock().unwrap().clone();
-        String::from_utf8(bytes)
-            .unwrap()
-            .lines()
-            .filter_map(|l| serde_json::from_str(l).ok())
-            .collect()
-    }
 
     #[test]
-    fn hello_is_answered_with_ready_and_manifest_contributions() {
-        let out = run("{\"v\":2,\"t\":\"hello\"}\n{\"v\":2,\"t\":\"shutdown\"}\n");
-        let ready = out.iter().find(|m| m["t"] == "ready").expect("ready");
-        assert_eq!(ready["plugin"]["id"], "reelio");
-        let slots: Vec<&str> = ready["contributions"]
-            .as_array()
-            .unwrap()
+    fn manifest_contributions_parse_into_sdk_contributions() {
+        let spec = spec().expect("manifest parses");
+        assert_eq!(spec.id, "reelio");
+        assert!(spec
+            .contributions
             .iter()
-            .filter_map(|c| c["slot"].as_str())
-            .collect();
-        for needed in [
-            "sidebar.entry",
-            "workspace.view",
-            "inspector.panel",
-            "asset.action",
-            "preferences.page",
-            "modal",
-            "command",
-        ] {
-            assert!(slots.contains(&needed), "manifest declares {needed}");
-        }
-    }
-
-    #[test]
-    fn visible_workspace_receives_a_scene_and_later_only_canvas_fast_path_updates() {
-        let out = run(
-            "{\"v\":2,\"t\":\"hello\"}\n{\"v\":2,\"t\":\"visibility\",\"instance\":\"main\",\"visible\":true}\n{\"v\":2,\"t\":\"ping\",\"id\":\"1\"}\n",
+            .any(|c| c.slot == "workspace.view" && c.id == "main"));
+        assert_eq!(
+            spec.contributions
+                .iter()
+                .filter(|c| c.slot == "inspector.panel")
+                .count(),
+            2
         );
-        let set = out
-            .iter()
-            .find(|m| m["t"] == "ui.set" && m["instance"] == "main")
-            .expect("main scene sent");
-        assert!(set["scene"]
-            .to_string()
-            .contains("Drop media into the media pool"));
-        assert!(out.iter().any(|m| m["t"] == "pong" && m["id"] == "1"));
+    }
+
+    #[test]
+    fn every_lane_canvas_op_is_a_valid_sdk_draw_op() {
+        // Reducer draw ops must deserialize into the SDK's typed DrawOp (amendment 3).
+        use reelio_ui::canvas::{draw, lane_ops, LaneDraw};
+        let lane = LaneDraw {
+            width: 700.0,
+            height: 56.0,
+            kind: "video".into(),
+            enabled: true,
+            selected: true,
+            title: "Movie".into(),
+            start_label: "00:00:00.000".into(),
+            end_label: "00:00:10.000".into(),
+            ruler_step_ms: 1000.0,
+            scale: 0.1,
+            scroll: 0.0,
+            clip_left: 10.0,
+            clip_width: 400.0,
+            trim_handles: true,
+            ticks: vec![(0.0, "00:00:00.000".into())],
+            chapters: vec![40.0],
+            playhead_x: 120.0,
+            excluded_pill: None,
+        };
+        let v = draw(1, lane_ops(&lane));
+        serde_json::from_value::<Vec<DrawOp>>(v["ops"].clone())
+            .expect("ops match the SDK draw schema");
+    }
+
+    #[test]
+    fn controlled_inputs_bump_rev_only_when_the_value_changes() {
+        let mut revs = BTreeMap::new();
+        let mut a = json!({"id": "n", "kind": "text_input", "value": "x"});
+        stamp_revs(&mut a, "main", &mut revs);
+        assert_eq!(a["rev"], 1);
+        let mut b = json!({"id": "n", "kind": "text_input", "value": "x"});
+        stamp_revs(&mut b, "main", &mut revs);
+        assert_eq!(b["rev"], 1);
+        let mut c = json!({"id": "n", "kind": "text_input", "value": "y"});
+        stamp_revs(&mut c, "main", &mut revs);
+        assert_eq!(c["rev"], 2);
     }
 
     #[test]
@@ -393,11 +442,5 @@ mod tests {
         assert_eq!(draws.len(), 1);
         assert_eq!(draws[0].0, "c");
         assert!(structure["children"][0]["draw"].is_null());
-    }
-
-    #[test]
-    fn unknown_messages_are_ignored() {
-        let out = run("{\"v\":2,\"t\":\"future.thing\"}\n{\"v\":2,\"t\":\"hello\"}\n");
-        assert!(out.iter().any(|m| m["t"] == "ready"));
     }
 }

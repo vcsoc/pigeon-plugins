@@ -209,6 +209,7 @@ which answers every command with an explicit error. Nothing here has run against
 | Modals open/close through `window.open_modal` / `window.close_modal` | implemented-unverified | `Pump::render` |
 | Engine request workers (never on the loop thread) | implemented-unverified | `serve`, worker threads |
 | Persisted preferences via `settings.set` | implemented-unverified | `Effect::Persist` |
-| SDK (`pigeon-plugin-sdk`) use | not-implemented | the SDK is not on `arch/sdk`; `transport.rs` is a thin adapter |
-| Engine (`reelio-engine`) use | not-implemented | `UnconnectedEngine`; the bridge boundary is `engine_bridge::EngineBridge` |
+| SDK (`pigeon-plugin-sdk`) use | verified-by-test (smoke) | vendored under `vendor/pigeon-plugin-sdk` (amendment 12); `transport.rs` runs the SDK runtime; binary smoke run: ready, ui.set, pong |
+| Engine (`reelio-engine`) use | verified-by-test | `engine_bridge::Real` maps all 23 UI requests onto `ReelioEngine`; `dropped_media_is_probed_by_the_real_engine_and_becomes_a_lane` runs ffmpeg-generated MP4 through drop, `media_dropped`, `media_probe` and the lane scene |
+| Amendments 1, 7, 9, 13 | verified-by-test | command push by `Incoming::Command`; controlled inputs get `rev` (`controlled_inputs_bump_rev...`); permissions list; two inspector panels ordered by `order` |
 | Real Pigeon host, conformance suite | not-verifiable-here | |

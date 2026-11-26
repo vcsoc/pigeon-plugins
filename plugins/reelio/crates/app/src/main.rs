@@ -1,33 +1,47 @@
-//! `reelio`: the Reelio plugin process (protocol v2). Started by `sh <plugin>/run --plugin`.
+//! `reelio`: the Reelio plugin process (protocol v2, on the vendored Pigeon SDK).
 //!
-//! Flags: `--plugin` (serve protocol v2 on stdin/stdout), `--version`, `--uninstall` (Reelio keeps
-//! no external state, so this only confirms and never touches the user's media or projects).
+//! Flags: `--plugin` (serve on stdin/stdout), `--setup` (idempotent; nothing to install beyond the
+//! binary, so it only reports readiness), `--version`, `--uninstall` (Reelio keeps no external state,
+//! so this confirms without touching the user's media or projects).
 
 mod engine_bridge;
 mod transport;
 
-use std::io::{self, BufReader};
+use engine_bridge::{EngineBridge, PluginHost, Real, Unavailable};
+use pigeon_plugin_sdk::runtime::Plugin;
 use std::sync::Arc;
+
+fn run_plugin() -> Result<(), String> {
+    let spec = transport::spec()?;
+    let plugin = Plugin::stdio(spec).map_err(|e| e.to_string())?;
+    let engine: Arc<dyn EngineBridge> = match Real::start(PluginHost::from_env()) {
+        Ok(real) => Arc::new(real),
+        Err(error) => Arc::new(Unavailable(format!(
+            "The Reelio engine could not start: {error}"
+        ))),
+    };
+    let app = transport::App::new(plugin.ctx(), engine);
+    transport::start_ticker(&app);
+    let handler_app = app.clone();
+    plugin.run(move |_ctx, msg| transport::handle(&handler_app, msg));
+    Ok(())
+}
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.iter().any(|a| a == "--version") {
         println!("{}", env!("CARGO_PKG_VERSION"));
-        return;
-    }
-    if args.iter().any(|a| a == "--uninstall") {
+    } else if args.iter().any(|a| a == "--setup") {
+        println!("{{\"ok\":true,\"ready\":true}}");
+    } else if args.iter().any(|a| a == "--uninstall") {
         println!("{{\"ok\":true,\"removed\":[]}}");
-        return;
-    }
-    if args.iter().any(|a| a == "--plugin") {
-        let stdin = BufReader::new(io::stdin());
-        let engine = Arc::new(engine_bridge::UnconnectedEngine);
-        if let Err(error) = transport::serve(stdin, io::stdout().lock(), engine) {
-            eprintln!("reelio: protocol error: {error}");
+    } else if args.iter().any(|a| a == "--plugin") {
+        if let Err(error) = run_plugin() {
+            println!("{{\"ok\":false,\"error\":{}}}", serde_json::json!(error));
             std::process::exit(1);
         }
-        return;
+    } else {
+        eprintln!("usage: reelio --plugin | --setup | --version | --uninstall");
+        std::process::exit(2);
     }
-    eprintln!("usage: reelio --plugin | --version | --uninstall");
-    std::process::exit(2);
 }

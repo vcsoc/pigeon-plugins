@@ -9,6 +9,11 @@ set -eu
 HERE=$(cd "$(dirname "$0")" && pwd -P)
 DATA=${PIGEON_PLUGIN_DATA:-$HERE/.data}
 BIN="$HERE/bin/reelio"
+if [ ! -x "$BIN" ] && [ "${1:-}" = "--plugin" ]; then
+  # Amendment 11: the host runs --setup first; --plugin before setup fails fast with JSON on stdout.
+  printf '{"ok":false,"error":"Reelio is not set up. Run: sh run --setup"}\n'
+  exit 1
+fi
 if [ ! -x "$BIN" ]; then
   PATH="$PATH:$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
   export PATH

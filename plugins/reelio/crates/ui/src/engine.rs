@@ -23,6 +23,10 @@ pub enum Request {
     ChooseMedia {
         folder: bool,
     },
+    /// Authorizes dropped files (engine `media_dropped`); returns the authorized canonical paths.
+    MediaDropped {
+        paths: Vec<String>,
+    },
     MediaProbe {
         path: String,
     },

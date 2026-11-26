@@ -119,12 +119,12 @@ fn toasts(s: &State) -> Vec<Value> {
     for (kind, toast) in [("error", s.error.as_ref()), ("notice", s.notice.as_ref())] {
         if let Some(t) = toast {
             out.push(node(
-                &format!("toast.{kind}"),
+                &format!("toast:{kind}:hover"),
                 "row",
                 json!({
                     "role": if t.error { "alert" } else { "status" },
                     "class": if t.error { "toast error" } else { "toast" },
-                    "on_hover": format!("toast:{kind}:hover"),
+                    "on": ["hover", "blur"],
                     "children": [
                         text(&format!("toast.{kind}.msg"), &t.text, "body"),
                         icon_button(&format!("toast:{kind}:dismiss"), "x", "Dismiss notification", true),

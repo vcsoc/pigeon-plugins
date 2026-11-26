@@ -1,10 +1,10 @@
 [package]
 name = "reelio-app"
 description = "Reelio Pigeon plugin binary: protocol v2 transport, scene pump and the engine bridge."
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-publish.workspace = true
+version = "2.0.0"
+edition = "2021"
+license = "MIT"
+publish = false
 
 [[bin]]
 name = "reelio"
@@ -12,5 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 reelio-ui = { path = "../ui" }
+reelio-engine = { path = "../engine" }
+pigeon-plugin-sdk = { path = "../../vendor/pigeon-plugin-sdk" }
 serde.workspace = true
 serde_json.workspace = true
