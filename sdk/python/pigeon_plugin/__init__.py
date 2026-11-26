@@ -16,9 +16,11 @@ from .scene import *  # noqa: F401,F403  (node classes and one builder per kind)
 from .scene import __all__ as _scene_all
 from .draw import DrawList
 from .contribution import Contribution, AppliesTo, SLOTS
+from .runtime import Plugin, PluginSpec, Ctx, Resources, ServiceError, StartError, ResourceError
 
 __all__ = list(_scene_all) + [
     "PROTOCOL_VERSION", "MAX_LINE_BYTES", "MAX_SCENE_NODES", "MAX_SCENE_BYTES", "MAX_CANVAS_OPS",
     "MAX_CANVAS_BYTES", "HOST_QUEUE_CAPACITY", "ProtocolError", "parse_incoming", "encode_outgoing",
     "Node", "Size", "Color", "MenuItem", "Span", "DrawList", "draw", "Contribution", "AppliesTo", "SLOTS",
+    "Plugin", "PluginSpec", "Ctx", "Resources", "ServiceError", "StartError", "ResourceError",
 ]
