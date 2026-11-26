@@ -123,6 +123,17 @@ def fit_box(width, height, max_w, max_h):
 
 def write_mask_png(path, width, height, rects):
     """8-bit grayscale PNG, nonzero = remove. Rects are applied in order: mark 255, erase 0."""
+    if not 0 < width * height <= MAX_INPUT_PIXELS or len(rects) > 256:
+        raise OperationError('Invalid or oversized object mask.')
+    area = 0
+    for rect in rects:
+        x0, y0 = rect['min']
+        x1, y1 = rect['max']
+        if not (0 <= x0 < x1 <= width and 0 <= y0 < y1 <= height):
+            raise OperationError('Invalid object mask rectangle.')
+        area += (x1 - x0) * (y1 - y0)
+    if area > 32_000_000:
+        raise OperationError('Object mask is too complex; clear it and use fewer rectangles.')
     stride = width + 1
     raw = bytearray(stride * height)
     for rect in rects:
@@ -132,6 +143,9 @@ def write_mask_png(path, width, height, rects):
         for y in range(y0, y1):
             start = y * stride + 1 + x0
             raw[start:start + (x1 - x0)] = bytes([value]) * (x1 - x0)
+
+    if 255 not in raw:
+        raise OperationError('The mask is empty. Mark an area to remove.')
 
     def chunk(kind, data):
         return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xFFFFFFFF)
@@ -274,9 +288,12 @@ class App:
 
     def slot_id(self, instance):
         prefix = self.manifest['id'] + '/'
-        return instance.removeprefix(prefix).split('/', 1)[0]
+        return instance.removeprefix(prefix).split('#', 1)[0]
 
     def on_visible(self, instance):
+        pass
+
+    def start(self):
         pass
 
     def close(self):
@@ -329,12 +346,16 @@ class App:
 
 def run_app(app_class, folder):
     """Entry point for `worker.py --plugin`: handshake, then the SDK loop until shutdown."""
-    with open(os.path.join(folder, 'plugin.json'), encoding='utf-8') as f:
-        manifest = json.load(f)
-    plugin = Plugin.stdio(PluginSpec(manifest['id'], manifest['version'], manifest['ui']['contributions']))
     app = app_class(folder)
+    manifest = app.manifest
+    spec = PluginSpec(manifest['id'], manifest['version'], manifest['ui']['contributions'])
+    # The SDK's daemon reader may still be waiting for host EOF after `shutdown`.
+    # Use private streams so CPython does not try to lock/flush the same stdio at exit.
+    plugin = Plugin.start(os.fdopen(os.dup(sys.stdin.fileno()), 'rb'),
+                          os.fdopen(os.dup(sys.stdout.fileno()), 'wb'), spec)
     app.ctx = plugin.ctx
     try:
+        app.start()
         plugin.run(app.handle)
     finally:
         app.close()
@@ -371,6 +392,7 @@ class ImageTool(App):
         self.revs = {}
         self.target = None
         self.loaded = False
+        self.initializing = True
         self.ready = None
         self.device = None
         self.health_error = ''
@@ -410,9 +432,17 @@ class ImageTool(App):
     def ensure_loaded(self):
         if not self.loaded:
             self.loaded = True
-            self.spawn(self.refresh_health)
-            self.spawn(self.load_consent)
-            self.spawn(self.subscribe_selection)
+            self.spawn(self.load_initial_state)
+
+    def load_initial_state(self):
+        try:
+            self.subscribe_selection()
+            self.load_consent()
+            self.refresh_health()
+        finally:
+            with self.lock:
+                self.initializing = False
+                self.render_all()
 
     def subscribe_selection(self):
         try:
@@ -464,7 +494,9 @@ class ImageTool(App):
                 return
             self.set_target(assets[0])
         try:
-            self.call('window.open_modal', {'contribution': self.MODAL, 'instance': self.MODAL, 'props': {}})
+            self.call('window.open_modal', {'contribution': self.MODAL,
+                                            'instance': f"{self.manifest['id']}/{self.MODAL}",
+                                            'props': {'title': self.TITLE}})
         except ServiceError as error:
             with self.lock:
                 self.error = f'Could not open the tool window: {error.message}'
@@ -787,7 +819,7 @@ class ImageTool(App):
 
     # ---- rendering (lock held)
     def render(self, instance):
-        if self.slot_id(instance) in (self.PANEL, self.MODAL):
+        if not self.initializing and self.slot_id(instance) in (self.PANEL, self.MODAL):
             self.publish(instance, self.scene())
 
     def scene(self):

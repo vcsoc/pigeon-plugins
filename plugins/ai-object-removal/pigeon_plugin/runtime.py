@@ -499,6 +499,8 @@ class Plugin:
         finally:
             shared.closed = True
             shared.outbox.close()
+            # Leave time to flush queued replies before CPython finalizes buffered stdout.
+            self._threads[1].join(timeout=1.0)
 
 
 def _read_line(stream):
@@ -544,6 +546,9 @@ def _reader_loop(shared, stream):
         except ProtocolError as exc:
             sys.stderr.write(f"pigeon_plugin: ignoring host line: {exc}\n")
             continue
+        if msg.get("t") == "shutdown":
+            # Do not block again on stdin while the app exits (the host may keep its pipe open).
+            break
         _dispatch(shared, msg)
     shared.closed = True
     shared.outbox.close()

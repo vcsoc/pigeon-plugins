@@ -90,6 +90,16 @@ class Size:
         return {"fill": weight}
 
 
+def _plain(value):
+    if isinstance(value, Node):
+        return value.to_dict()
+    if isinstance(value, dict):
+        return {k: _plain(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain(v) for v in value]
+    return value
+
+
 class Node:
     """A scene node. Children go in `.children`; other props in `.props`."""
 
@@ -223,8 +233,9 @@ class Node:
         return sum(1 for _ in self.walk())
 
     def to_dict(self):
+        """Plain JSON-ready dict. Nodes nested inside props (list windows, tabs) are converted too."""
         out = {"id": self.id, "kind": self.kind}
-        out.update(self.props)
+        out.update({k: _plain(v) for k, v in self.props.items()})
         if self.children:
             out["children"] = [c.to_dict() for c in self.children]
         return out

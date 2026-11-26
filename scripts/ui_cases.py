@@ -59,14 +59,17 @@ class Session:
 
 def open_tool(host, target, run_ready=True):
     """Handshake, show the panel, and open the tool window for `target` (an asset action)."""
-    host.handshake()
+    ready = host.handshake()
+    check(mh.contributions_match(ready, os.path.join(host.plugin_dir, 'plugin.json')), 'ready contributions differ')
+    host.ping()
     host.visible('panel')
     host.scene('panel', lambda s: mh.find(s, 'run') is not None or mh.find(s, 'setup') is not None,
                what='panel content')
     host.wait(lambda: (mh.find(host.scenes.get('panel'), 'run') or {}).get('enabled') is False,
               what='run button disabled without a target')
     host.command('open', [target])
-    host.wait(lambda: any(m.get('instance') == 'tool' for m in host.modals), what='tool window opened')
+    host.wait(lambda: any(m.get('instance') == ready['plugin']['id'] + '/tool' for m in host.modals),
+              what='tool window opened')
     host.scene('tool', lambda s: mh.find(s, 'target') is not None, what='tool shows the target')
     host.wait(lambda: any(rid.startswith('source-') for rid in host.resources), what='source preview published')
     if run_ready:
@@ -254,12 +257,55 @@ def case_diffusion(plugin_dir, seed, scratch):
     return 'device report, manual steps, prompt, exact original pixels kept, derive'
 
 
+def case_semantic(plugin_dir, seed, scratch):
+    images = make_images(scratch)
+    duplicate = os.path.join(scratch, 'duplicate.png')
+    Image.open(images['photo']).save(duplicate)
+    first = asset(images['photo'], 'photo.png', 200, 150)
+    second = asset(duplicate, 'duplicate.png', 200, 150, 'asset-2')
+    env = {'PIGEON_PLUGIN_SEED': seed} if seed else {}
+    host = mh.MockHost(plugin_dir, env=env, library=[first, second], settings={'auto': False, 'minimum': 0.3})
+    try:
+        ready = host.handshake()
+        check(mh.contributions_match(ready, os.path.join(plugin_dir, 'plugin.json')), 'ready contributions differ')
+        host.visible('index')
+        host.visible('prefs')
+        host.scene('prefs', lambda s: mh.find(s, 'minimum'), what='preferences')
+        host.scene('index', lambda s: (mh.find(s, 'pause') or {}).get('enabled'), what='healthy index controls')
+        host.change('prefs', 'workers', 1)
+        host.wait(lambda: host.settings.get('workers') == 1, what='saved setting')
+        host.click('index', 'pause')
+        host.scene('index', lambda s: (mh.find(s, 'pause') or {}).get('label') == 'Resume', what='paused')
+        host.click('index', 'pause')
+        host.ping()
+        host.scene('index', lambda s: '2 files indexed' in (mh.find(s, 'model') or {}).get('text', ''),
+                   timeout=120, what='indexed two real images')
+        host.change('prefs', 'minimum', 0.3)
+        reply = host.request('search.query', {'mode_id': 'semantic', 'query': 'bright yellow square', 'limit': 1},
+                             timeout=120)
+        check(len(reply.get('result', {}).get('results', [])) == 1, f'expected provider result: {reply}')
+        host.command('similar', [first])
+        host.scene('similar-results', lambda s: mh.find(s, 'reveal-0') is not None,
+                   timeout=120, what='similar duplicate')
+        host.click('similar-results', 'reveal-0')
+        host.wait(lambda: ('library.reveal', {'id': 'asset-2'}) in host.calls, what='reveal the similar image')
+        host.library.clear()
+        reply = host.request('search.query', {'mode_id': 'semantic', 'query': 'bright yellow square'}, timeout=120)
+        check(reply.get('result', {}).get('results') == [], f'hidden entries must not be returned: {reply}')
+        check(not host.errors, f'protocol errors: {host.errors}')
+    finally:
+        code = host.shutdown()
+    check(code == 0, f'plugin exit {code}: {host.stderr_tail()}')
+    return 'pause/resume, persisted preferences, model indexing, provider query, find similar and reveal'
+
+
 CASES = {
     'ai-enlarge': case_enlarge,
     'ai-background-removal': case_background,
     'ai-object-removal': case_object_removal,
     'ai-image-expand': case_expand,
     'ai-image-expand-diffusion': case_diffusion,
+    'semantic-search': case_semantic,
 }
 
 

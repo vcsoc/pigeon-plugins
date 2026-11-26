@@ -1,6 +1,6 @@
 __pycache__/
 *.pyc
-.data/
+.data
 .venv/
 .pytest_cache/
 target/

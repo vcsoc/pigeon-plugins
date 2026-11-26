@@ -2,12 +2,8 @@
 
 Starts a plugin with `sh run --plugin`, performs the handshake, answers the host services a plugin
 uses (settings, selection, library, windows, progress, notifications), records every scene and
-resource the plugin publishes, validates the messages it sends, and lets a test drive events
-(clicks, changes, canvas pointers, commands, visibility). It is deliberately small: the WP2 mock host
-(`pigeon_plugin` SDK) supersedes it once that lands; the same checks are kept here until then.
-
-Validation covers the envelope (`v`, `t`), scene shape (ids unique per scene, known node kinds, a
-root node) and the host services used. Anything else the plugin sends is recorded in `unknown`.
+resource the plugin publishes, and lets Python cases drive events against real model outputs.
+Both directions and service payloads are validated with the SDK's protocol schemas.
 """
 import json
 import os
@@ -17,6 +13,13 @@ import subprocess
 import tempfile
 import threading
 import time
+import sys
+from pathlib import Path
+
+from jsonschema import ValidationError
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'sdk' / 'python'))
+from pigeon_plugin.schemas import validate
 
 NODE_KINDS = {
     'row', 'column', 'stack', 'grid', 'wrap', 'split', 'scroll', 'tabs', 'collapsible', 'panel', 'spacer',
@@ -59,6 +62,10 @@ class MockHost:
     def __init__(self, plugin_dir, env=None, selection=None, library=None, settings=None, timeout=30):
         self.timeout = timeout
         self.plugin_dir = plugin_dir
+        manifest = json.loads(Path(plugin_dir, 'plugin.json').read_text())
+        self.plugin_id = manifest['id']
+        self.permissions = set(manifest['ui']['permissions'])
+        self.provider_methods = {}
         self.work = tempfile.mkdtemp(prefix='mock-host-')
         self.session = os.path.join(self.work, 'session')
         os.makedirs(self.session)
@@ -97,7 +104,13 @@ class MockHost:
 
     # ---- transport
     def send(self, t, **fields):
+        if 'instance' in fields and '/' not in fields['instance']:
+            fields['instance'] = f"{self.plugin_id}/{fields['instance']}"
         message = {'v': 2, 't': t, **fields}
+        validate(message, 'to_plugin.schema.json')
+        if t == 'req':
+            validate(fields['params'], 'methods.schema.json', fields['method'] + '.params')
+            self.provider_methods[fields['id']] = fields['method']
         try:
             self.process.stdin.write(json.dumps(message) + '\n')
             self.process.stdin.flush()
@@ -122,7 +135,11 @@ class MockHost:
             if not isinstance(message, dict) or message.get('v') != 2:
                 self.errors.append(f'envelope without v=2: {line[:120]}')
                 continue
-            self._handle(message)
+            try:
+                validate(message)
+                self._handle(message)
+            except ValidationError as error:
+                self.errors.append(f"{message.get('t')}: {error.json_path}: {error.message[:250]}")
         with self.lock:
             self.exited = True
             self.lock.notify_all()
@@ -136,7 +153,7 @@ class MockHost:
                 problem = validate_scene(message.get('scene'))
                 if problem:
                     self.errors.append(f"ui.set {message.get('instance')}: {problem}")
-                self.scenes[message.get('instance')] = message.get('scene')
+                self.scenes[message['instance'].split('/', 1)[1]] = message['scene']
             elif kind == 'resource.put':
                 self.resources[message['rid']] = message
                 self.send('resource.ack', rid=message['rid'], seq=message['seq'])
@@ -145,11 +162,18 @@ class MockHost:
             elif kind == 'pong':
                 self.pongs.add(str(message.get('id')))
             elif kind == 'res':
-                self.replies[str(message.get('id'))] = message
+                ident = message['id']
+                method = self.provider_methods.pop(ident)
+                if 'result' in message:
+                    validate(message['result'], 'methods.schema.json', method + '.result')
+                self.replies[ident] = message
             elif kind == 'req':
                 self.lock.release()
                 try:
+                    validate(message['params'], 'methods.schema.json', message['method'] + '.params')
                     reply = self._service(message)
+                    if 'result' in reply:
+                        validate(reply['result'], 'methods.schema.json', message['method'] + '.result')
                 finally:
                     self.lock.acquire()
                 try:
@@ -168,17 +192,26 @@ class MockHost:
         method = message.get('method')
         params = message.get('params') or {}
         self.calls.append((method, params))
+        prefix = method.split('.')[0]
+        permission = {'window': 'windows', 'selection': 'selection'}.get(prefix)
+        if prefix == 'library':
+            permission = 'library.write' if method == 'library.import' else 'library.read'
+        if permission and permission not in self.permissions:
+            return {'error': {'code': 'permission_denied', 'message': f'missing {permission}'}}
         if method == 'settings.get':
             return {'result': {'value': self.settings.get(params.get('key'))}}
         if method == 'settings.set':
             self.settings[params.get('key')] = params.get('value')
             return {'result': {}}
         if method == 'selection.get':
-            return {'result': {'assets': self.selection}}
+            return {'result': {'ids': [a['id'] for a in self.selection], 'kinds': [a['kind'] for a in self.selection],
+                               'paths': [a['path'] for a in self.selection], 'assets': self.selection}}
         if method == 'selection.subscribe':
-            return {'result': {}}
+            return {'result': {'subscribed': True}}
         if method == 'library.query':
-            return {'result': {'items': self.library, 'next': None}}
+            return {'result': {'items': self.library}}
+        if method == 'library.get':
+            return {'result': {'items': [a for a in self.library if a['id'] in params['ids']]}}
         if method == 'library.import':
             self.counter += 1
             self.imports.append(params)
@@ -187,7 +220,7 @@ class MockHost:
             return {'result': {}}
         if method == 'window.open_modal':
             self.modals.append(params)
-            self.send('visibility', instance=params.get('instance'), visible=True)
+            self.send('visibility', instance=params['instance'], visible=True)
             return {'result': {}}
         if method.startswith('progress.'):
             self.progress.append((method, params))
@@ -204,7 +237,7 @@ class MockHost:
             while not predicate():
                 remaining = deadline - time.time()
                 if remaining <= 0 or self.exited:
-                    raise MockHostError(f'timed out waiting for {what}; stderr tail: {self.stderr_tail()}')
+                    raise MockHostError(f'timed out waiting for {what}; errors: {self.errors[-5:]}; stderr: {self.stderr_tail()}')
                 self.lock.wait(min(remaining, 0.25))
         return True
 
@@ -232,10 +265,9 @@ class MockHost:
         self.send('ui.event', instance=instance, node=node_id, type='click')
 
     def change(self, instance, node_id, value, rev=None):
-        message = {'instance': instance, 'node': node_id, 'type': 'change', 'value': value}
-        if rev is not None:
-            message['rev'] = rev
-        self.send('ui.event', **message)
+        node = find(self.scenes.get(instance), node_id) or {}
+        self.send('ui.event', instance=instance, node=node_id, type='change', value=value,
+                  rev=node.get('rev', 0) if rev is None else rev)
 
     def pointer(self, instance, node_id, phase, x, y):
         self.send('ui.event', instance=instance, node=node_id, type='pointer', phase=phase, x=x, y=y, button=0,

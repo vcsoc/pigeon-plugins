@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Copy shared/run and shared/plugin_runtime.py into every standalone plugin.
+"""Copy shared launchers and runtime helpers into plugins that use them.
 
 Each plugin folder must be self-contained (Pigeon installs one plugin at a time), so the shared
 launcher, runtime and protocol-v2 UI adapter are duplicated, not imported. Edit shared/, run this
@@ -17,15 +17,19 @@ SHARED = ("run", "plugin_runtime.py", "ui_support.py")
 
 def editor_plugins():
     for manifest in sorted((ROOT / "plugins").glob("*/plugin.json")):
-        if json.loads(manifest.read_text()).get("worker", {}).get("standalone"):
-            yield manifest.parent
+        entry = json.loads(manifest.read_text())
+        worker = entry.get("worker", {})
+        files = {f["path"] for f in entry.get("files", [])}
+        if worker.get("runtime") == "python3" and worker.get("standalone") and "plugin_runtime.py" in files:
+            names = SHARED if "ui_support.py" in files else SHARED[:2]
+            yield manifest.parent, names
 
 
 def main():
     check = "--check" in sys.argv
     stale = []
-    for folder in editor_plugins():
-        for name in SHARED:
+    for folder, names in editor_plugins():
+        for name in names:
             source, target = ROOT / "shared" / name, folder / name
             if not target.exists() or target.read_bytes() != source.read_bytes():
                 stale.append(str(target.relative_to(ROOT)))

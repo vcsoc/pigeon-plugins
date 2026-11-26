@@ -160,8 +160,13 @@ class SemanticSearch(ui.App):
         return super().call(method, params)
 
     def load_state(self):
+        # Yield to host startup: the library may still be opening when the plugin is enabled.
+        if self.stopping.wait(1):
+            return
         values = {}
         for key in DEFAULTS:
+            if self.stopping.is_set():
+                return
             values[key] = self.setting(key, DEFAULTS[key])
         try:
             info = ui.child_health(self.folder)
@@ -367,8 +372,11 @@ class SemanticSearch(ui.App):
         cursor = None
         seen = set()
         while not self.stopping.is_set() and not self.paused:
-            reply = self.call('library.query', filter={'kinds': list(KINDS)}, sort='name', cursor=cursor,
-                              limit=LIBRARY_PAGE)
+            params = {'filter': {'kinds': list(KINDS)}, 'sort': {'field': 'name', 'direction': 'asc'},
+                      'limit': LIBRARY_PAGE}
+            if cursor:
+                params['cursor'] = cursor
+            reply = self.call('library.query', **params)
             for item in reply.get('items') or reply.get('assets') or []:
                 record = self.record_for(item)
                 if record:
@@ -424,9 +432,22 @@ class SemanticSearch(ui.App):
         reply = self.engine_call('search', query=query, assets=allowed, minimum=minimum, limit=limit,
                                  offset=offset)
         results = [{'ref': str(item['id']), 'score': round(float(item.get('score', 0)), 4),
-                    'snippet': self.snippet(item.get('match'))} for item in reply.get('results', [])]
+                    'snippet': self.snippet(item.get('match'))} for item in self.visible_matches(reply, allowed)]
         more = int(reply.get('totalMatches', 0)) > offset + limit
-        return {'results': results, 'next': str(offset + limit) if more else None}
+        return {'results': results, **({'next': str(offset + limit)} if more else {})}
+
+    def visible_matches(self, reply, allowed):
+        """Check current library access; an earlier index scan may include now-hidden assets."""
+        hits = reply.get('results') or []
+        if not hits:
+            return []
+        current = self.call('library.get', ids=[str(hit['id']) for hit in hits]).get('items', [])
+        visible = set()
+        for item in current:
+            record = self.record_for(item)
+            if record and allowed.get(record['asset']['id']) == record['fingerprint']:
+                visible.add(record['asset']['id'])
+        return [item for item in hits if str(item['id']) in visible]
 
     @staticmethod
     def snippet(match):
@@ -443,7 +464,10 @@ class SemanticSearch(ui.App):
             reply = self.call('selection.get')
         except HostError:
             return []
-        return [item for item in reply.get('assets') or [] if isinstance(item, dict) and item.get('path')]
+        items = reply.get('assets') or [{'id': ident, 'kind': kind, 'path': path}
+                                        for ident, kind, path in zip(reply.get('ids', []), reply.get('kinds', []),
+                                                                      reply.get('paths', []))]
+        return [item for item in items if isinstance(item, dict) and item.get('path')]
 
     def open_similar(self, context):
         assets = self.selected_assets(context)
@@ -476,7 +500,7 @@ class SemanticSearch(ui.App):
             reply = self.engine_call('search', assetId=str(target['id']), sample=record['asset'],
                                      assets=allowed, minimum=minimum, limit=30)
             rows = [{'id': str(item['id']), 'name': self.names.get(str(item['id']), str(item['id'])),
-                     'score': round(float(item.get('score', 0)), 3)} for item in reply.get('results', [])]
+                     'score': round(float(item.get('score', 0)), 3)} for item in self.visible_matches(reply, allowed)]
             status = f'{len(rows)} similar items.' if rows else 'Nothing similar above the threshold.'
         except HostError as error:
             rows, status = [], str(error)
@@ -619,15 +643,4 @@ class SemanticSearch(ui.App):
 
 
 def main():
-    from pigeon_plugin import Plugin, PluginSpec
-
-    app = SemanticSearch(HERE)
-    manifest = app.manifest
-    plugin = Plugin.stdio(PluginSpec(manifest['id'], manifest['version'], manifest['ui']['contributions']))
-    app.ctx = plugin.ctx
-    try:
-        app.start()
-        plugin.run(app.handle)
-    finally:
-        app.close()
-    return 0
+    return ui.run_app(SemanticSearch, HERE)
