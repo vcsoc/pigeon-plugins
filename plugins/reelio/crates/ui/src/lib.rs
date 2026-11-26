@@ -12,6 +12,7 @@ pub mod crop;
 pub mod engine;
 pub mod geometry;
 pub mod layout;
+pub mod menus;
 pub mod model;
 pub mod playback;
 pub mod posters;

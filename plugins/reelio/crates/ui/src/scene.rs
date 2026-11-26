@@ -798,15 +798,55 @@ pub fn main_view(s: &State) -> Value {
         "column",
         json!({"fill": 1, "gap": 0, "children": std::mem::take(&mut center)}),
     ));
-    json!({
-        "id": "root",
-        "kind": "column",
-        "gap": 6,
-        "children": [
-            node("chrome", "column", json!({"gap": 6, "padding": 8, "children": top_children})),
-            node("body", "row", json!({"fill": 1, "gap": 0, "children": body})),
-        ],
-    })
+    let chrome = node(
+        "chrome",
+        "column",
+        json!({"gap": 6, "padding": 8, "children": top_children}),
+    );
+    let body_row = node(
+        "body",
+        "row",
+        json!({"fill": 1, "gap": 0, "children": body}),
+    );
+    let workspace = node(
+        "workspace",
+        "column",
+        json!({"fill": 1, "gap": 6, "children": [chrome, body_row]}),
+    );
+    // Menus overlay the workspace (z-order `stack`).
+    let mut children = vec![workspace];
+    children.extend(menu_overlay(s));
+    json!({"id": "root", "kind": "stack", "children": children})
+}
+
+/// Context or project menu, drawn above the workspace at its anchor point.
+fn menu_overlay(s: &State) -> Option<Value> {
+    let menu = s.menu.as_ref()?;
+    let items: Vec<Value> = menu
+        .items
+        .iter()
+        .enumerate()
+        .map(|(i, item)| {
+            let mut b = button(
+                &format!("menu:{}", item.action),
+                &item.label,
+                None,
+                if item.danger { "danger" } else { "ghost" },
+                item.enabled,
+            );
+            b["toggled"] = json!(i == menu.focus);
+            if let Some(t) = &item.title {
+                b["tooltip"] = json!(t);
+            }
+            b
+        })
+        .collect();
+    Some(node(
+        "menu",
+        "panel",
+        json!({"x": menu.x, "y": menu.y, "width": {"px": 200}, "role": "menu", "label": menu.label,
+               "children": [column("menu.items", items, 2.0)], "padding": 4}),
+    ))
 }
 
 /// Inspector: poster/cover, selected lane, output container, at a glance, validation.

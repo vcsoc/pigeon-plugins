@@ -351,6 +351,15 @@ pub fn ui_value(event: &NodeEvent) -> Option<Value> {
         NodeEvent::Blur { value, .. } if value.is_null() => json!(false),
         NodeEvent::Blur { value, .. } => value.clone(),
         NodeEvent::Pointer {
+            phase: PointerPhase::Down,
+            x,
+            y,
+            button: 2,
+            ..
+        } => {
+            json!({"type": "context", "x": x, "y": y})
+        }
+        NodeEvent::Pointer {
             phase, x, y, mods, ..
         } => {
             let phase = match phase {

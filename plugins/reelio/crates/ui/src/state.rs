@@ -210,6 +210,8 @@ pub struct State {
     pub store: ProjectStore,
     /// In-progress pointer gesture on a timeline lane (see `timeline_input`).
     pub gesture: Option<crate::timeline_input::Gesture>,
+    /// Open context or project menu (see `menus`).
+    pub menu: Option<crate::menus::Menu>,
     /// Live feedback for the gesture in progress; never part of the undo history.
     pub drafts: crate::timeline_input::Drafts,
     pub project_rev: u64,
@@ -262,6 +264,7 @@ impl State {
         let mut s = State {
             store: ProjectStore::new(empty_project()),
             gesture: None,
+            menu: None,
             drafts: Default::default(),
             project_rev: 0,
             section: Section::Timeline,
@@ -937,12 +940,40 @@ impl State {
         }
     }
 
+    /// Perform a control action directly (menu items and tests use the same path as clicks).
+    pub fn ui_action(&mut self, node: &str, value: Value) {
+        self.ui(node, value);
+    }
+
     fn ui(&mut self, node: &str, value: Value) {
         let (verb, arg) = node
             .split_once(':')
             .map(|(a, b)| (a, b.to_string()))
             .unwrap_or((node, String::new()));
+        let is_context = value.get("type").and_then(Value::as_str) == Some("context");
+        // Any control outside an open menu dismisses it (the opening event itself is excluded).
+        if self.menu.is_some()
+            && !node.starts_with("menu")
+            && !(verb == "lane.canvas" && is_context)
+        {
+            let keyboard = value.get("type").and_then(Value::as_str) == Some("key");
+            if !keyboard {
+                self.menu = None;
+            }
+        }
         match verb {
+            "menu" => {
+                if value.get("type").and_then(Value::as_str) == Some("key") {
+                    let key = value
+                        .get("key")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
+                    self.menu_key(&key);
+                } else {
+                    self.menu_activate(&arg);
+                }
+            }
             "nav" => {
                 if let Some(s) = Section::from_id(&arg) {
                     self.section = s;
@@ -955,6 +986,7 @@ impl State {
             "undo" => self.undo(),
             "redo" => self.redo(),
             "project" => match arg.as_str() {
+                "menu" => self.open_project_menu(8.0, 40.0),
                 "new" => self.new_project(),
                 "open" => self.open_project(),
                 "open_media" => self.open_media(false),
@@ -991,7 +1023,15 @@ impl State {
                 _ => {}
             },
             "lane" => self.lane(&arg, value),
-            "lane.canvas" => self.canvas_event(&arg, value),
+            "lane.canvas" => {
+                if is_context {
+                    let x = value.get("x").and_then(Value::as_f64).unwrap_or(0.0);
+                    let y = value.get("y").and_then(Value::as_f64).unwrap_or(0.0);
+                    self.lane_context(&arg, x, y);
+                } else {
+                    self.canvas_event(&arg, value);
+                }
+            }
             "track" => self.track(&arg, value),
             "chapter" => self.chapter(&arg, value),
             "cover" => match arg.as_str() {
@@ -1106,6 +1146,16 @@ impl State {
             }
             Some("key") if value.get("phase").and_then(Value::as_str) == Some("down") => {
                 let key = value.get("key").and_then(Value::as_str).unwrap_or("");
+                if key == "F10"
+                    && value
+                        .get("mods")
+                        .and_then(|m| m.get("shift"))
+                        .and_then(Value::as_bool)
+                        == Some(true)
+                {
+                    self.lane_context(track, 24.0, 30.0);
+                    return;
+                }
                 let mods = value.get("mods");
                 let shift = mods
                     .and_then(|m| m.get("shift"))
