@@ -1,0 +1,179 @@
+{
+  "id": "immich",
+  "name": "Immich",
+  "version": "1.0.0",
+  "category": "Library sources",
+  "kind": "app",
+  "sdk": "rust",
+  "provides": [
+    "library.source",
+    "preferences.page",
+    "asset.action",
+    "command",
+    "statusbar.item",
+    "modal"
+  ],
+  "description": "Browse an Immich server's photos in Pigeon (Immich / Annual / year / month), see server thumbnails, send local files to Immich and download originals into a local folder with checksum and metadata verification. Runs in its own process; uninstalling it removes its cache, catalogue and keychain entries.",
+  "author": "Pigeon",
+  "licence": "Apache-2.0",
+  "source": "Immich server HTTP API (https://immich.app); reqwest, rusqlite (bundled), image",
+  "ui": {
+    "protocol": 2,
+    "activation": "startup",
+    "contributions": [
+      {
+        "slot": "preferences.page",
+        "id": "settings",
+        "title": "Immich",
+        "icon": "cloud",
+        "order": 60
+      },
+      {
+        "slot": "library.source",
+        "id": "immich",
+        "title": "Immich",
+        "icon": "cloud",
+        "root": {"id": "root", "title": "Immich", "children": true},
+        "capabilities": [
+          "browse",
+          "upload",
+          "download",
+          "metadata_write",
+          "tags"
+        ]
+      },
+      {
+        "slot": "statusbar.item",
+        "id": "status",
+        "align": "right",
+        "order": 50
+      },
+      {
+        "slot": "modal",
+        "id": "transfer",
+        "title": "Verified Immich transfers",
+        "size": "medium",
+        "resizable": true,
+        "modal": true
+      },
+      {
+        "slot": "modal",
+        "id": "tag-picker",
+        "title": "Add Immich tag",
+        "size": "small",
+        "resizable": false,
+        "modal": true
+      },
+      {
+        "slot": "asset.action",
+        "id": "send",
+        "title": "Send to Immich",
+        "icon": "cloud-arrow-up",
+        "group": "Immich",
+        "applies_to": {
+          "kinds": [
+            "image",
+            "video",
+            "audio",
+            "document"
+          ],
+          "min": 1
+        },
+        "selection": "many"
+      },
+      {
+        "slot": "asset.action",
+        "id": "download",
+        "title": "Download original from Immich...",
+        "icon": "cloud-arrow-down",
+        "group": "Immich",
+        "applies_to": {
+          "kinds": [
+            "image"
+          ],
+          "min": 1
+        },
+        "selection": "many",
+        "source": "immich"
+      },
+      {
+        "slot": "asset.action",
+        "id": "tag",
+        "title": "Add Immich tag...",
+        "icon": "tag",
+        "group": "Immich",
+        "applies_to": {
+          "kinds": [
+            "image"
+          ],
+          "min": 1
+        },
+        "selection": "any",
+        "source": "immich"
+      },
+      {
+        "slot": "command",
+        "id": "sync",
+        "title": "Sync Immich now"
+      },
+      {
+        "slot": "command",
+        "id": "sync-collection",
+        "title": "Sync Immich and refresh thumbnails"
+      }
+    ],
+    "permissions": [
+      "library.read",
+      "library.write",
+      "secrets",
+      "dialogs",
+      "windows"
+    ]
+  },
+  "worker": {
+    "runtime": "native",
+    "entry": "run",
+    "protocol": 2,
+    "standalone": true,
+    "crate": "Cargo.toml",
+    "lockfile": "Cargo.lock",
+    "binary": "pigeon-immich",
+    "commands": {
+      "setup": "run --setup",
+      "health": "run --health",
+      "selfTest": "run --self-test",
+      "plugin": "run --plugin",
+      "uninstall": "run --uninstall"
+    }
+  },
+  "artifacts": [],
+  "files": [
+    {
+      "path": "plugin.json"
+    },
+    {
+      "path": "run",
+      "executable": true
+    },
+    {
+      "path": "Cargo.toml"
+    },
+    {
+      "path": "Cargo.lock"
+    },
+    {
+      "path": "src"
+    },
+    {
+      "path": "tests"
+    },
+    {
+      "path": "docs/immich-parity.md"
+    }
+  ],
+  "models": [],
+  "network": [
+    "the Immich server you configure (HTTPS recommended; HTTP exposes traffic to the local network)"
+  ],
+  "privacy": "Talks only to the Immich server you configure. Passwords are kept in the system keychain (or in memory for a session-only login) and never written to disk. Thumbnails and the catalogue are cached in this plugin's private data folder and removed by uninstalling it. Originals are downloaded only when you explicitly transfer them."
+}

@@ -1,0 +1,17 @@
+{
+  "language": "rust",
+  "sha256": "caa8c2fa0f7d3432ecefd67d0609be24da542373ad27bdfebae07736e796db7f",
+  "files": [
+    "Cargo.toml",
+    "src/canvas.rs",
+    "src/contribution.rs",
+    "src/lib.rs",
+    "src/protocol.rs",
+    "src/resources.rs",
+    "src/resources_tests.rs",
+    "src/runtime.rs",
+    "src/runtime_tests.rs",
+    "src/scene.rs",
+    "src/transport.rs"
+  ]
+}
