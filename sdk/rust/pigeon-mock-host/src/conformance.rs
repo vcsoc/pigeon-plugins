@@ -386,8 +386,9 @@ fn probe_slots(s: &Session, timeout: Duration) -> Result<Outcome, String> {
     }
     let mut verified = 0;
     for (id, slot) in slots {
-        // Toolbar and status-bar items may be command-only and do not promise a scene.
-        if !matches!(slot.as_str(), "workspace.view" | "sidebar.section" | "inspector.panel" | "preferences.page" | "modal") { continue; }
+        // Toolbar and status-bar items may be command-only, and a modal only exists once something opens it
+        // (window.open_modal with its props), so none of these promise a scene on a bare visibility probe.
+        if !matches!(slot.as_str(), "workspace.view" | "sidebar.section" | "inspector.panel" | "preferences.page") { continue; }
         let instance = format!("{}/{id}", s.manifest.id);
         let before = s.scene_revision(&instance);
         s.send(&Incoming::Resize { instance: instance.clone(), w: 960.0, h: 640.0, scale: 1.0 })?;

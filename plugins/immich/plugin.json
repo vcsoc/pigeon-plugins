@@ -6,12 +6,7 @@
   "kind": "app",
   "sdk": "rust",
   "provides": [
-    "library.source",
-    "preferences.page",
-    "asset.action",
-    "command",
-    "statusbar.item",
-    "modal"
+    "source"
   ],
   "description": "Browse an Immich server's photos in Pigeon (Immich / Annual / year / month), see server thumbnails, send local files to Immich and download originals into a local folder with checksum and metadata verification. Runs in its own process; uninstalling it removes its cache, catalogue and keychain entries.",
   "author": "Pigeon",
@@ -33,7 +28,11 @@
         "id": "immich",
         "title": "Immich",
         "icon": "cloud",
-        "root": {"id": "root", "title": "Immich", "children": true},
+        "root": {
+          "id": "root",
+          "title": "Immich",
+          "children": true
+        },
         "capabilities": [
           "browse",
           "upload",
@@ -156,24 +155,22 @@
       "executable": true
     },
     {
-      "path": "Cargo.toml"
-    },
-    {
-      "path": "Cargo.lock"
-    },
-    {
-      "path": "src"
-    },
-    {
-      "path": "tests"
-    },
-    {
-      "path": "docs/immich-parity.md"
+      "path": "source.tar.gz",
+      "role": "source"
     }
   ],
   "models": [],
   "network": [
     "the Immich server you configure (HTTPS recommended; HTTP exposes traffic to the local network)"
   ],
-  "privacy": "Talks only to the Immich server you configure. Passwords are kept in the system keychain (or in memory for a session-only login) and never written to disk. Thumbnails and the catalogue are cached in this plugin's private data folder and removed by uninstalling it. Originals are downloaded only when you explicitly transfer them."
+  "privacy": "Talks only to the Immich server you configure. Passwords are kept in the system keychain (or in memory for a session-only login) and never written to disk. Thumbnails and the catalogue are cached in this plugin's private data folder and removed by uninstalling it. Originals are downloaded only when you explicitly transfer them.",
+  "sourceArchive": {
+    "file": "source.tar.gz",
+    "include": [
+      "Cargo.toml",
+      "Cargo.lock",
+      "src",
+      "vendor"
+    ]
+  }
 }

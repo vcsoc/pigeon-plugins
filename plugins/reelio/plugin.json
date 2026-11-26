@@ -26,51 +26,262 @@
     }
   },
   "files": [
-    {"path": "plugin.json"},
-    {"path": "run", "executable": true},
-    {"path": "Cargo.toml"},
-    {"path": "Cargo.lock"},
-    {"path": "crates"},
-    {"path": "vendor"}
+    {
+      "path": "plugin.json"
+    },
+    {
+      "path": "run",
+      "executable": true
+    },
+    {
+      "path": "source.tar.gz",
+      "role": "source"
+    }
   ],
   "ui": {
     "protocol": 2,
     "activation": "visible",
     "contributions": [
-      {"slot": "sidebar.entry", "id": "nav", "title": "Reelio", "icon": "film", "order": 40, "opens": "main"},
-      {"slot": "workspace.view", "id": "main", "title": "Reelio", "icon": "film"},
-      {"slot": "inspector.panel", "id": "summary", "title": "Poster / cover", "icon": "image", "order": 10},
-      {"slot": "inspector.panel", "id": "project", "title": "Project tools", "icon": "sliders", "order": 20},
-      {"slot": "asset.action", "id": "open-in-reelio", "title": "Open in Reelio", "icon": "film", "applies_to": {"kinds": ["video", "audio"], "min": 1}, "selection": "one", "group": "open"},
-      {"slot": "asset.action", "id": "add-to-reelio", "title": "Add to Reelio project", "icon": "plus", "applies_to": {"kinds": ["video", "audio", "document", "image"], "min": 1}, "selection": "any", "group": "project"},
-      {"slot": "drop.target", "id": "cover-drop", "accepts": ["files"], "where": "cover:preview"},
-      {"slot": "preferences.page", "id": "prefs", "title": "Reelio", "icon": "film", "order": 50},
-      {"slot": "modal", "id": "settings", "title": "Preferences", "size": "medium", "resizable": false, "modal": true},
-      {"slot": "modal", "id": "about", "title": "About Reelio", "size": "small", "resizable": false, "modal": true},
-      {"slot": "modal", "id": "quit", "title": "Close Reelio?", "size": "small", "resizable": false, "modal": true},
-      {"slot": "modal", "id": "dependencies", "title": "Required components", "size": "medium", "resizable": false, "modal": true},
-      {"slot": "modal", "id": "restore", "title": "Restore export settings", "size": "small", "resizable": false, "modal": true},
-      {"slot": "modal", "id": "export_review", "title": "Export review", "size": "medium", "resizable": true, "modal": true},
-      {"slot": "modal", "id": "consent", "title": "Reelio confirmation", "size": "medium", "resizable": false, "modal": true},
-      {"slot": "modal", "id": "download", "title": "Download", "size": "small", "resizable": false, "modal": true},
-      {"slot": "command", "id": "project.new", "title": "New project", "shortcut": "Ctrl+N"},
-      {"slot": "command", "id": "project.open", "title": "Open project", "shortcut": "Ctrl+Shift+O"},
-      {"slot": "command", "id": "project.open_media", "title": "Open media", "shortcut": "Ctrl+O"},
-      {"slot": "command", "id": "project.save", "title": "Save project", "shortcut": "Ctrl+S"},
-      {"slot": "command", "id": "project.quit", "title": "Quit Reelio", "shortcut": "Ctrl+W"},
-      {"slot": "command", "id": "export.validate", "title": "Validate export", "shortcut": "Ctrl+E"},
-      {"slot": "command", "id": "edit.undo", "title": "Undo", "shortcut": "Ctrl+Z"},
-      {"slot": "command", "id": "edit.redo", "title": "Redo", "shortcut": "Ctrl+Shift+Z"},
-      {"slot": "command", "id": "view.toggle_play", "title": "Play or pause preview", "shortcut": "Space"},
-      {"slot": "command", "id": "view.chapter_prev", "title": "Previous chapter", "shortcut": "Alt+Left"},
-      {"slot": "command", "id": "view.chapter_next", "title": "Next chapter", "shortcut": "Alt+Right"}
+      {
+        "slot": "sidebar.entry",
+        "id": "nav",
+        "title": "Reelio",
+        "icon": "film",
+        "order": 40,
+        "opens": "main"
+      },
+      {
+        "slot": "workspace.view",
+        "id": "main",
+        "title": "Reelio",
+        "icon": "film"
+      },
+      {
+        "slot": "inspector.panel",
+        "id": "summary",
+        "title": "Poster / cover",
+        "icon": "image",
+        "order": 10
+      },
+      {
+        "slot": "inspector.panel",
+        "id": "project",
+        "title": "Project tools",
+        "icon": "sliders",
+        "order": 20
+      },
+      {
+        "slot": "asset.action",
+        "id": "open-in-reelio",
+        "title": "Open in Reelio",
+        "icon": "film",
+        "applies_to": {
+          "kinds": [
+            "video",
+            "audio"
+          ],
+          "min": 1
+        },
+        "selection": "one",
+        "group": "open"
+      },
+      {
+        "slot": "asset.action",
+        "id": "add-to-reelio",
+        "title": "Add to Reelio project",
+        "icon": "plus",
+        "applies_to": {
+          "kinds": [
+            "video",
+            "audio",
+            "document",
+            "image"
+          ],
+          "min": 1
+        },
+        "selection": "any",
+        "group": "project"
+      },
+      {
+        "slot": "drop.target",
+        "id": "cover-drop",
+        "accepts": [
+          "files"
+        ],
+        "where": "cover:preview"
+      },
+      {
+        "slot": "preferences.page",
+        "id": "prefs",
+        "title": "Reelio",
+        "icon": "film",
+        "order": 50
+      },
+      {
+        "slot": "modal",
+        "id": "settings",
+        "title": "Preferences",
+        "size": "medium",
+        "resizable": false,
+        "modal": true
+      },
+      {
+        "slot": "modal",
+        "id": "about",
+        "title": "About Reelio",
+        "size": "small",
+        "resizable": false,
+        "modal": true
+      },
+      {
+        "slot": "modal",
+        "id": "quit",
+        "title": "Close Reelio?",
+        "size": "small",
+        "resizable": false,
+        "modal": true
+      },
+      {
+        "slot": "modal",
+        "id": "dependencies",
+        "title": "Required components",
+        "size": "medium",
+        "resizable": false,
+        "modal": true
+      },
+      {
+        "slot": "modal",
+        "id": "restore",
+        "title": "Restore export settings",
+        "size": "small",
+        "resizable": false,
+        "modal": true
+      },
+      {
+        "slot": "modal",
+        "id": "export_review",
+        "title": "Export review",
+        "size": "medium",
+        "resizable": true,
+        "modal": true
+      },
+      {
+        "slot": "modal",
+        "id": "consent",
+        "title": "Reelio confirmation",
+        "size": "medium",
+        "resizable": false,
+        "modal": true
+      },
+      {
+        "slot": "modal",
+        "id": "download",
+        "title": "Download",
+        "size": "small",
+        "resizable": false,
+        "modal": true
+      },
+      {
+        "slot": "command",
+        "id": "project.new",
+        "title": "New project",
+        "shortcut": "Ctrl+N"
+      },
+      {
+        "slot": "command",
+        "id": "project.open",
+        "title": "Open project",
+        "shortcut": "Ctrl+Shift+O"
+      },
+      {
+        "slot": "command",
+        "id": "project.open_media",
+        "title": "Open media",
+        "shortcut": "Ctrl+O"
+      },
+      {
+        "slot": "command",
+        "id": "project.save",
+        "title": "Save project",
+        "shortcut": "Ctrl+S"
+      },
+      {
+        "slot": "command",
+        "id": "project.quit",
+        "title": "Quit Reelio",
+        "shortcut": "Ctrl+W"
+      },
+      {
+        "slot": "command",
+        "id": "export.validate",
+        "title": "Validate export",
+        "shortcut": "Ctrl+E"
+      },
+      {
+        "slot": "command",
+        "id": "edit.undo",
+        "title": "Undo",
+        "shortcut": "Ctrl+Z"
+      },
+      {
+        "slot": "command",
+        "id": "edit.redo",
+        "title": "Redo",
+        "shortcut": "Ctrl+Shift+Z"
+      },
+      {
+        "slot": "command",
+        "id": "view.toggle_play",
+        "title": "Play or pause preview",
+        "shortcut": "Space"
+      },
+      {
+        "slot": "command",
+        "id": "view.chapter_prev",
+        "title": "Previous chapter",
+        "shortcut": "Alt+Left"
+      },
+      {
+        "slot": "command",
+        "id": "view.chapter_next",
+        "title": "Next chapter",
+        "shortcut": "Alt+Right"
+      }
     ],
     "theme_override": {
-      "bg": "#18191b", "bg_panel": "#202123", "bg_raised": "#272a36", "bg_input": "#191b23",
-      "fg": "#e8eaf0", "fg_weak": "#8f95a6", "accent": "#5688ff", "accent_fg": "#b9ccff",
-      "danger": "#f16d7a", "warning": "#e6bd79", "success": "#8bd3ac", "border": "#2b2e35",
-      "hover": "#2b2e35", "selection": "#34394c", "focus_ring": "#5688ff"
+      "bg": "#18191b",
+      "bg_panel": "#202123",
+      "bg_raised": "#272a36",
+      "bg_input": "#191b23",
+      "fg": "#e8eaf0",
+      "fg_weak": "#8f95a6",
+      "accent": "#5688ff",
+      "accent_fg": "#b9ccff",
+      "danger": "#f16d7a",
+      "warning": "#e6bd79",
+      "success": "#8bd3ac",
+      "border": "#2b2e35",
+      "hover": "#2b2e35",
+      "selection": "#34394c",
+      "focus_ring": "#5688ff"
     },
-    "permissions": ["selection", "library.read", "library.write", "dialogs", "shell", "windows"]
+    "permissions": [
+      "selection",
+      "library.read",
+      "library.write",
+      "dialogs",
+      "shell",
+      "windows"
+    ]
+  },
+  "sourceArchive": {
+    "file": "source.tar.gz",
+    "include": [
+      "plugin.json",
+      "Cargo.toml",
+      "Cargo.lock",
+      "crates",
+      "vendor"
+    ]
   }
 }

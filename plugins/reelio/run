@@ -9,6 +9,20 @@ set -eu
 HERE=$(cd "$(dirname "$0")" && pwd -P)
 DATA=${PIGEON_PLUGIN_DATA:-$HERE/.data}
 ARTIFACT="$HERE/bin/reelio"
+fail() { printf '{"ok":false,"error":"%s"}\n' "$1"; exit 1; }
+# Source tree: this folder when it holds the sources (repository checkout), otherwise the archive the
+# catalogue installs (source.tar.gz), unpacked once into the plugin's data folder.
+source_dir() {
+  if [ -f "$HERE/Cargo.toml" ]; then echo "$HERE"; return 0; fi
+  SRC="$DATA/src"
+  if [ ! -f "$SRC/Cargo.toml" ] || [ "$HERE/source.tar.gz" -nt "$SRC/Cargo.toml" ]; then
+    [ -f "$HERE/source.tar.gz" ] || fail "the plugin source archive is missing"
+    rm -rf "$SRC"; mkdir -p "$SRC"
+    tar -xzf "$HERE/source.tar.gz" -C "$SRC" || fail "unpacking the plugin source failed"
+  fi
+  echo "$SRC"
+}
+
 TARGET=${CARGO_TARGET_DIR:-$DATA/target}
 BIN="$ARTIFACT"
 [ -x "$BIN" ] || BIN="$TARGET/release/reelio"
@@ -21,7 +35,8 @@ case "${1:-}" in
         printf '{"ok":false,"error":"reelio binary missing and cargo not found"}\n'
         exit 1
       fi
-      CARGO_TARGET_DIR="$TARGET" cargo build --release --quiet --manifest-path "$HERE/Cargo.toml" -p reelio-app >&2
+      SRC_DIR=$(source_dir)
+      CARGO_TARGET_DIR="$TARGET" cargo build --release --quiet --locked --manifest-path "$SRC_DIR/Cargo.toml" -p reelio-app >&2 || fail "building the Reelio plugin with cargo failed"
     fi
     mkdir -p "$DATA"
     "$BIN" --setup
@@ -33,6 +48,13 @@ case "${1:-}" in
       exit 1
     fi
     exec "$BIN" "$@"
+    ;;
+  --health)
+    if [ -f "$DATA/setup.ok" ] && [ -x "$BIN" ]; then
+      printf '{"version":1,"ok":true,"ready":true}\n'
+    else
+      printf '{"version":1,"ok":false,"ready":false,"error":"not set up: run the plugin with --setup"}\n'; exit 1
+    fi
     ;;
   --version|--uninstall)
     if [ -x "$BIN" ]; then exec "$BIN" "$@"; fi

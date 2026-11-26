@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from urllib.parse import urlsplit
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 ROOT = Path(__file__).resolve().parent.parent
 ID = re.compile(r"^[a-z0-9][a-z0-9-]{1,40}$")
 HEX = re.compile(r"^[0-9a-f]{64}$")
@@ -146,9 +147,20 @@ def build():
             listed[path] = f
         if protocol == 2 or m["worker"].get("standalone"):
             check_standalone(name, folder, m, listed)
+        spec = m.get("sourceArchive")
+        if spec:
+            # A native plugin installs as plugin.json + run + one source archive (which already holds
+            # the vendored SDK); the archive must be current and listed.
+            if spec["file"] not in listed:
+                fail(name, f"sourceArchive file '{spec['file']}' must be listed in files")
+            import pack_source
+            target = folder / spec["file"]
+            if not target.exists() or target.read_bytes() != pack_source.build(folder, spec["include"]):
+                fail(name, "source archive is stale: run scripts/pack_source.py")
         if protocol == 2:
-            for f in sdk_files(folder, m["sdk"]):
-                listed.setdefault(f["path"], f)
+            for f in sdk_files(folder, m["sdk"]):        # also verifies the vendored copy against its stamp
+                if not spec:
+                    listed.setdefault(f["path"], f)
         files = []
         for path, f in listed.items():
             p = (folder / path).resolve()

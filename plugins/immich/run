@@ -58,9 +58,23 @@ PY
   echo installed
 }
 
+# Source tree: this folder when it holds the sources (repository checkout), otherwise the archive the
+# catalogue installs (source.tar.gz), unpacked once into the plugin's data folder.
+source_dir() {
+  if [ -f "$HERE/Cargo.toml" ]; then echo "$HERE"; return 0; fi
+  SRC="$DATA/src"
+  if [ ! -f "$SRC/Cargo.toml" ] || [ "$HERE/source.tar.gz" -nt "$SRC/Cargo.toml" ]; then
+    [ -f "$HERE/source.tar.gz" ] || fail "the plugin source archive is missing"
+    rm -rf "$SRC"; mkdir -p "$SRC"
+    tar -xzf "$HERE/source.tar.gz" -C "$SRC" || fail "unpacking the plugin source failed"
+  fi
+  echo "$SRC"
+}
+
 build_from_source() {
   command -v cargo >/dev/null 2>&1 || fail "cargo (Rust) is required to build the Immich plugin from source"
-  cargo build --release --locked --manifest-path "$HERE/Cargo.toml" --target-dir "$DATA/target" >&2 \
+  SRC_DIR=$(source_dir)
+  cargo build --release --locked --manifest-path "$SRC_DIR/Cargo.toml" --target-dir "$DATA/target" >&2 \
     || fail "building the Immich plugin with cargo failed"
   mkdir -p "$BIN_DIR"
   cp "$DATA/target/release/pigeon-immich" "$BIN"

@@ -789,7 +789,11 @@ fn handle_service_request(shared: &Arc<Shared>, req: Value) {
         shared.cond.notify_all();
     }
     if let Err(e) = write_to_plugin(&shared.stdin, &line) {
-        record_violation(shared, Violation { path: "/mock".into(), message: format!("cannot answer {method}: {e}") }, "");
+        // A plugin that has already exited (crash tests kill it deliberately) cannot receive a reply; that is
+        // the plugin's end of life, not a protocol violation.
+        if !e.to_string().contains("Broken pipe") {
+            record_violation(shared, Violation { path: "/mock".into(), message: format!("cannot answer {method}: {e}") }, "");
+        }
     }
 }
 

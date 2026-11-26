@@ -4,9 +4,12 @@
     {
       "id": "ai-background-removal",
       "name": "AI Background Removal",
-      "version": "1.1.1",
+      "version": "2.0.0",
       "category": "Image editing",
-      "kind": "editor-worker",
+      "kind": "app",
+      "provides": [
+        "ops"
+      ],
       "description": "Remove the background from a saved image with U2-Net-P, entirely offline once the 4.5 MB model is downloaded. A preview must be accepted before anything is saved.",
       "author": "Pigeon",
       "licence": "Apache-2.0",
@@ -18,7 +21,7 @@
         "runtime": "python3",
         "python": ">=3.10,<3.14",
         "entry": "run",
-        "protocol": 1,
+        "protocol": 2,
         "standalone": true,
         "requires": [
           "numpy",
@@ -30,35 +33,83 @@
           "setup": "run --setup",
           "health": "run --health [--verify]",
           "selfTest": "run --self-test",
-          "request": "run  (JSON on stdin)"
+          "request": "run  (JSON on stdin)",
+          "plugin": "run --plugin",
+          "uninstall": "run --uninstall"
         }
       },
+      "sdk": "python",
       "files": [
         {
           "path": "plugin.json",
-          "bytes": 1810,
-          "sha256": "8b083a17b1ac7c21b38d55f81fc0db60b60707652772e046b168385421c8cceb"
+          "bytes": 2976,
+          "sha256": "71a73cfd3c799d8a83519e6a8a06148e90e835b6b5f0ca6fdbe699c1af8b4d82"
         },
         {
           "path": "run",
           "executable": true,
-          "bytes": 2717,
-          "sha256": "d770e0176016fac713411518ffe0d00142f59ca816f0654c766d1cef03152e0c"
+          "bytes": 3590,
+          "sha256": "0df7e2cd4a887cb763324604ccf1f7453e033f97840b258f996ffe0d37d21eca"
         },
         {
           "path": "plugin_runtime.py",
-          "bytes": 12134,
-          "sha256": "78c55e5cc3e972d3927a6d10242be1b704779b93863daf153f4af311b6dfcaf4"
+          "bytes": 13815,
+          "sha256": "ba10df55c50bdd4434babe0bf7434cc666a92dafbf1a41337397c3ca71561b4c"
         },
         {
           "path": "worker.py",
-          "bytes": 2482,
-          "sha256": "c4e0fcffb6b5fbcaf3245b73a2f15c1d72c3a8d2f561ae5c871cd61102faba2d"
+          "bytes": 2789,
+          "sha256": "63c934643e31de231c04f8fc89cfa6d27654e514801c8d5ff6a2fa35144aee7b"
+        },
+        {
+          "path": "ui.py",
+          "bytes": 1106,
+          "sha256": "7d25d5c5fb60d7d0784d5fe19a3e13e440770d7e124341eee207af184262d3bc"
+        },
+        {
+          "path": "ui_support.py",
+          "bytes": 38233,
+          "sha256": "49a5979de007fb562b6b4cdc19747036e0990b038fc5cd8f7cb6883f7723586c"
         },
         {
           "path": "requirements.txt",
           "bytes": 46,
           "sha256": "dacd4078831dd7f0d1cace128ad08d461904cadf93f65e605d95549aaea927fb"
+        },
+        {
+          "path": "pigeon_plugin/__init__.py",
+          "bytes": 1572,
+          "sha256": "664ef0bd7892ba60879451da9b9e5b668a6ce9944117a4345ce1d2cedc2ba715"
+        },
+        {
+          "path": "pigeon_plugin/contribution.py",
+          "bytes": 3058,
+          "sha256": "92d5a0f2dae6c5c7e59e30d772cfba9970984775dd868808e429a92cbf76447b"
+        },
+        {
+          "path": "pigeon_plugin/draw.py",
+          "bytes": 3653,
+          "sha256": "8e7c753d98942ba4fae2588c10959440523049184f0f77bf65fd7569a65a181f"
+        },
+        {
+          "path": "pigeon_plugin/protocol.py",
+          "bytes": 1704,
+          "sha256": "ddc45a42c8624ffd65b60de2c99291a58830c713eaa176e735eb13addbb3ae68"
+        },
+        {
+          "path": "pigeon_plugin/runtime.py",
+          "bytes": 24012,
+          "sha256": "0045949c1be3a075c3d3eb768ef946278367f6f9a184ef993393dbf5dff71f46"
+        },
+        {
+          "path": "pigeon_plugin/scene.py",
+          "bytes": 12308,
+          "sha256": "55197e85972a9fa1649a90fc74cac9d95f3afb48ff305bbe2c52be0f8104f584"
+        },
+        {
+          "path": "pigeon_plugin/SDK_SOURCE.json",
+          "bytes": 234,
+          "sha256": "2e315ee92134819640cb66e75a8e15fb0030613c3ef3bd4ba5094c33281f52f8"
         }
       ],
       "models": [
@@ -80,15 +131,66 @@
         "release-assets.githubusercontent.com"
       ],
       "privacy": "Setup downloads the Python packages and model files once. Images and prompts are processed locally and never sent anywhere.",
+      "ui": {
+        "protocol": 2,
+        "activation": "visible",
+        "contributions": [
+          {
+            "slot": "inspector.panel",
+            "id": "panel",
+            "title": "AI Background Removal",
+            "icon": "scissors",
+            "order": 61,
+            "applies_to": {
+              "kinds": [
+                "image"
+              ],
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "slot": "asset.action",
+            "id": "open",
+            "title": "Remove background with AI\u2026",
+            "icon": "scissors",
+            "applies_to": {
+              "kinds": [
+                "image"
+              ],
+              "min": 1,
+              "max": 1
+            },
+            "selection": "one",
+            "group": "AI"
+          },
+          {
+            "slot": "modal",
+            "id": "tool",
+            "title": "AI Background Removal",
+            "size": "medium",
+            "resizable": true,
+            "modal": false
+          }
+        ],
+        "permissions": [
+          "selection",
+          "library.write",
+          "windows"
+        ]
+      },
       "path": "plugins/ai-background-removal",
       "approved": true
     },
     {
       "id": "ai-enlarge",
       "name": "AI Image Enlarger",
-      "version": "1.1.1",
+      "version": "2.0.0",
       "category": "Image editing",
-      "kind": "editor-worker",
+      "kind": "app",
+      "provides": [
+        "ops"
+      ],
       "description": "Offline 3x image enlargement with a sub-pixel convolutional neural network. The model is tiny (235 KB) and ships inside the plugin; only Python packages are installed once, at setup.",
       "author": "Pigeon",
       "licence": "Apache-2.0",
@@ -100,7 +202,7 @@
         "runtime": "python3",
         "python": ">=3.10,<3.14",
         "entry": "run",
-        "protocol": 1,
+        "protocol": 2,
         "standalone": true,
         "requires": [
           "numpy",
@@ -112,30 +214,43 @@
           "setup": "run --setup",
           "health": "run --health [--verify]",
           "selfTest": "run --self-test",
-          "request": "run  (JSON on stdin)"
+          "request": "run  (JSON on stdin)",
+          "plugin": "run --plugin",
+          "uninstall": "run --uninstall"
         }
       },
+      "sdk": "python",
       "files": [
         {
           "path": "plugin.json",
-          "bytes": 1449,
-          "sha256": "049ee5af8105dfb7b1b43be999e9be195a2ec542dc1c71c4bbd2155ae45a4d91"
+          "bytes": 2623,
+          "sha256": "a91d1d979f6aff403e9734545523de96d025bf4019ea23571b8432499aa6f368"
         },
         {
           "path": "run",
           "executable": true,
-          "bytes": 2717,
-          "sha256": "d770e0176016fac713411518ffe0d00142f59ca816f0654c766d1cef03152e0c"
+          "bytes": 3590,
+          "sha256": "0df7e2cd4a887cb763324604ccf1f7453e033f97840b258f996ffe0d37d21eca"
         },
         {
           "path": "plugin_runtime.py",
-          "bytes": 12134,
-          "sha256": "78c55e5cc3e972d3927a6d10242be1b704779b93863daf153f4af311b6dfcaf4"
+          "bytes": 13815,
+          "sha256": "ba10df55c50bdd4434babe0bf7434cc666a92dafbf1a41337397c3ca71561b4c"
         },
         {
           "path": "worker.py",
-          "bytes": 3387,
-          "sha256": "12f4416db7254f1d2ef61243ba4805e7c3ca111050c6cbff60cada5a996ceb29"
+          "bytes": 3650,
+          "sha256": "ecbd587f820ecf170f234b177811d2ce88a084bb7aa2c31ea3290157aea12e5e"
+        },
+        {
+          "path": "ui.py",
+          "bytes": 1668,
+          "sha256": "169d99557258da34c657ee8b641cfe35d3054491bc27d9ff34180cac1299de3e"
+        },
+        {
+          "path": "ui_support.py",
+          "bytes": 38233,
+          "sha256": "49a5979de007fb562b6b4cdc19747036e0990b038fc5cd8f7cb6883f7723586c"
         },
         {
           "path": "requirements.txt",
@@ -147,6 +262,41 @@
           "role": "model",
           "bytes": 240078,
           "sha256": "85f36ff88cc504a24af5e0602148bc56a8aa09a58eca8c0da2756f3e8186035e"
+        },
+        {
+          "path": "pigeon_plugin/__init__.py",
+          "bytes": 1572,
+          "sha256": "664ef0bd7892ba60879451da9b9e5b668a6ce9944117a4345ce1d2cedc2ba715"
+        },
+        {
+          "path": "pigeon_plugin/contribution.py",
+          "bytes": 3058,
+          "sha256": "92d5a0f2dae6c5c7e59e30d772cfba9970984775dd868808e429a92cbf76447b"
+        },
+        {
+          "path": "pigeon_plugin/draw.py",
+          "bytes": 3653,
+          "sha256": "8e7c753d98942ba4fae2588c10959440523049184f0f77bf65fd7569a65a181f"
+        },
+        {
+          "path": "pigeon_plugin/protocol.py",
+          "bytes": 1704,
+          "sha256": "ddc45a42c8624ffd65b60de2c99291a58830c713eaa176e735eb13addbb3ae68"
+        },
+        {
+          "path": "pigeon_plugin/runtime.py",
+          "bytes": 24012,
+          "sha256": "0045949c1be3a075c3d3eb768ef946278367f6f9a184ef993393dbf5dff71f46"
+        },
+        {
+          "path": "pigeon_plugin/scene.py",
+          "bytes": 12308,
+          "sha256": "55197e85972a9fa1649a90fc74cac9d95f3afb48ff305bbe2c52be0f8104f584"
+        },
+        {
+          "path": "pigeon_plugin/SDK_SOURCE.json",
+          "bytes": 234,
+          "sha256": "2e315ee92134819640cb66e75a8e15fb0030613c3ef3bd4ba5094c33281f52f8"
         }
       ],
       "models": [],
@@ -155,15 +305,66 @@
         "pypi.org"
       ],
       "privacy": "Runs entirely on this computer. Images are never sent anywhere. Setup installs Python packages from PyPI once.",
+      "ui": {
+        "protocol": 2,
+        "activation": "visible",
+        "contributions": [
+          {
+            "slot": "inspector.panel",
+            "id": "panel",
+            "title": "AI Image Enlarger",
+            "icon": "magnifying-glass-plus",
+            "order": 60,
+            "applies_to": {
+              "kinds": [
+                "image"
+              ],
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "slot": "asset.action",
+            "id": "open",
+            "title": "Enlarge with AI\u2026",
+            "icon": "magnifying-glass-plus",
+            "applies_to": {
+              "kinds": [
+                "image"
+              ],
+              "min": 1,
+              "max": 1
+            },
+            "selection": "one",
+            "group": "AI"
+          },
+          {
+            "slot": "modal",
+            "id": "tool",
+            "title": "AI Image Enlarger",
+            "size": "medium",
+            "resizable": true,
+            "modal": false
+          }
+        ],
+        "permissions": [
+          "selection",
+          "library.write",
+          "windows"
+        ]
+      },
       "path": "plugins/ai-enlarge",
       "approved": true
     },
     {
       "id": "ai-image-expand",
       "name": "AI Image Expand",
-      "version": "1.1.1",
+      "version": "2.0.0",
       "category": "Image editing",
-      "kind": "editor-worker",
+      "kind": "app",
+      "provides": [
+        "ops"
+      ],
       "description": "Enlarge the canvas and the model paints in the new border (outpainting). Uses MI-GAN, a 28 MB inpainting model, so it is fast on CPU. Your original pixels are never altered. The result must be accepted before it is saved as a derivative.",
       "author": "Pigeon",
       "licence": "MIT",
@@ -175,7 +376,7 @@
         "runtime": "python3",
         "python": ">=3.10,<3.14",
         "entry": "run",
-        "protocol": 1,
+        "protocol": 2,
         "standalone": true,
         "requires": [
           "numpy",
@@ -187,35 +388,83 @@
           "setup": "run --setup",
           "health": "run --health [--verify]",
           "selfTest": "run --self-test",
-          "request": "run  (JSON on stdin)"
+          "request": "run  (JSON on stdin)",
+          "plugin": "run --plugin",
+          "uninstall": "run --uninstall"
         }
       },
+      "sdk": "python",
       "files": [
         {
           "path": "plugin.json",
-          "bytes": 1960,
-          "sha256": "cbe7fff275e78bf00bcf516e175532b4d43ed27816cbba5ae6a78909f13e0121"
+          "bytes": 3119,
+          "sha256": "0969117a905434b52f87897778e8c0f4d877a6bc923b1ae3b9ce633c20118113"
         },
         {
           "path": "run",
           "executable": true,
-          "bytes": 2717,
-          "sha256": "d770e0176016fac713411518ffe0d00142f59ca816f0654c766d1cef03152e0c"
+          "bytes": 3590,
+          "sha256": "0df7e2cd4a887cb763324604ccf1f7453e033f97840b258f996ffe0d37d21eca"
         },
         {
           "path": "plugin_runtime.py",
-          "bytes": 12134,
-          "sha256": "78c55e5cc3e972d3927a6d10242be1b704779b93863daf153f4af311b6dfcaf4"
+          "bytes": 13815,
+          "sha256": "ba10df55c50bdd4434babe0bf7434cc666a92dafbf1a41337397c3ca71561b4c"
         },
         {
           "path": "worker.py",
-          "bytes": 7445,
-          "sha256": "68dad8241cba9b60f6ad696f030e4194985c486a29e9ca9d8ca8f6c6a0200fe8"
+          "bytes": 7775,
+          "sha256": "703cdc84b3bd30c8bb285d7d8ecb1d603521765fcb3954da47d23077c82ba23a"
+        },
+        {
+          "path": "ui.py",
+          "bytes": 862,
+          "sha256": "6355776a6f0bbf6d30f0438e4e3920e8336f0709684e34fa9bfb94ea6cd323ee"
+        },
+        {
+          "path": "ui_support.py",
+          "bytes": 38233,
+          "sha256": "49a5979de007fb562b6b4cdc19747036e0990b038fc5cd8f7cb6883f7723586c"
         },
         {
           "path": "requirements.txt",
           "bytes": 46,
           "sha256": "dacd4078831dd7f0d1cace128ad08d461904cadf93f65e605d95549aaea927fb"
+        },
+        {
+          "path": "pigeon_plugin/__init__.py",
+          "bytes": 1572,
+          "sha256": "664ef0bd7892ba60879451da9b9e5b668a6ce9944117a4345ce1d2cedc2ba715"
+        },
+        {
+          "path": "pigeon_plugin/contribution.py",
+          "bytes": 3058,
+          "sha256": "92d5a0f2dae6c5c7e59e30d772cfba9970984775dd868808e429a92cbf76447b"
+        },
+        {
+          "path": "pigeon_plugin/draw.py",
+          "bytes": 3653,
+          "sha256": "8e7c753d98942ba4fae2588c10959440523049184f0f77bf65fd7569a65a181f"
+        },
+        {
+          "path": "pigeon_plugin/protocol.py",
+          "bytes": 1704,
+          "sha256": "ddc45a42c8624ffd65b60de2c99291a58830c713eaa176e735eb13addbb3ae68"
+        },
+        {
+          "path": "pigeon_plugin/runtime.py",
+          "bytes": 24012,
+          "sha256": "0045949c1be3a075c3d3eb768ef946278367f6f9a184ef993393dbf5dff71f46"
+        },
+        {
+          "path": "pigeon_plugin/scene.py",
+          "bytes": 12308,
+          "sha256": "55197e85972a9fa1649a90fc74cac9d95f3afb48ff305bbe2c52be0f8104f584"
+        },
+        {
+          "path": "pigeon_plugin/SDK_SOURCE.json",
+          "bytes": 234,
+          "sha256": "2e315ee92134819640cb66e75a8e15fb0030613c3ef3bd4ba5094c33281f52f8"
         }
       ],
       "models": [
@@ -238,15 +487,66 @@
         "pypi.org"
       ],
       "privacy": "Setup downloads the Python packages and model files once. Images and prompts are processed locally and never sent anywhere.",
+      "ui": {
+        "protocol": 2,
+        "activation": "visible",
+        "contributions": [
+          {
+            "slot": "inspector.panel",
+            "id": "panel",
+            "title": "AI Image Expand",
+            "icon": "frame-corners",
+            "order": 63,
+            "applies_to": {
+              "kinds": [
+                "image"
+              ],
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "slot": "asset.action",
+            "id": "open",
+            "title": "Expand canvas with AI\u2026",
+            "icon": "frame-corners",
+            "applies_to": {
+              "kinds": [
+                "image"
+              ],
+              "min": 1,
+              "max": 1
+            },
+            "selection": "one",
+            "group": "AI"
+          },
+          {
+            "slot": "modal",
+            "id": "tool",
+            "title": "AI Image Expand",
+            "size": "large",
+            "resizable": true,
+            "modal": false
+          }
+        ],
+        "permissions": [
+          "selection",
+          "library.write",
+          "windows"
+        ]
+      },
       "path": "plugins/ai-image-expand",
       "approved": true
     },
     {
       "id": "ai-image-expand-diffusion",
       "name": "AI Image Expand (Diffusion)",
-      "version": "1.1.1",
+      "version": "2.0.0",
       "category": "Image editing",
-      "kind": "editor-worker",
+      "kind": "app",
+      "provides": [
+        "ops"
+      ],
       "description": "Enlarge the canvas by any amount and Stable Diffusion 1.5 Inpainting paints in the new border at full resolution, continuing the scene. About 2.1 GB of models, runs offline on CPU and is slow (minutes to hours for large images). Your original pixels are never altered. The result must be accepted before it is saved as a derivative.",
       "author": "Pigeon",
       "licence": "CreativeML OpenRAIL-M",
@@ -258,7 +558,7 @@
         "runtime": "python3",
         "python": ">=3.10,<3.14",
         "entry": "run",
-        "protocol": 1,
+        "protocol": 2,
         "standalone": true,
         "requires": [
           "numpy",
@@ -270,30 +570,43 @@
           "setup": "run --setup",
           "health": "run --health [--verify]",
           "selfTest": "run --self-test",
-          "request": "run  (JSON on stdin)"
+          "request": "run  (JSON on stdin)",
+          "plugin": "run --plugin",
+          "uninstall": "run --uninstall"
         }
       },
+      "sdk": "python",
       "files": [
         {
           "path": "plugin.json",
-          "bytes": 4373,
-          "sha256": "04de7e953bba9b010794de820c54ce4fab60011eb6680841552a987175ecda66"
+          "bytes": 5566,
+          "sha256": "6ba78e3eb807806c8117d53b5808ee5e6e865dd89735eda115b1dfb04583f527"
         },
         {
           "path": "run",
           "executable": true,
-          "bytes": 2717,
-          "sha256": "d770e0176016fac713411518ffe0d00142f59ca816f0654c766d1cef03152e0c"
+          "bytes": 3590,
+          "sha256": "0df7e2cd4a887cb763324604ccf1f7453e033f97840b258f996ffe0d37d21eca"
         },
         {
           "path": "plugin_runtime.py",
-          "bytes": 12134,
-          "sha256": "78c55e5cc3e972d3927a6d10242be1b704779b93863daf153f4af311b6dfcaf4"
+          "bytes": 13815,
+          "sha256": "ba10df55c50bdd4434babe0bf7434cc666a92dafbf1a41337397c3ca71561b4c"
         },
         {
           "path": "worker.py",
-          "bytes": 16156,
-          "sha256": "8c7215319ff00f93fa9d9f116b61faa4e1da9fcabdf6e370b39a32ce6b6cf708"
+          "bytes": 16425,
+          "sha256": "d2935964c38713e22fe9200fd0dfb85c932bff6b926639f31e9ec479cf3dd51c"
+        },
+        {
+          "path": "ui.py",
+          "bytes": 4141,
+          "sha256": "d5745c99a69ad7aee39e8bfb0f4f25735b0f30abef6b322ee8c1344e4a4df05f"
+        },
+        {
+          "path": "ui_support.py",
+          "bytes": 38233,
+          "sha256": "49a5979de007fb562b6b4cdc19747036e0990b038fc5cd8f7cb6883f7723586c"
         },
         {
           "path": "requirements.txt",
@@ -304,6 +617,41 @@
           "path": "requirements-cuda.txt",
           "bytes": 185,
           "sha256": "e4ffc052f25ba760745961673c764b354f864f5c54521d2959b59fe93959aed4"
+        },
+        {
+          "path": "pigeon_plugin/__init__.py",
+          "bytes": 1572,
+          "sha256": "664ef0bd7892ba60879451da9b9e5b668a6ce9944117a4345ce1d2cedc2ba715"
+        },
+        {
+          "path": "pigeon_plugin/contribution.py",
+          "bytes": 3058,
+          "sha256": "92d5a0f2dae6c5c7e59e30d772cfba9970984775dd868808e429a92cbf76447b"
+        },
+        {
+          "path": "pigeon_plugin/draw.py",
+          "bytes": 3653,
+          "sha256": "8e7c753d98942ba4fae2588c10959440523049184f0f77bf65fd7569a65a181f"
+        },
+        {
+          "path": "pigeon_plugin/protocol.py",
+          "bytes": 1704,
+          "sha256": "ddc45a42c8624ffd65b60de2c99291a58830c713eaa176e735eb13addbb3ae68"
+        },
+        {
+          "path": "pigeon_plugin/runtime.py",
+          "bytes": 24012,
+          "sha256": "0045949c1be3a075c3d3eb768ef946278367f6f9a184ef993393dbf5dff71f46"
+        },
+        {
+          "path": "pigeon_plugin/scene.py",
+          "bytes": 12308,
+          "sha256": "55197e85972a9fa1649a90fc74cac9d95f3afb48ff305bbe2c52be0f8104f584"
+        },
+        {
+          "path": "pigeon_plugin/SDK_SOURCE.json",
+          "bytes": 234,
+          "sha256": "2e315ee92134819640cb66e75a8e15fb0030613c3ef3bd4ba5094c33281f52f8"
         }
       ],
       "models": [
@@ -371,15 +719,66 @@
         "pypi.org"
       ],
       "privacy": "Setup downloads the Python packages and model files once. Images and prompts are processed locally and never sent anywhere.",
+      "ui": {
+        "protocol": 2,
+        "activation": "visible",
+        "contributions": [
+          {
+            "slot": "inspector.panel",
+            "id": "panel",
+            "title": "AI Image Expand (Diffusion)",
+            "icon": "frame-corners",
+            "order": 64,
+            "applies_to": {
+              "kinds": [
+                "image"
+              ],
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "slot": "asset.action",
+            "id": "open",
+            "title": "Expand canvas with diffusion AI\u2026",
+            "icon": "frame-corners",
+            "applies_to": {
+              "kinds": [
+                "image"
+              ],
+              "min": 1,
+              "max": 1
+            },
+            "selection": "one",
+            "group": "AI"
+          },
+          {
+            "slot": "modal",
+            "id": "tool",
+            "title": "AI Image Expand (Diffusion)",
+            "size": "large",
+            "resizable": true,
+            "modal": false
+          }
+        ],
+        "permissions": [
+          "selection",
+          "library.write",
+          "windows"
+        ]
+      },
       "path": "plugins/ai-image-expand-diffusion",
       "approved": true
     },
     {
       "id": "ai-object-removal",
       "name": "AI Object Removal",
-      "version": "1.1.1",
+      "version": "2.0.0",
       "category": "Image editing",
-      "kind": "editor-worker",
+      "kind": "app",
+      "provides": [
+        "ops"
+      ],
       "description": "Paint over an object and LaMa inpaints the background. Runs offline once the 198 MB model is downloaded. The result must be accepted before it is saved as a derivative.",
       "author": "Pigeon",
       "licence": "Apache-2.0",
@@ -391,7 +790,7 @@
         "runtime": "python3",
         "python": ">=3.10,<3.14",
         "entry": "run",
-        "protocol": 1,
+        "protocol": 2,
         "standalone": true,
         "requires": [
           "numpy",
@@ -403,35 +802,83 @@
           "setup": "run --setup",
           "health": "run --health [--verify]",
           "selfTest": "run --self-test",
-          "request": "run  (JSON on stdin)"
+          "request": "run  (JSON on stdin)",
+          "plugin": "run --plugin",
+          "uninstall": "run --uninstall"
         }
       },
+      "sdk": "python",
       "files": [
         {
           "path": "plugin.json",
-          "bytes": 1848,
-          "sha256": "4de775ec0214c65d4d1826cff8a03360f83e5efa8eddec81ffc0a82ebb3e48a4"
+          "bytes": 2997,
+          "sha256": "3380e68ccd34c2c3422a27abd4385fd75de2d10c7f5e6ad59e689dff6dd6c875"
         },
         {
           "path": "run",
           "executable": true,
-          "bytes": 2717,
-          "sha256": "d770e0176016fac713411518ffe0d00142f59ca816f0654c766d1cef03152e0c"
+          "bytes": 3590,
+          "sha256": "0df7e2cd4a887cb763324604ccf1f7453e033f97840b258f996ffe0d37d21eca"
         },
         {
           "path": "plugin_runtime.py",
-          "bytes": 12134,
-          "sha256": "78c55e5cc3e972d3927a6d10242be1b704779b93863daf153f4af311b6dfcaf4"
+          "bytes": 13815,
+          "sha256": "ba10df55c50bdd4434babe0bf7434cc666a92dafbf1a41337397c3ca71561b4c"
         },
         {
           "path": "worker.py",
-          "bytes": 3383,
-          "sha256": "441a76a02d2e78d3748159a4b1d47aa8d5b61e1e5dfc4459a332d1c620ff2886"
+          "bytes": 3588,
+          "sha256": "9fe343d1880fdaf250d5ea6516e737148cca518a552bb8feb5bd14598141cac5"
+        },
+        {
+          "path": "ui.py",
+          "bytes": 5674,
+          "sha256": "ea3797cf7ddb37c53784a071a8baadd29d8c765826f8c6254ce6922e53aedd31"
+        },
+        {
+          "path": "ui_support.py",
+          "bytes": 38233,
+          "sha256": "49a5979de007fb562b6b4cdc19747036e0990b038fc5cd8f7cb6883f7723586c"
         },
         {
           "path": "requirements.txt",
           "bytes": 46,
           "sha256": "dacd4078831dd7f0d1cace128ad08d461904cadf93f65e605d95549aaea927fb"
+        },
+        {
+          "path": "pigeon_plugin/__init__.py",
+          "bytes": 1572,
+          "sha256": "664ef0bd7892ba60879451da9b9e5b668a6ce9944117a4345ce1d2cedc2ba715"
+        },
+        {
+          "path": "pigeon_plugin/contribution.py",
+          "bytes": 3058,
+          "sha256": "92d5a0f2dae6c5c7e59e30d772cfba9970984775dd868808e429a92cbf76447b"
+        },
+        {
+          "path": "pigeon_plugin/draw.py",
+          "bytes": 3653,
+          "sha256": "8e7c753d98942ba4fae2588c10959440523049184f0f77bf65fd7569a65a181f"
+        },
+        {
+          "path": "pigeon_plugin/protocol.py",
+          "bytes": 1704,
+          "sha256": "ddc45a42c8624ffd65b60de2c99291a58830c713eaa176e735eb13addbb3ae68"
+        },
+        {
+          "path": "pigeon_plugin/runtime.py",
+          "bytes": 24012,
+          "sha256": "0045949c1be3a075c3d3eb768ef946278367f6f9a184ef993393dbf5dff71f46"
+        },
+        {
+          "path": "pigeon_plugin/scene.py",
+          "bytes": 12308,
+          "sha256": "55197e85972a9fa1649a90fc74cac9d95f3afb48ff305bbe2c52be0f8104f584"
+        },
+        {
+          "path": "pigeon_plugin/SDK_SOURCE.json",
+          "bytes": 234,
+          "sha256": "2e315ee92134819640cb66e75a8e15fb0030613c3ef3bd4ba5094c33281f52f8"
         }
       ],
       "models": [
@@ -454,16 +901,552 @@
         "pypi.org"
       ],
       "privacy": "Setup downloads the Python packages and model files once. Images and prompts are processed locally and never sent anywhere.",
+      "ui": {
+        "protocol": 2,
+        "activation": "visible",
+        "contributions": [
+          {
+            "slot": "inspector.panel",
+            "id": "panel",
+            "title": "AI Object Removal",
+            "icon": "eraser",
+            "order": 62,
+            "applies_to": {
+              "kinds": [
+                "image"
+              ],
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "slot": "asset.action",
+            "id": "open",
+            "title": "Remove object with AI\u2026",
+            "icon": "eraser",
+            "applies_to": {
+              "kinds": [
+                "image"
+              ],
+              "min": 1,
+              "max": 1
+            },
+            "selection": "one",
+            "group": "AI"
+          },
+          {
+            "slot": "modal",
+            "id": "tool",
+            "title": "AI Object Removal",
+            "size": "large",
+            "resizable": true,
+            "modal": false
+          }
+        ],
+        "permissions": [
+          "selection",
+          "library.write",
+          "windows"
+        ]
+      },
       "path": "plugins/ai-object-removal",
+      "approved": true
+    },
+    {
+      "id": "immich",
+      "name": "Immich",
+      "version": "1.0.0",
+      "category": "Library sources",
+      "kind": "app",
+      "sdk": "rust",
+      "provides": [
+        "source"
+      ],
+      "description": "Browse an Immich server's photos in Pigeon (Immich / Annual / year / month), see server thumbnails, send local files to Immich and download originals into a local folder with checksum and metadata verification. Runs in its own process; uninstalling it removes its cache, catalogue and keychain entries.",
+      "author": "Pigeon",
+      "licence": "Apache-2.0",
+      "source": "Immich server HTTP API (https://immich.app); reqwest, rusqlite (bundled), image",
+      "ui": {
+        "protocol": 2,
+        "activation": "startup",
+        "contributions": [
+          {
+            "slot": "preferences.page",
+            "id": "settings",
+            "title": "Immich",
+            "icon": "cloud",
+            "order": 60
+          },
+          {
+            "slot": "library.source",
+            "id": "immich",
+            "title": "Immich",
+            "icon": "cloud",
+            "root": {
+              "id": "root",
+              "title": "Immich",
+              "children": true
+            },
+            "capabilities": [
+              "browse",
+              "upload",
+              "download",
+              "metadata_write",
+              "tags"
+            ]
+          },
+          {
+            "slot": "statusbar.item",
+            "id": "status",
+            "align": "right",
+            "order": 50
+          },
+          {
+            "slot": "modal",
+            "id": "transfer",
+            "title": "Verified Immich transfers",
+            "size": "medium",
+            "resizable": true,
+            "modal": true
+          },
+          {
+            "slot": "modal",
+            "id": "tag-picker",
+            "title": "Add Immich tag",
+            "size": "small",
+            "resizable": false,
+            "modal": true
+          },
+          {
+            "slot": "asset.action",
+            "id": "send",
+            "title": "Send to Immich",
+            "icon": "cloud-arrow-up",
+            "group": "Immich",
+            "applies_to": {
+              "kinds": [
+                "image",
+                "video",
+                "audio",
+                "document"
+              ],
+              "min": 1
+            },
+            "selection": "many"
+          },
+          {
+            "slot": "asset.action",
+            "id": "download",
+            "title": "Download original from Immich...",
+            "icon": "cloud-arrow-down",
+            "group": "Immich",
+            "applies_to": {
+              "kinds": [
+                "image"
+              ],
+              "min": 1
+            },
+            "selection": "many",
+            "source": "immich"
+          },
+          {
+            "slot": "asset.action",
+            "id": "tag",
+            "title": "Add Immich tag...",
+            "icon": "tag",
+            "group": "Immich",
+            "applies_to": {
+              "kinds": [
+                "image"
+              ],
+              "min": 1
+            },
+            "selection": "any",
+            "source": "immich"
+          },
+          {
+            "slot": "command",
+            "id": "sync",
+            "title": "Sync Immich now"
+          },
+          {
+            "slot": "command",
+            "id": "sync-collection",
+            "title": "Sync Immich and refresh thumbnails"
+          }
+        ],
+        "permissions": [
+          "library.read",
+          "library.write",
+          "secrets",
+          "dialogs",
+          "windows"
+        ]
+      },
+      "worker": {
+        "runtime": "native",
+        "entry": "run",
+        "protocol": 2,
+        "standalone": true,
+        "crate": "Cargo.toml",
+        "lockfile": "Cargo.lock",
+        "binary": "pigeon-immich",
+        "commands": {
+          "setup": "run --setup",
+          "health": "run --health",
+          "selfTest": "run --self-test",
+          "plugin": "run --plugin",
+          "uninstall": "run --uninstall"
+        }
+      },
+      "artifacts": [],
+      "files": [
+        {
+          "path": "plugin.json",
+          "bytes": 4361,
+          "sha256": "e2c868032a8ba74fd2eeab128110e8237430862ee9a64ef6cc072ba2d9826a1e"
+        },
+        {
+          "path": "run",
+          "executable": true,
+          "bytes": 4325,
+          "sha256": "0a30f7b20a65328d068071e424859b9c0d2d9bcb436b3d76a66a8d34a6d682e9"
+        },
+        {
+          "path": "source.tar.gz",
+          "role": "source",
+          "bytes": 93826,
+          "sha256": "d0445d274bf5f197012faf5a5f4a9949b52260dbe8df9ce2f856c998530ae7f1"
+        }
+      ],
+      "models": [],
+      "network": [
+        "the Immich server you configure (HTTPS recommended; HTTP exposes traffic to the local network)"
+      ],
+      "privacy": "Talks only to the Immich server you configure. Passwords are kept in the system keychain (or in memory for a session-only login) and never written to disk. Thumbnails and the catalogue are cached in this plugin's private data folder and removed by uninstalling it. Originals are downloaded only when you explicitly transfer them.",
+      "sourceArchive": {
+        "file": "source.tar.gz",
+        "include": [
+          "Cargo.toml",
+          "Cargo.lock",
+          "src",
+          "vendor"
+        ]
+      },
+      "operations": [],
+      "path": "plugins/immich",
+      "approved": true
+    },
+    {
+      "id": "reelio",
+      "name": "Reelio",
+      "version": "2.0.0",
+      "kind": "app",
+      "sdk": "rust",
+      "category": "Media",
+      "description": "Local media container editor: import video, audio and subtitles, edit tracks, trims, chapters, metadata, covers and subtitles, then export to a new MP4, M4V or MKV with verified output. Sources are never changed.",
+      "author": "Chris Visser",
+      "licence": "MIT",
+      "homepage": "https://github.com/vcsoc/reelio",
+      "worker": {
+        "runtime": "native",
+        "entry": "run",
+        "protocol": 2,
+        "standalone": true,
+        "build": {
+          "manifest": "crates/app/Cargo.toml",
+          "bin": "reelio",
+          "cargoTargetDir": ".data/target"
+        },
+        "commands": {
+          "plugin": "run --plugin",
+          "version": "run --version",
+          "uninstall": "run --uninstall"
+        }
+      },
+      "files": [
+        {
+          "path": "plugin.json",
+          "bytes": 6406,
+          "sha256": "688b75a6ed2403b2066d90c80cfc3380ef99c5ce6ef652ddb4a789600509d466"
+        },
+        {
+          "path": "run",
+          "executable": true,
+          "bytes": 2678,
+          "sha256": "5592caa2a2f49a8d2eadb0b6cfcba14706cea9b96c85b813b3a9099efab8ef18"
+        },
+        {
+          "path": "source.tar.gz",
+          "role": "source",
+          "bytes": 275392,
+          "sha256": "d9964e9d6ebf5405f25e88fd9a1caa4842b57be509536d8128ec8cdf5f5cd410"
+        }
+      ],
+      "ui": {
+        "protocol": 2,
+        "activation": "visible",
+        "contributions": [
+          {
+            "slot": "sidebar.entry",
+            "id": "nav",
+            "title": "Reelio",
+            "icon": "film",
+            "order": 40,
+            "opens": "main"
+          },
+          {
+            "slot": "workspace.view",
+            "id": "main",
+            "title": "Reelio",
+            "icon": "film"
+          },
+          {
+            "slot": "inspector.panel",
+            "id": "summary",
+            "title": "Poster / cover",
+            "icon": "image",
+            "order": 10
+          },
+          {
+            "slot": "inspector.panel",
+            "id": "project",
+            "title": "Project tools",
+            "icon": "sliders",
+            "order": 20
+          },
+          {
+            "slot": "asset.action",
+            "id": "open-in-reelio",
+            "title": "Open in Reelio",
+            "icon": "film",
+            "applies_to": {
+              "kinds": [
+                "video",
+                "audio"
+              ],
+              "min": 1
+            },
+            "selection": "one",
+            "group": "open"
+          },
+          {
+            "slot": "asset.action",
+            "id": "add-to-reelio",
+            "title": "Add to Reelio project",
+            "icon": "plus",
+            "applies_to": {
+              "kinds": [
+                "video",
+                "audio",
+                "document",
+                "image"
+              ],
+              "min": 1
+            },
+            "selection": "any",
+            "group": "project"
+          },
+          {
+            "slot": "drop.target",
+            "id": "cover-drop",
+            "accepts": [
+              "files"
+            ],
+            "where": "cover:preview"
+          },
+          {
+            "slot": "preferences.page",
+            "id": "prefs",
+            "title": "Reelio",
+            "icon": "film",
+            "order": 50
+          },
+          {
+            "slot": "modal",
+            "id": "settings",
+            "title": "Preferences",
+            "size": "medium",
+            "resizable": false,
+            "modal": true
+          },
+          {
+            "slot": "modal",
+            "id": "about",
+            "title": "About Reelio",
+            "size": "small",
+            "resizable": false,
+            "modal": true
+          },
+          {
+            "slot": "modal",
+            "id": "quit",
+            "title": "Close Reelio?",
+            "size": "small",
+            "resizable": false,
+            "modal": true
+          },
+          {
+            "slot": "modal",
+            "id": "dependencies",
+            "title": "Required components",
+            "size": "medium",
+            "resizable": false,
+            "modal": true
+          },
+          {
+            "slot": "modal",
+            "id": "restore",
+            "title": "Restore export settings",
+            "size": "small",
+            "resizable": false,
+            "modal": true
+          },
+          {
+            "slot": "modal",
+            "id": "export_review",
+            "title": "Export review",
+            "size": "medium",
+            "resizable": true,
+            "modal": true
+          },
+          {
+            "slot": "modal",
+            "id": "consent",
+            "title": "Reelio confirmation",
+            "size": "medium",
+            "resizable": false,
+            "modal": true
+          },
+          {
+            "slot": "modal",
+            "id": "download",
+            "title": "Download",
+            "size": "small",
+            "resizable": false,
+            "modal": true
+          },
+          {
+            "slot": "command",
+            "id": "project.new",
+            "title": "New project",
+            "shortcut": "Ctrl+N"
+          },
+          {
+            "slot": "command",
+            "id": "project.open",
+            "title": "Open project",
+            "shortcut": "Ctrl+Shift+O"
+          },
+          {
+            "slot": "command",
+            "id": "project.open_media",
+            "title": "Open media",
+            "shortcut": "Ctrl+O"
+          },
+          {
+            "slot": "command",
+            "id": "project.save",
+            "title": "Save project",
+            "shortcut": "Ctrl+S"
+          },
+          {
+            "slot": "command",
+            "id": "project.quit",
+            "title": "Quit Reelio",
+            "shortcut": "Ctrl+W"
+          },
+          {
+            "slot": "command",
+            "id": "export.validate",
+            "title": "Validate export",
+            "shortcut": "Ctrl+E"
+          },
+          {
+            "slot": "command",
+            "id": "edit.undo",
+            "title": "Undo",
+            "shortcut": "Ctrl+Z"
+          },
+          {
+            "slot": "command",
+            "id": "edit.redo",
+            "title": "Redo",
+            "shortcut": "Ctrl+Shift+Z"
+          },
+          {
+            "slot": "command",
+            "id": "view.toggle_play",
+            "title": "Play or pause preview",
+            "shortcut": "Space"
+          },
+          {
+            "slot": "command",
+            "id": "view.chapter_prev",
+            "title": "Previous chapter",
+            "shortcut": "Alt+Left"
+          },
+          {
+            "slot": "command",
+            "id": "view.chapter_next",
+            "title": "Next chapter",
+            "shortcut": "Alt+Right"
+          }
+        ],
+        "theme_override": {
+          "bg": "#18191b",
+          "bg_panel": "#202123",
+          "bg_raised": "#272a36",
+          "bg_input": "#191b23",
+          "fg": "#e8eaf0",
+          "fg_weak": "#8f95a6",
+          "accent": "#5688ff",
+          "accent_fg": "#b9ccff",
+          "danger": "#f16d7a",
+          "warning": "#e6bd79",
+          "success": "#8bd3ac",
+          "border": "#2b2e35",
+          "hover": "#2b2e35",
+          "selection": "#34394c",
+          "focus_ring": "#5688ff"
+        },
+        "permissions": [
+          "selection",
+          "library.read",
+          "library.write",
+          "dialogs",
+          "shell",
+          "windows"
+        ]
+      },
+      "sourceArchive": {
+        "file": "source.tar.gz",
+        "include": [
+          "plugin.json",
+          "Cargo.toml",
+          "Cargo.lock",
+          "crates",
+          "vendor"
+        ]
+      },
+      "operations": [],
+      "network": [],
+      "models": [],
+      "privacy": "",
+      "path": "plugins/reelio",
       "approved": true
     },
     {
       "id": "semantic-search",
       "name": "Local Semantic Search",
-      "version": "1.1.0",
+      "version": "2.0.0",
       "category": "Search",
-      "kind": "semantic-index",
-      "description": "Private multimodal similarity search, knowledge-graph clustering and tag suggestions using EmbeddingGemma 2 (768-dim embeddings of text, images and video), computed on this computer. Setup downloads about 1.5 GB once. Runs as a standalone engine that Pigeon talks to over a simple line protocol.",
+      "kind": "app",
+      "provides": [
+        "search",
+        "ops"
+      ],
+      "description": "Private multimodal similarity search, knowledge-graph clustering and tag suggestions using EmbeddingGemma 2 (768-dim embeddings of text, images and video), computed on this computer. Setup downloads about 1.5 GB once. The plugin runs its indexing engine locally.",
       "author": "Pigeon",
       "licence": "Apache-2.0",
       "operations": [
@@ -473,7 +1456,7 @@
         "runtime": "python3",
         "python": ">=3.10,<3.14",
         "entry": "run",
-        "protocol": 1,
+        "protocol": 2,
         "standalone": true,
         "requires": [
           "sentence-transformers",
@@ -484,31 +1467,43 @@
           "setup": "run --setup",
           "health": "run --health [--verify]",
           "selfTest": "run --self-test",
-          "serve": "run --serve <index.db>",
-          "request": "run  (JSON on stdin)"
+          "request": "run  (JSON on stdin)",
+          "plugin": "run --plugin",
+          "uninstall": "run --uninstall"
         }
       },
+      "sdk": "python",
       "files": [
         {
           "path": "plugin.json",
-          "bytes": 7412,
-          "sha256": "044b5cbf65ca491f333b02e77b92f864f5ca9844015b5bd638d38b2e63f7b3c8"
+          "bytes": 9021,
+          "sha256": "54f952b6951f46781b8682914bca079332adf18be04b123fde4a975dcfab72a8"
         },
         {
           "path": "run",
           "executable": true,
-          "bytes": 2717,
-          "sha256": "d770e0176016fac713411518ffe0d00142f59ca816f0654c766d1cef03152e0c"
+          "bytes": 3590,
+          "sha256": "0df7e2cd4a887cb763324604ccf1f7453e033f97840b258f996ffe0d37d21eca"
         },
         {
           "path": "plugin_runtime.py",
-          "bytes": 12134,
-          "sha256": "78c55e5cc3e972d3927a6d10242be1b704779b93863daf153f4af311b6dfcaf4"
+          "bytes": 13815,
+          "sha256": "ba10df55c50bdd4434babe0bf7434cc666a92dafbf1a41337397c3ca71561b4c"
         },
         {
           "path": "worker.py",
-          "bytes": 4034,
-          "sha256": "0e558b759f34fbc5b1a6a3709422f90ec3be3ac1ea846ec2ca4e5c4237049a5f"
+          "bytes": 4179,
+          "sha256": "290f342e64076ca0cb25eb8297726ad3ba6ec27614797d19f46e2664bb1b92aa"
+        },
+        {
+          "path": "ui.py",
+          "bytes": 28065,
+          "sha256": "39040ac3f77c0c1ca592593003d308be8d1a73591cdf3f9bffbcb7c67caf0e2b"
+        },
+        {
+          "path": "ui_support.py",
+          "bytes": 38233,
+          "sha256": "49a5979de007fb562b6b4cdc19747036e0990b038fc5cd8f7cb6883f7723586c"
         },
         {
           "path": "semantic-engine.py",
@@ -519,6 +1514,41 @@
           "path": "requirements.txt",
           "bytes": 353,
           "sha256": "4f11447913465f63f399d4c3a4c76c7d544d64a97986774ebc51406926e9a53c"
+        },
+        {
+          "path": "pigeon_plugin/__init__.py",
+          "bytes": 1572,
+          "sha256": "664ef0bd7892ba60879451da9b9e5b668a6ce9944117a4345ce1d2cedc2ba715"
+        },
+        {
+          "path": "pigeon_plugin/contribution.py",
+          "bytes": 3058,
+          "sha256": "92d5a0f2dae6c5c7e59e30d772cfba9970984775dd868808e429a92cbf76447b"
+        },
+        {
+          "path": "pigeon_plugin/draw.py",
+          "bytes": 3653,
+          "sha256": "8e7c753d98942ba4fae2588c10959440523049184f0f77bf65fd7569a65a181f"
+        },
+        {
+          "path": "pigeon_plugin/protocol.py",
+          "bytes": 1704,
+          "sha256": "ddc45a42c8624ffd65b60de2c99291a58830c713eaa176e735eb13addbb3ae68"
+        },
+        {
+          "path": "pigeon_plugin/runtime.py",
+          "bytes": 24012,
+          "sha256": "0045949c1be3a075c3d3eb768ef946278367f6f9a184ef993393dbf5dff71f46"
+        },
+        {
+          "path": "pigeon_plugin/scene.py",
+          "bytes": 12308,
+          "sha256": "55197e85972a9fa1649a90fc74cac9d95f3afb48ff305bbe2c52be0f8104f584"
+        },
+        {
+          "path": "pigeon_plugin/SDK_SOURCE.json",
+          "bytes": 234,
+          "sha256": "2e315ee92134819640cb66e75a8e15fb0030613c3ef3bd4ba5094c33281f52f8"
         }
       ],
       "models": [
@@ -651,6 +1681,81 @@
       ],
       "privacy": "Setup downloads the Python packages and the model once. Your files and queries stay on this computer; nothing is sent anywhere. Not a generative chatbot.",
       "source": "google/embeddinggemma-2 on Hugging Face (Apache-2.0), pinned to a commit",
+      "ui": {
+        "protocol": 2,
+        "activation": "startup",
+        "contributions": [
+          {
+            "slot": "inspector.panel",
+            "id": "index",
+            "title": "Semantic index",
+            "icon": "sparkles",
+            "order": 40,
+            "applies_to": {
+              "kinds": [
+                "image",
+                "video",
+                "audio",
+                "document"
+              ],
+              "min": 1
+            }
+          },
+          {
+            "slot": "statusbar.item",
+            "id": "status",
+            "title": "Semantic index",
+            "align": "right",
+            "order": 30
+          },
+          {
+            "slot": "search.provider",
+            "id": "meaning",
+            "title": "Meaning",
+            "icon": "sparkles",
+            "mode_id": "semantic",
+            "order": 10
+          },
+          {
+            "slot": "asset.action",
+            "id": "similar",
+            "title": "Find similar",
+            "icon": "sparkles",
+            "applies_to": {
+              "kinds": [
+                "image",
+                "video",
+                "audio",
+                "document"
+              ],
+              "min": 1,
+              "max": 1
+            },
+            "selection": "one",
+            "group": "AI"
+          },
+          {
+            "slot": "modal",
+            "id": "similar-results",
+            "title": "Similar items",
+            "size": "medium",
+            "resizable": true,
+            "modal": false
+          },
+          {
+            "slot": "preferences.page",
+            "id": "prefs",
+            "title": "Semantic search",
+            "icon": "sparkles",
+            "order": 50
+          }
+        ],
+        "permissions": [
+          "selection",
+          "library.read",
+          "windows"
+        ]
+      },
       "path": "plugins/semantic-search",
       "approved": true
     }
