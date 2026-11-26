@@ -281,7 +281,7 @@ pub fn inspect_vtt(text: &str) -> Result<Vec<SubtitleCue>, String> {
             continue;
         };
         let (start, end) = lines[index].split_once(" --> ").unwrap_or(("", ""));
-        let end_token = end.trim().split_whitespace().next().unwrap_or("");
+        let end_token = end.split_whitespace().next().unwrap_or("");
         let cue = SubtitleCue {
             start: vtt_timestamp(start.trim())?,
             end: vtt_timestamp(end_token)?,

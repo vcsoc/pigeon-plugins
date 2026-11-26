@@ -1,0 +1,74 @@
+{
+  "id": "reelio",
+  "name": "Reelio",
+  "version": "2.0.0",
+  "kind": "app",
+  "category": "Media",
+  "description": "Local media container editor: import video, audio and subtitles, edit tracks, trims, chapters, metadata, covers and subtitles, then export to a new MP4, M4V or MKV with verified output. Sources are never changed.",
+  "author": "Chris Visser",
+  "licence": "MIT",
+  "homepage": "https://github.com/vcsoc/reelio",
+  "worker": {
+    "runtime": "native",
+    "entry": "run",
+    "protocol": 2,
+    "standalone": true,
+    "build": {
+      "manifest": "crates/app/Cargo.toml",
+      "bin": "reelio",
+      "cargoTargetDir": ".data/target"
+    },
+    "commands": {
+      "plugin": "run --plugin",
+      "version": "run --version",
+      "uninstall": "run --uninstall"
+    }
+  },
+  "files": [
+    {"path": "plugin.json"},
+    {"path": "run", "executable": true},
+    {"path": "Cargo.toml"},
+    {"path": "Cargo.lock"},
+    {"path": "crates"}
+  ],
+  "ui": {
+    "protocol": 2,
+    "activation": "visible",
+    "contributions": [
+      {"slot": "sidebar.entry", "id": "nav", "title": "Reelio", "icon": "film", "order": 40, "opens": "main"},
+      {"slot": "workspace.view", "id": "main", "title": "Reelio", "icon": "film"},
+      {"slot": "inspector.panel", "id": "summary", "title": "Poster / cover", "icon": "image", "order": 10, "applies_to": {"kinds": ["video", "audio", "subtitle"]}},
+      {"slot": "inspector.panel", "id": "project", "title": "Project tools", "icon": "sliders", "order": 20},
+      {"slot": "asset.action", "id": "open-in-reelio", "title": "Open in Reelio", "icon": "film", "applies_to": {"kinds": ["video", "audio"], "min": 1}, "selection": "one", "group": "open"},
+      {"slot": "asset.action", "id": "add-to-reelio", "title": "Add to Reelio project", "icon": "plus", "applies_to": {"kinds": ["video", "audio", "subtitle", "image"], "min": 1}, "selection": "any", "group": "project"},
+      {"slot": "preferences.page", "id": "prefs", "title": "Reelio", "icon": "film", "order": 50},
+      {"slot": "modal", "id": "settings", "title": "Preferences", "size": "medium", "resizable": false, "modal": true},
+      {"slot": "modal", "id": "about", "title": "About Reelio", "size": "small", "resizable": false, "modal": true},
+      {"slot": "modal", "id": "quit", "title": "Close Reelio?", "size": "small", "resizable": false, "modal": true},
+      {"slot": "modal", "id": "export_review", "title": "Export review", "size": "medium", "resizable": true, "modal": true},
+      {"slot": "modal", "id": "download", "title": "Download", "size": "small", "resizable": false, "modal": true},
+      {"slot": "command", "id": "project.new", "title": "New project", "shortcut": "Ctrl+N"},
+      {"slot": "command", "id": "project.open", "title": "Open project", "shortcut": "Ctrl+Shift+O"},
+      {"slot": "command", "id": "project.open_media", "title": "Open media", "shortcut": "Ctrl+O"},
+      {"slot": "command", "id": "project.save", "title": "Save project", "shortcut": "Ctrl+S"},
+      {"slot": "command", "id": "project.quit", "title": "Quit Reelio", "shortcut": "Ctrl+W"},
+      {"slot": "command", "id": "export.validate", "title": "Validate export", "shortcut": "Ctrl+E"},
+      {"slot": "command", "id": "edit.undo", "title": "Undo", "shortcut": "Ctrl+Z"},
+      {"slot": "command", "id": "edit.redo", "title": "Redo", "shortcut": "Ctrl+Shift+Z"},
+      {"slot": "command", "id": "view.toggle_play", "title": "Play or pause preview", "shortcut": "Space"},
+      {"slot": "command", "id": "view.chapter_prev", "title": "Previous chapter", "shortcut": "Alt+Left"},
+      {"slot": "command", "id": "view.chapter_next", "title": "Next chapter", "shortcut": "Alt+Right"}
+    ],
+    "theme_override": {
+      "colors": {
+        "bg": "#18191b", "bg_panel": "#202123", "bg_raised": "#272a36", "bg_input": "#191b23",
+        "fg": "#e8eaf0", "fg_weak": "#8f95a6", "accent": "#5688ff", "accent_fg": "#b9ccff",
+        "danger": "#f16d7a", "warning": "#e6bd79", "success": "#8bd3ac", "border": "#2b2e35",
+        "hover": "#2b2e35", "selection": "#34394c", "focus_ring": "#5688ff"
+      },
+      "radius": 4,
+      "spacing": 4
+    },
+    "permissions": ["selection", "library.read", "library.write", "dialogs", "shell", "windows", "notifications"]
+  }
+}

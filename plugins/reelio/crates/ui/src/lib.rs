@@ -19,3 +19,4 @@ pub mod scene;
 pub mod state;
 pub mod store;
 pub mod subtitles;
+pub mod timeline_input;

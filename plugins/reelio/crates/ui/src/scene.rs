@@ -511,7 +511,14 @@ pub fn canvas_draw(s: &State, t: &Track, kind: &str, width: f64) -> Value {
     let chapters: Vec<f64> = if kind == "video" {
         p.chapters
             .iter()
-            .map(|c| c.start_ms as f64 * scale - view.scroll)
+            .enumerate()
+            .map(|(i, c)| {
+                let start = match s.drafts.chapter {
+                    Some((index, ms)) if index == i => ms,
+                    _ => c.start_ms as f64,
+                };
+                start * scale - view.scroll
+            })
             .collect()
     } else {
         vec![]
@@ -528,7 +535,7 @@ pub fn canvas_draw(s: &State, t: &Track, kind: &str, width: f64) -> Value {
             t.title.clone()
         },
         start_label: crate::chapters::chapter_time((offset + start).max(0.0)),
-        end_label: crate::chapters::chapter_time(bounds_end - (-offset).max(start).max(0.0)),
+        end_label: crate::chapters::chapter_time(bounds_end - start.max(-offset)),
         ruler_step_ms: step,
         scale,
         scroll: view.scroll,
@@ -565,7 +572,10 @@ fn timeline(s: &State) -> Value {
                 && !p.track_stream(t).map(|x| x.attached_pic()).unwrap_or(false)
         })
         .collect();
-    let mut lanes: Vec<Value> = shown.iter().map(|t| lane(s, t, view_width)).collect();
+    let mut lanes: Vec<Value> = shown
+        .iter()
+        .map(|t| lane(s, &s.effective_track(t), view_width))
+        .collect();
     if lanes.is_empty() && p.artwork.is_none() {
         lanes.push(text("timeline.empty", "Drop media into the media pool to begin. Every audio and subtitle stream gets its own lane.", "body"));
     }
@@ -633,7 +643,6 @@ fn timeline(s: &State) -> Value {
         ],
         8.0,
     );
-    let _ = timeline_viewport_duration;
     column(
         "timeline",
         vec![
@@ -787,7 +796,7 @@ pub fn main_view(s: &State) -> Value {
     body.push(node(
         "center",
         "column",
-        json!({"fill": 1, "gap": 0, "children": center.drain(..).collect::<Vec<_>>()}),
+        json!({"fill": 1, "gap": 0, "children": std::mem::take(&mut center)}),
     ));
     json!({
         "id": "root",

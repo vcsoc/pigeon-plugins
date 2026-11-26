@@ -186,6 +186,10 @@ pub struct Dialogs {
 
 pub struct State {
     pub store: ProjectStore,
+    /// In-progress pointer gesture on a timeline lane (see `timeline_input`).
+    pub gesture: Option<crate::timeline_input::Gesture>,
+    /// Live feedback for the gesture in progress; never part of the undo history.
+    pub drafts: crate::timeline_input::Drafts,
     pub project_rev: u64,
     pub section: Section,
     pub selected: Option<String>,
@@ -235,6 +239,8 @@ impl State {
     pub fn new() -> Self {
         let mut s = State {
             store: ProjectStore::new(empty_project()),
+            gesture: None,
+            drafts: Default::default(),
             project_rev: 0,
             section: Section::Timeline,
             selected: None,
@@ -872,6 +878,7 @@ impl State {
                 _ => {}
             },
             "lane" => self.lane(&arg, value),
+            "lane.canvas" => self.canvas_event(&arg, value),
             "track" => self.track(&arg, value),
             "chapter" => self.chapter(&arg, value),
             "cover" => match arg.as_str() {
@@ -971,6 +978,42 @@ impl State {
                 } else if let Some(t) = slot {
                     t.paused = hover;
                 }
+            }
+            _ => {}
+        }
+    }
+
+    /// Canvas events from a lane (`lane.canvas:<track>`): pointer, key, wheel.
+    fn canvas_event(&mut self, track: &str, value: Value) {
+        match value.get("type").and_then(Value::as_str) {
+            Some("pointer") => {
+                if let Some(p) = crate::timeline_input::parse_pointer(&value) {
+                    crate::timeline_input::pointer(self, track, p);
+                }
+            }
+            Some("key") if value.get("phase").and_then(Value::as_str) == Some("down") => {
+                let key = value.get("key").and_then(Value::as_str).unwrap_or("");
+                let mods = value.get("mods");
+                let shift = mods
+                    .and_then(|m| m.get("shift"))
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                let alt = mods
+                    .and_then(|m| m.get("alt"))
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                crate::timeline_input::key(self, track, key, shift, alt);
+            }
+            Some("wheel") => {
+                let dx = value.get("dx").and_then(Value::as_f64).unwrap_or(0.0);
+                let dy = value.get("dy").and_then(Value::as_f64).unwrap_or(0.0);
+                let x = value.get("x").and_then(Value::as_f64).unwrap_or(0.0);
+                let alt = value
+                    .get("mods")
+                    .and_then(|m| m.get("alt"))
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                crate::timeline_input::wheel(self, dx, dy, x, alt);
             }
             _ => {}
         }
@@ -1146,6 +1189,41 @@ impl State {
         {
             self.select_track(&track);
         }
+    }
+
+    /// Select a lane by track id (used by pointer gestures on its canvas).
+    pub fn select_track_by_id(&mut self, id: &str) {
+        self.select_track(id);
+    }
+
+    /// Track as it should be drawn: in-progress offset and trim feedback applied.
+    pub fn effective_track(&self, t: &Track) -> Track {
+        let mut out = t.clone();
+        if let Some((id, offset)) = &self.drafts.offset {
+            if *id == t.id {
+                out.offset_ms = *offset;
+            }
+        }
+        if let Some((id, patch)) = &self.drafts.trim {
+            if *id == t.id {
+                patch.apply(&mut out);
+            }
+        }
+        out
+    }
+
+    pub fn edit_track_offset(&mut self, id: &str, offset: i64) {
+        self.patch_track(
+            id,
+            TrackPatch {
+                offset_ms: Some(offset),
+                ..Default::default()
+            },
+        );
+    }
+
+    pub fn edit_track_patch(&mut self, id: &str, patch: TrackPatch) {
+        self.patch_track(id, patch);
     }
 
     fn select_track(&mut self, id: &str) {
@@ -1907,12 +1985,12 @@ mod tests {
         s.edit(|p| p.name = "x".into());
         s.dispatch(Event::Quit);
         assert!(s.dialogs.quit_confirm);
-        assert!(!s.drain().iter().any(|e| *e == Effect::CloseWindow));
+        assert!(!s.drain().contains(&Effect::CloseWindow));
         s.dispatch(Event::Ui {
             node: "quit:confirm".into(),
             value: Value::Null,
         });
-        assert!(s.drain().iter().any(|e| *e == Effect::CloseWindow));
+        assert!(s.drain().contains(&Effect::CloseWindow));
         s.busy = Some("export".into());
         s.dispatch(Event::Quit);
         assert_eq!(

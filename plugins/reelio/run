@@ -1,0 +1,22 @@
+#!/bin/sh
+# Reelio plugin launcher (standalone native layout). Needs only this folder.
+#   run --plugin      serve protocol v2 on stdin/stdout (the host starts this)
+#   run --version     print the plugin version
+#   run --uninstall   confirm uninstall (Reelio keeps no external state)
+# The binary is bin/reelio when shipped as an artifact; otherwise it is built from crates/app with
+# cargo into .data/target (developer mode). Nothing is downloaded by this script.
+set -eu
+HERE=$(cd "$(dirname "$0")" && pwd -P)
+DATA=${PIGEON_PLUGIN_DATA:-$HERE/.data}
+BIN="$HERE/bin/reelio"
+if [ ! -x "$BIN" ]; then
+  PATH="$PATH:$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+  export PATH
+  if ! command -v cargo >/dev/null 2>&1; then
+    printf '{"ok":false,"error":"reelio binary missing and cargo not found"}\n' >&2
+    exit 1
+  fi
+  CARGO_TARGET_DIR="$DATA/target" cargo build --release --quiet --manifest-path "$HERE/Cargo.toml" -p reelio-app >&2
+  BIN="$DATA/target/release/reelio"
+fi
+exec "$BIN" "$@"

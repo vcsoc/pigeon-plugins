@@ -1,0 +1,16 @@
+[package]
+name = "reelio-app"
+description = "Reelio Pigeon plugin binary: protocol v2 transport, scene pump and the engine bridge."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "reelio"
+path = "src/main.rs"
+
+[dependencies]
+reelio-ui = { path = "../ui" }
+serde.workspace = true
+serde_json.workspace = true
