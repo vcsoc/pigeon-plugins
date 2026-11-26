@@ -4,159 +4,760 @@
   "title": "Pigeon UI protocol v2: host to plugin messages",
   "description": "Every line the host writes to a plugin's stdin. Hosts never send messages the plugin did not ask for except the pushes listed here.",
   "oneOf": [
-    { "$ref": "#/$defs/hello" },
-    { "$ref": "#/$defs/ping" },
-    { "$ref": "#/$defs/ui_event" },
-    { "$ref": "#/$defs/resource_ack" },
-    { "$ref": "#/$defs/res" },
-    { "$ref": "#/$defs/req" },
-    { "$ref": "#/$defs/visibility" },
-    { "$ref": "#/$defs/focus" },
-    { "$ref": "#/$defs/resize" },
-    { "$ref": "#/$defs/theme_changed" },
-    { "$ref": "#/$defs/locale_changed" },
-    { "$ref": "#/$defs/selection_changed" },
-    { "$ref": "#/$defs/cancel" },
-    { "$ref": "#/$defs/command" },
-    { "$ref": "#/$defs/drop" },
-    { "$ref": "#/$defs/error" },
-    { "$ref": "#/$defs/shutdown" }
+    {
+      "$ref": "#/$defs/hello"
+    },
+    {
+      "$ref": "#/$defs/ping"
+    },
+    {
+      "$ref": "#/$defs/ui_event"
+    },
+    {
+      "$ref": "#/$defs/resource_ack"
+    },
+    {
+      "$ref": "#/$defs/res"
+    },
+    {
+      "$ref": "#/$defs/req"
+    },
+    {
+      "$ref": "#/$defs/visibility"
+    },
+    {
+      "$ref": "#/$defs/focus"
+    },
+    {
+      "$ref": "#/$defs/resize"
+    },
+    {
+      "$ref": "#/$defs/theme_changed"
+    },
+    {
+      "$ref": "#/$defs/locale_changed"
+    },
+    {
+      "$ref": "#/$defs/selection_changed"
+    },
+    {
+      "$ref": "#/$defs/cancel"
+    },
+    {
+      "$ref": "#/$defs/command"
+    },
+    {
+      "$ref": "#/$defs/drop"
+    },
+    {
+      "$ref": "#/$defs/error"
+    },
+    {
+      "$ref": "#/$defs/shutdown"
+    }
   ],
   "$defs": {
     "envelope": {
       "type": "object",
-      "required": ["v", "t"],
-      "properties": { "v": { "const": 2 }, "t": { "type": "string" }, "id": { "type": ["string", "integer"] } }
+      "required": [
+        "v",
+        "t"
+      ],
+      "properties": {
+        "v": {
+          "const": 2
+        },
+        "t": {
+          "type": "string"
+        },
+        "id": {
+          "type": [
+            "string",
+            "integer"
+          ]
+        }
+      }
     },
     "hello": {
       "description": "First line on stdin.",
-      "allOf": [{ "$ref": "#/$defs/envelope" }, {
-        "type": "object",
-        "required": ["t", "host", "protocol", "theme", "locale", "scale", "session_dir", "features"],
-        "properties": {
-          "t": { "const": "hello" },
-          "host": { "type": "object", "required": ["name", "version"], "properties": { "name": { "type": "string" }, "version": { "type": "string" } } },
-          "protocol": { "type": "object", "required": ["min", "max"], "properties": { "min": { "type": "integer" }, "max": { "type": "integer" } } },
-          "theme": { "$ref": "common.schema.json#/$defs/theme" },
-          "locale": { "type": "string" },
-          "scale": { "type": "number", "exclusiveMinimum": 0 },
-          "data_dir": { "type": "string" },
-          "session_dir": { "type": "string", "minLength": 1 },
-          "features": { "type": "array", "items": { "type": "string" } }
+      "allOf": [
+        {
+          "$ref": "#/$defs/envelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "t",
+            "host",
+            "protocol",
+            "theme",
+            "locale",
+            "scale",
+            "session_dir",
+            "features"
+          ],
+          "properties": {
+            "t": {
+              "const": "hello"
+            },
+            "host": {
+              "type": "object",
+              "required": [
+                "name",
+                "version"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "string"
+                }
+              }
+            },
+            "protocol": {
+              "type": "object",
+              "required": [
+                "min",
+                "max"
+              ],
+              "properties": {
+                "min": {
+                  "type": "integer"
+                },
+                "max": {
+                  "type": "integer"
+                }
+              }
+            },
+            "theme": {
+              "$ref": "common.schema.json#/$defs/theme"
+            },
+            "locale": {
+              "type": "string"
+            },
+            "scale": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "data_dir": {
+              "type": "string"
+            },
+            "session_dir": {
+              "type": "string",
+              "minLength": 1
+            },
+            "features": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
         }
-      }]
+      ]
     },
     "ping": {
-      "allOf": [{ "$ref": "#/$defs/envelope" }, { "type": "object", "required": ["t"], "properties": { "t": { "const": "ping" } } }]
+      "allOf": [
+        {
+          "$ref": "#/$defs/envelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "t"
+          ],
+          "properties": {
+            "t": {
+              "const": "ping"
+            }
+          }
+        }
+      ]
     },
     "ui_event": {
       "description": "A user event on one node. The remaining fields depend on `type`: click, double_click, context (none); change, submit, blur (value, rev); scroll (x,y); list.window (first,last,overscan); pointer (phase,x,y,button,buttons,mods,clicks,pointer_id,coalesced); wheel (dx,dy,x,y,mods,coalesced); key (phase,key,code,text,mods,repeat); drop (paths|assets,x,y); hover (x,y).",
-      "allOf": [{ "$ref": "#/$defs/envelope" }, {
-        "type": "object",
-        "required": ["t", "instance", "node", "type"],
-        "properties": {
-          "t": { "const": "ui.event" },
-          "instance": { "$ref": "common.schema.json#/$defs/instance" },
-          "node": { "type": "string" },
-          "type": { "enum": ["click", "double_click", "context", "change", "submit", "blur", "scroll", "list.window", "pointer", "wheel", "key", "drop", "hover"] }
+      "allOf": [
+        {
+          "$ref": "#/$defs/envelope"
         },
-        "allOf": [
-          { "if": { "properties": { "type": { "enum": ["change", "submit", "blur"] } } }, "then": { "required": ["value", "rev"] } },
-          { "if": { "properties": { "type": { "const": "list.window" } } }, "then": { "required": ["first", "last", "overscan"] } },
-          { "if": { "properties": { "type": { "const": "pointer" } } }, "then": { "required": ["phase", "x", "y"], "properties": { "phase": { "enum": ["down", "move", "up", "cancel", "enter", "leave"] }, "mods": { "$ref": "common.schema.json#/$defs/mods" } } } },
-          { "if": { "properties": { "type": { "const": "wheel" } } }, "then": { "required": ["dx", "dy"], "properties": { "mods": { "$ref": "common.schema.json#/$defs/mods" } } } },
-          { "if": { "properties": { "type": { "const": "key" } } }, "then": { "required": ["phase", "key"], "properties": { "phase": { "enum": ["down", "up"] }, "mods": { "$ref": "common.schema.json#/$defs/mods" } } } },
-          { "if": { "properties": { "type": { "const": "drop" } } }, "then": { "required": ["x", "y"] } }
-        ]
-      }]
+        {
+          "type": "object",
+          "required": [
+            "t",
+            "instance",
+            "node",
+            "type"
+          ],
+          "properties": {
+            "t": {
+              "const": "ui.event"
+            },
+            "instance": {
+              "$ref": "common.schema.json#/$defs/instance"
+            },
+            "node": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "click",
+                "double_click",
+                "context",
+                "change",
+                "submit",
+                "blur",
+                "scroll",
+                "list.window",
+                "pointer",
+                "wheel",
+                "key",
+                "drop",
+                "hover"
+              ]
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "type": {
+                    "enum": [
+                      "change",
+                      "submit",
+                      "blur"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "value",
+                  "rev"
+                ]
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "type": {
+                    "const": "list.window"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "first",
+                  "last",
+                  "overscan"
+                ]
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "type": {
+                    "const": "pointer"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "phase",
+                  "x",
+                  "y"
+                ],
+                "properties": {
+                  "phase": {
+                    "enum": [
+                      "down",
+                      "move",
+                      "up",
+                      "cancel",
+                      "enter",
+                      "leave"
+                    ]
+                  },
+                  "mods": {
+                    "$ref": "common.schema.json#/$defs/mods"
+                  },
+                  "coalesced": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "number of pointer moves or wheel ticks merged into this event by the host (amendment 4)"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "type": {
+                    "const": "wheel"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "dx",
+                  "dy"
+                ],
+                "properties": {
+                  "mods": {
+                    "$ref": "common.schema.json#/$defs/mods"
+                  },
+                  "coalesced": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "number of pointer moves or wheel ticks merged into this event by the host (amendment 4)"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "type": {
+                    "const": "key"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "phase",
+                  "key"
+                ],
+                "properties": {
+                  "phase": {
+                    "enum": [
+                      "down",
+                      "up"
+                    ]
+                  },
+                  "mods": {
+                    "$ref": "common.schema.json#/$defs/mods"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "type": {
+                    "const": "drop"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "x",
+                  "y"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     },
     "resource_ack": {
-      "allOf": [{ "$ref": "#/$defs/envelope" }, {
-        "type": "object", "required": ["t", "rid", "seq"],
-        "properties": { "t": { "const": "resource.ack" }, "rid": { "type": "string" }, "seq": { "type": "integer", "minimum": 0 } }
-      }]
+      "allOf": [
+        {
+          "$ref": "#/$defs/envelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "t",
+            "rid",
+            "seq"
+          ],
+          "properties": {
+            "t": {
+              "const": "resource.ack"
+            },
+            "rid": {
+              "type": "string"
+            },
+            "seq": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      ]
     },
     "res": {
       "description": "Answer to a host service request. Exactly one of result or error.",
-      "allOf": [{ "$ref": "#/$defs/envelope" }, {
-        "type": "object", "required": ["t", "id"],
-        "properties": { "t": { "const": "res" }, "id": { "type": "string" }, "result": {}, "error": { "$ref": "common.schema.json#/$defs/error" } },
-        "oneOf": [{ "required": ["result"] }, { "required": ["error"] }]
-      }]
+      "allOf": [
+        {
+          "$ref": "#/$defs/envelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "t",
+            "id"
+          ],
+          "properties": {
+            "t": {
+              "const": "res"
+            },
+            "id": {
+              "type": "string"
+            },
+            "result": {},
+            "error": {
+              "$ref": "common.schema.json#/$defs/error"
+            }
+          },
+          "oneOf": [
+            {
+              "required": [
+                "result"
+              ]
+            },
+            {
+              "required": [
+                "error"
+              ]
+            }
+          ]
+        }
+      ]
     },
     "req": {
       "description": "Provider request (source.*, search.query). Params per methods.schema.json.",
-      "allOf": [{ "$ref": "#/$defs/envelope" }, {
-        "type": "object", "required": ["t", "id", "method"],
-        "properties": { "t": { "const": "req" }, "id": { "type": "string" }, "method": { "type": "string" }, "params": { "type": "object" } }
-      }]
+      "allOf": [
+        {
+          "$ref": "#/$defs/envelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "t",
+            "id",
+            "method"
+          ],
+          "properties": {
+            "t": {
+              "const": "req"
+            },
+            "id": {
+              "type": "string"
+            },
+            "method": {
+              "type": "string"
+            },
+            "params": {
+              "type": "object"
+            }
+          }
+        }
+      ]
     },
     "visibility": {
       "description": "An instance became visible or hidden. Alias on the wire: ui.visible.",
-      "allOf": [{ "$ref": "#/$defs/envelope" }, {
-        "type": "object", "required": ["t", "instance", "visible"],
-        "properties": { "t": { "enum": ["visibility", "ui.visible"] }, "instance": { "$ref": "common.schema.json#/$defs/instance" }, "visible": { "type": "boolean" } }
-      }]
+      "allOf": [
+        {
+          "$ref": "#/$defs/envelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "t",
+            "instance",
+            "visible"
+          ],
+          "properties": {
+            "t": {
+              "enum": [
+                "visibility",
+                "ui.visible"
+              ]
+            },
+            "instance": {
+              "$ref": "common.schema.json#/$defs/instance"
+            },
+            "visible": {
+              "type": "boolean"
+            }
+          }
+        }
+      ]
     },
     "focus": {
-      "allOf": [{ "$ref": "#/$defs/envelope" }, {
-        "type": "object", "required": ["t", "has"], "properties": { "t": { "const": "focus" }, "has": { "type": "boolean" } }
-      }]
+      "allOf": [
+        {
+          "$ref": "#/$defs/envelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "t",
+            "has"
+          ],
+          "properties": {
+            "t": {
+              "const": "focus"
+            },
+            "has": {
+              "type": "boolean"
+            }
+          }
+        }
+      ]
     },
     "resize": {
-      "allOf": [{ "$ref": "#/$defs/envelope" }, {
-        "type": "object", "required": ["t", "instance", "w", "h", "scale"],
-        "properties": { "t": { "const": "resize" }, "instance": { "$ref": "common.schema.json#/$defs/instance" }, "w": { "type": "number", "minimum": 0 }, "h": { "type": "number", "minimum": 0 }, "scale": { "type": "number", "exclusiveMinimum": 0 } }
-      }]
+      "allOf": [
+        {
+          "$ref": "#/$defs/envelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "t",
+            "instance",
+            "w",
+            "h",
+            "scale"
+          ],
+          "properties": {
+            "t": {
+              "const": "resize"
+            },
+            "instance": {
+              "$ref": "common.schema.json#/$defs/instance"
+            },
+            "w": {
+              "type": "number",
+              "minimum": 0
+            },
+            "h": {
+              "type": "number",
+              "minimum": 0
+            },
+            "scale": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          }
+        }
+      ]
     },
     "theme_changed": {
-      "allOf": [{ "$ref": "#/$defs/envelope" }, {
-        "type": "object", "required": ["t", "theme"], "properties": { "t": { "const": "theme.changed" }, "theme": { "$ref": "common.schema.json#/$defs/theme" } }
-      }]
+      "allOf": [
+        {
+          "$ref": "#/$defs/envelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "t",
+            "theme"
+          ],
+          "properties": {
+            "t": {
+              "const": "theme.changed"
+            },
+            "theme": {
+              "$ref": "common.schema.json#/$defs/theme"
+            }
+          }
+        }
+      ]
     },
     "locale_changed": {
-      "allOf": [{ "$ref": "#/$defs/envelope" }, {
-        "type": "object", "required": ["t", "locale"], "properties": { "t": { "const": "locale.changed" }, "locale": { "type": "string" } }
-      }]
+      "allOf": [
+        {
+          "$ref": "#/$defs/envelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "t",
+            "locale"
+          ],
+          "properties": {
+            "t": {
+              "const": "locale.changed"
+            },
+            "locale": {
+              "type": "string"
+            }
+          }
+        }
+      ]
     },
     "selection_changed": {
-      "allOf": [{ "$ref": "#/$defs/envelope" }, {
-        "type": "object", "required": ["t"],
-        "properties": {
-          "t": { "const": "selection.changed" },
-          "ids": { "type": "array", "items": { "type": "string" } },
-          "kinds": { "type": "array", "items": { "enum": ["image", "video", "audio", "document"] } },
-          "paths": { "type": "array", "items": { "type": "string" } }
+      "allOf": [
+        {
+          "$ref": "#/$defs/envelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "t"
+          ],
+          "properties": {
+            "t": {
+              "const": "selection.changed"
+            },
+            "ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "kinds": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "image",
+                  "video",
+                  "audio",
+                  "document"
+                ]
+              }
+            },
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
         }
-      }]
+      ]
     },
     "cancel": {
-      "allOf": [{ "$ref": "#/$defs/envelope" }, {
-        "type": "object", "required": ["t", "job"], "properties": { "t": { "const": "cancel" }, "job": { "type": "string" } }
-      }]
+      "allOf": [
+        {
+          "$ref": "#/$defs/envelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "t",
+            "job"
+          ],
+          "properties": {
+            "t": {
+              "const": "cancel"
+            },
+            "job": {
+              "type": "string"
+            }
+          }
+        }
+      ]
     },
     "command": {
       "description": "An asset.action, toolbar.item, command or shortcut fired. `command` is the contribution id (not the envelope id).",
-      "allOf": [{ "$ref": "#/$defs/envelope" }, {
-        "type": "object", "required": ["t", "command"],
-        "properties": { "t": { "const": "command" }, "command": { "type": "string" }, "args": { "type": "object" }, "context": { "type": "object" } }
-      }]
+      "allOf": [
+        {
+          "$ref": "#/$defs/envelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "t",
+            "command"
+          ],
+          "properties": {
+            "t": {
+              "const": "command"
+            },
+            "command": {
+              "type": "string"
+            },
+            "args": {
+              "type": "object"
+            },
+            "context": {
+              "type": "object"
+            }
+          }
+        }
+      ]
     },
     "drop": {
-      "allOf": [{ "$ref": "#/$defs/envelope" }, {
-        "type": "object", "required": ["t", "target"],
-        "properties": { "t": { "const": "drop" }, "target": { "type": "string" }, "paths": { "type": "array", "items": { "type": "string" } }, "assets": { "type": "array" } }
-      }]
+      "allOf": [
+        {
+          "$ref": "#/$defs/envelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "t",
+            "target"
+          ],
+          "properties": {
+            "t": {
+              "const": "drop"
+            },
+            "target": {
+              "type": "string"
+            },
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "assets": {
+              "type": "array"
+            }
+          }
+        }
+      ]
     },
     "error": {
       "description": "The host rejected a message the plugin sent, for example canvas_too_large. ref names the rejected node or request.",
-      "allOf": [{ "$ref": "#/$defs/envelope" }, {
-        "type": "object", "required": ["t", "code", "message"],
-        "properties": { "t": { "const": "error" }, "code": { "type": "string" }, "message": { "type": "string" }, "ref": { "type": "string" } }
-      }]
+      "allOf": [
+        {
+          "$ref": "#/$defs/envelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "t",
+            "code",
+            "message"
+          ],
+          "properties": {
+            "t": {
+              "const": "error"
+            },
+            "code": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "ref": {
+              "type": "string"
+            }
+          }
+        }
+      ]
     },
     "shutdown": {
-      "allOf": [{ "$ref": "#/$defs/envelope" }, { "type": "object", "required": ["t"], "properties": { "t": { "const": "shutdown" } } }]
+      "allOf": [
+        {
+          "$ref": "#/$defs/envelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "t"
+          ],
+          "properties": {
+            "t": {
+              "const": "shutdown"
+            }
+          }
+        }
+      ]
     }
   }
 }
