@@ -40,7 +40,6 @@ pub enum Cmd {
     },
     Seek {
         ms: f64,
-        exact: bool,
     },
 }
 
@@ -203,6 +202,8 @@ impl Pump {
                 self.url = Some(url);
                 self.size = (width, height);
                 self.playing = false;
+                let seek_id = self.latest_seek.fetch_add(1, Ordering::SeqCst) + 1;
+                self.single_frame(0., seek_id);
             }
             Cmd::Transport {
                 playing,
@@ -221,9 +222,9 @@ impl Pump {
                     self.stop_audio();
                 }
             }
-            Cmd::Seek { ms, exact } => {
+            Cmd::Seek { ms } => {
                 let seek_id = self.latest_seek.fetch_add(1, Ordering::SeqCst) + 1;
-                if self.playing && !exact {
+                if self.playing {
                     self.start_playing(ms);
                 } else {
                     self.stop_decoder();
@@ -316,7 +317,7 @@ impl Pump {
             }
         }
         if let Some(frame) = self.pending.take() {
-            let due_ms = (frame.media_ms - self.from_ms);
+            let due_ms = frame.media_ms - self.from_ms;
             if frame.gen != self.gen {
                 return;
             }

@@ -111,7 +111,7 @@ fn stat(id: &str, label: &str, value: &str) -> Value {
             node(
                 &format!("{id}.v"),
                 "text",
-                json!({"text": value, "align": "end", "mono": true}),
+                json!({"text": value, "align": "right", "style": "mono"}),
             ),
         ],
         8.0,
@@ -177,7 +177,17 @@ fn top_bar(s: &State) -> Value {
                 "Collapse or expand the media pool",
                 true,
             ),
-            node("tools", "row", json!({"gap": 2.0, "children": tabs})),
+            node(
+                "tools",
+                "wrap",
+                json!({"gap": 2.0, "width":{"fill":1}, "children": tabs}),
+            ),
+            icon_button(
+                "layout:right",
+                "panel-right",
+                "Collapse or expand the inspector",
+                true,
+            ),
             node("top.spacer", "spacer", json!({"width": {"fill": 1}})),
             icon_button("undo", "undo", "Undo (Ctrl/Cmd+Z)", edit_ok),
             icon_button(
@@ -257,7 +267,7 @@ fn media_pool(s: &State) -> Value {
         node(
             "pool.dropbox",
             "button",
-            json!({"label": "Add video, audio or subtitles\nDrop files here or browse", "variant": "default", "on": ["click"], "enabled": s.busy.is_none()}),
+            json!({"label": "Add video, audio or subtitles\nDrop files here or browse", "variant": "default", "on": ["click", "drop"], "enabled": s.busy.is_none()}),
         ),
     ];
     children.push(node(
@@ -273,7 +283,7 @@ fn media_pool(s: &State) -> Value {
     node(
         "pool",
         "column",
-        json!({"gap": 8.0, "padding": 10, "width": {"px": s.pool_width}, "children": children}),
+        json!({"gap": 8.0, "padding": 10, "width": {"px": crate::layout::clamp_pool_width(Some(s.pool_width),Some(s.window_width))}, "children": children}),
     )
 }
 
@@ -340,7 +350,7 @@ fn viewer(s: &State) -> Value {
     children.push(node(
         "viewer.seek",
         "slider",
-        json!({"value": s.media_time, "min": 0, "max": duration, "step": 1, "on": ["change", "release"], "aria": "Seek"}),
+        json!({"value": s.media_time, "min": 0, "max": duration, "step": 1, "on": ["change", "submit"], "accessibility": {"label":"Seek"}}),
     ));
     children.push(row(
         "viewer.time",
@@ -401,11 +411,17 @@ fn viewer(s: &State) -> Value {
         "secondary",
         source.is_some() && s.dependencies_ready(),
     ));
-    node(
+    let mut viewer = node(
         "viewer",
         "column",
-        json!({"gap": 8.0, "padding": 10, "fill": 1, "children": children}),
-    )
+        json!({"gap":8.0,"padding":10,"width":{"fill":1},"children":children}),
+    );
+    if s.section != Section::Subtitles {
+        if let Some(height) = s.viewer_height {
+            viewer["height"] = json!({"px":height});
+        }
+    }
+    viewer
 }
 
 /// One timeline lane: header controls plus a canvas that draws ruler, clip, handles and pins.
@@ -1458,18 +1474,40 @@ fn lower(s: &State) -> Value {
 
 /// Workspace view (`main`): the full central area (pool, viewer, lower workspace).
 pub fn main_view(s: &State) -> Value {
+    if s.workspace_closed {
+        return column(
+            "workspace.closed",
+            vec![
+                text("workspace.closed.title", "Reelio is closed", "title"),
+                button("workspace:reopen", "Reopen Reelio", None, "primary", true),
+            ],
+            8.,
+        );
+    }
+    let show_pool = !s.layout.left_collapsed && s.section != Section::Subtitles;
+    let upper = || {
+        if show_pool && !s.layout.full_height_left {
+            node(
+                "upper",
+                "row",
+                json!({"width":{"fill":1}, "children":[media_pool(s),divider("pool",true),viewer(s)]}),
+            )
+        } else {
+            viewer(s)
+        }
+    };
     let center = if s.section == Section::Subtitles {
         vec![subtitle_studio(s)]
     } else {
-        vec![viewer(s), lower(s)]
+        vec![upper(), divider("viewer", false), lower(s)]
     };
     let mut top_children = vec![top_bar(s)];
     if let Some(busy) = &s.busy {
         top_children.push(text("busy", busy, "caption"));
     }
     let mut body = vec![];
-    if !s.layout.left_collapsed && s.section != Section::Subtitles {
-        body.push(media_pool(s));
+    if show_pool && s.layout.full_height_left {
+        body.extend([media_pool(s), divider("pool", true)]);
     }
     body.push(node(
         "center",
@@ -1499,6 +1537,19 @@ pub fn main_view(s: &State) -> Value {
     }
     children.extend(menu_overlay(s));
     json!({"id": "root", "kind": "stack", "children": children})
+}
+
+fn divider(id: &str, vertical: bool) -> Value {
+    let (width, height) = if vertical {
+        (json!({"px":6}), json!({"fill":1}))
+    } else {
+        (json!({"fill":1}), json!({"px":6}))
+    };
+    node(
+        &format!("divider:{id}"),
+        "canvas",
+        json!({"width":width,"height":height,"cursor": if vertical {"resize_ew"} else {"resize_ns"},"on":["double_click"],"accessibility":{"label":format!("Resize {id}"),"role":"separator"},"interactive":{"pointer":true,"keys":true,"focusable":true,"coalesce":"move"},"draw":{"frame":0,"clear":"border","ops":[]}}),
+    )
 }
 
 /// Context or project menu, drawn above the workspace at its anchor point.
@@ -2291,8 +2342,17 @@ fn confirm_scene(
 pub fn all(s: &State) -> BTreeMap<String, Value> {
     let mut out = BTreeMap::new();
     out.insert("main".into(), main_view(s));
-    out.insert("summary".into(), summary_panel(s));
-    out.insert("project".into(), project_panel(s));
+    if s.layout.right_collapsed || s.workspace_closed {
+        for id in ["summary", "project"] {
+            out.insert(
+                id.into(),
+                node("inspector.hidden", "spacer", json!({"height":{"px":0}})),
+            );
+        }
+    } else {
+        out.insert("summary".into(), summary_panel(s));
+        out.insert("project".into(), project_panel(s));
+    }
     let dialogs = modals(s);
     // The host may show the preferences contribution without opening the same panel as a modal.
     if let Some(panel) = dialogs.get("modal.settings") {

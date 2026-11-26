@@ -189,22 +189,10 @@ pub struct ResourcePut {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "lowercase")]
 pub enum PatchOp {
-    Set {
-        path: String,
-        value: Value,
-    },
-    Insert {
-        path: String,
-        index: usize,
-        node: Node,
-    },
-    Remove {
-        path: String,
-    },
-    Move {
-        path: String,
-        index: usize,
-    },
+    Set { path: String, value: Value },
+    Insert { path: String, index: usize, node: Node },
+    Remove { path: String },
+    Move { path: String, index: usize },
 }
 
 /// `canvas.draw` fast path.
@@ -246,27 +234,11 @@ pub enum NodeEvent {
     DoubleClick,
     Context,
     /// Controlled input edit: the host's buffer and the `rev` it was based on.
-    Change {
-        value: Value,
-        rev: u64,
-    },
-    Submit {
-        value: Value,
-        rev: u64,
-    },
-    Blur {
-        value: Value,
-        rev: u64,
-    },
-    Scroll {
-        x: f32,
-        y: f32,
-    },
-    ListWindow {
-        first: u64,
-        last: u64,
-        overscan: u64,
-    },
+    Change { value: Value, rev: u64 },
+    Submit { value: Value, rev: u64 },
+    Blur { value: Value, rev: u64 },
+    Scroll { x: f32, y: f32 },
+    ListWindow { first: u64, last: u64, overscan: u64 },
     Pointer {
         phase: PointerPhase,
         x: f32,
@@ -279,37 +251,12 @@ pub enum NodeEvent {
         /// Number of pointer moves merged into this event by the host (1 when not merged).
         coalesced: u32,
     },
-    Wheel {
-        dx: f32,
-        dy: f32,
-        x: f32,
-        y: f32,
-        mods: Mods,
-        coalesced: u32,
-    },
-    Key {
-        phase: KeyPhase,
-        key: String,
-        code: String,
-        text: String,
-        mods: Mods,
-        repeat: bool,
-    },
-    Drop {
-        paths: Vec<String>,
-        assets: Vec<Value>,
-        x: f32,
-        y: f32,
-    },
-    Hover {
-        x: f32,
-        y: f32,
-    },
+    Wheel { dx: f32, dy: f32, x: f32, y: f32, mods: Mods, coalesced: u32 },
+    Key { phase: KeyPhase, key: String, code: String, text: String, mods: Mods, repeat: bool },
+    Drop { paths: Vec<String>, assets: Vec<Value>, x: f32, y: f32 },
+    Hover { x: f32, y: f32 },
     /// Any event type this SDK does not know yet.
-    Other {
-        kind: String,
-        data: Map<String, Value>,
-    },
+    Other { kind: String, data: Map<String, Value> },
 }
 
 impl NodeEvent {
@@ -342,9 +289,7 @@ impl NodeEvent {
         };
         match self {
             NodeEvent::Click | NodeEvent::DoubleClick | NodeEvent::Context => {}
-            NodeEvent::Change { value, rev }
-            | NodeEvent::Submit { value, rev }
-            | NodeEvent::Blur { value, rev } => {
+            NodeEvent::Change { value, rev } | NodeEvent::Submit { value, rev } | NodeEvent::Blur { value, rev } => {
                 put("value", value.clone());
                 put("rev", Value::from(*rev));
             }
@@ -352,26 +297,12 @@ impl NodeEvent {
                 put("x", Value::from(*x));
                 put("y", Value::from(*y));
             }
-            NodeEvent::ListWindow {
-                first,
-                last,
-                overscan,
-            } => {
+            NodeEvent::ListWindow { first, last, overscan } => {
                 put("first", Value::from(*first));
                 put("last", Value::from(*last));
                 put("overscan", Value::from(*overscan));
             }
-            NodeEvent::Pointer {
-                phase,
-                x,
-                y,
-                button,
-                buttons,
-                mods,
-                clicks,
-                pointer_id,
-                coalesced,
-            } => {
+            NodeEvent::Pointer { phase, x, y, button, buttons, mods, clicks, pointer_id, coalesced } => {
                 put("phase", to_value(phase));
                 put("x", Value::from(*x));
                 put("y", Value::from(*y));
@@ -382,14 +313,7 @@ impl NodeEvent {
                 put("pointer_id", Value::from(*pointer_id));
                 put("coalesced", Value::from(*coalesced));
             }
-            NodeEvent::Wheel {
-                dx,
-                dy,
-                x,
-                y,
-                mods,
-                coalesced,
-            } => {
+            NodeEvent::Wheel { dx, dy, x, y, mods, coalesced } => {
                 put("dx", Value::from(*dx));
                 put("dy", Value::from(*dy));
                 put("x", Value::from(*x));
@@ -397,14 +321,7 @@ impl NodeEvent {
                 put("mods", to_value(mods));
                 put("coalesced", Value::from(*coalesced));
             }
-            NodeEvent::Key {
-                phase,
-                key,
-                code,
-                text,
-                mods,
-                repeat,
-            } => {
+            NodeEvent::Key { phase, key, code, text, mods, repeat } => {
                 put("phase", to_value(phase));
                 put("key", Value::from(key.as_str()));
                 put("code", Value::from(code.as_str()));
@@ -412,12 +329,7 @@ impl NodeEvent {
                 put("mods", to_value(mods));
                 put("repeat", Value::from(*repeat));
             }
-            NodeEvent::Drop {
-                paths,
-                assets,
-                x,
-                y,
-            } => {
+            NodeEvent::Drop { paths, assets, x, y } => {
                 put("paths", Value::from(paths.clone()));
                 put("assets", Value::Array(assets.clone()));
                 put("x", Value::from(*x));
@@ -435,59 +347,37 @@ impl NodeEvent {
     /// Parse the fields of one event (the object that carries `type`). Unknown types become
     /// [`NodeEvent::Other`]; malformed known types also fall back to `Other` (never a panic).
     pub fn from_fields(obj: &Map<String, Value>) -> NodeEvent {
-        let kind = obj
-            .get("type")
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_string();
+        let kind = obj.get("type").and_then(Value::as_str).unwrap_or("").to_string();
         let f32_of = |k: &str| obj.get(k).and_then(Value::as_f64).unwrap_or(0.0) as f32;
         let u64_of = |k: &str| obj.get(k).and_then(Value::as_u64).unwrap_or(0);
-        let mods = || {
-            obj.get("mods")
-                .and_then(|v| serde_json::from_value::<Mods>(v.clone()).ok())
-                .unwrap_or_default()
-        };
+        let mods = || obj.get("mods").and_then(|v| serde_json::from_value::<Mods>(v.clone()).ok()).unwrap_or_default();
         let value = || obj.get("value").cloned().unwrap_or(Value::Null);
         let parsed = match kind.as_str() {
             "click" => Some(NodeEvent::Click),
             "double_click" => Some(NodeEvent::DoubleClick),
             "context" => Some(NodeEvent::Context),
-            "change" => Some(NodeEvent::Change {
-                value: value(),
-                rev: u64_of("rev"),
-            }),
-            "submit" => Some(NodeEvent::Submit {
-                value: value(),
-                rev: u64_of("rev"),
-            }),
-            "blur" => Some(NodeEvent::Blur {
-                value: value(),
-                rev: u64_of("rev"),
-            }),
-            "scroll" => Some(NodeEvent::Scroll {
-                x: f32_of("x"),
-                y: f32_of("y"),
-            }),
+            "change" => Some(NodeEvent::Change { value: value(), rev: u64_of("rev") }),
+            "submit" => Some(NodeEvent::Submit { value: value(), rev: u64_of("rev") }),
+            "blur" => Some(NodeEvent::Blur { value: value(), rev: u64_of("rev") }),
+            "scroll" => Some(NodeEvent::Scroll { x: f32_of("x"), y: f32_of("y") }),
             "list.window" => Some(NodeEvent::ListWindow {
                 first: u64_of("first"),
                 last: u64_of("last"),
                 overscan: u64_of("overscan"),
             }),
-            "pointer" => serde_json::from_value::<PointerPhase>(
-                obj.get("phase").cloned().unwrap_or(Value::Null),
-            )
-            .ok()
-            .map(|phase| NodeEvent::Pointer {
-                phase,
-                x: f32_of("x"),
-                y: f32_of("y"),
-                button: obj.get("button").and_then(Value::as_i64).unwrap_or(0) as i32,
-                buttons: u64_of("buttons") as u32,
-                mods: mods(),
-                clicks: u64_of("clicks") as u32,
-                pointer_id: u64_of("pointer_id") as u32,
-                coalesced: obj.get("coalesced").and_then(Value::as_u64).unwrap_or(1) as u32,
-            }),
+            "pointer" => serde_json::from_value::<PointerPhase>(obj.get("phase").cloned().unwrap_or(Value::Null))
+                .ok()
+                .map(|phase| NodeEvent::Pointer {
+                    phase,
+                    x: f32_of("x"),
+                    y: f32_of("y"),
+                    button: obj.get("button").and_then(Value::as_i64).unwrap_or(0) as i32,
+                    buttons: u64_of("buttons") as u32,
+                    mods: mods(),
+                    clicks: u64_of("clicks") as u32,
+                    pointer_id: u64_of("pointer_id") as u32,
+                    coalesced: obj.get("coalesced").and_then(Value::as_u64).unwrap_or(1) as u32,
+                }),
             "wheel" => Some(NodeEvent::Wheel {
                 dx: f32_of("dx"),
                 dy: f32_of("dy"),
@@ -496,48 +386,31 @@ impl NodeEvent {
                 mods: mods(),
                 coalesced: obj.get("coalesced").and_then(Value::as_u64).unwrap_or(1) as u32,
             }),
-            "key" => {
-                serde_json::from_value::<KeyPhase>(obj.get("phase").cloned().unwrap_or(Value::Null))
-                    .ok()
-                    .map(|phase| NodeEvent::Key {
-                        phase,
-                        key: obj.get("key").and_then(Value::as_str).unwrap_or("").into(),
-                        code: obj.get("code").and_then(Value::as_str).unwrap_or("").into(),
-                        text: obj.get("text").and_then(Value::as_str).unwrap_or("").into(),
-                        mods: mods(),
-                        repeat: obj.get("repeat").and_then(Value::as_bool).unwrap_or(false),
-                    })
-            }
+            "key" => serde_json::from_value::<KeyPhase>(obj.get("phase").cloned().unwrap_or(Value::Null))
+                .ok()
+                .map(|phase| NodeEvent::Key {
+                    phase,
+                    key: obj.get("key").and_then(Value::as_str).unwrap_or("").into(),
+                    code: obj.get("code").and_then(Value::as_str).unwrap_or("").into(),
+                    text: obj.get("text").and_then(Value::as_str).unwrap_or("").into(),
+                    mods: mods(),
+                    repeat: obj.get("repeat").and_then(Value::as_bool).unwrap_or(false),
+                }),
             "drop" => Some(NodeEvent::Drop {
                 paths: obj
                     .get("paths")
                     .and_then(Value::as_array)
-                    .map(|a| {
-                        a.iter()
-                            .filter_map(|v| v.as_str().map(String::from))
-                            .collect()
-                    })
+                    .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
                     .unwrap_or_default(),
-                assets: obj
-                    .get("assets")
-                    .and_then(Value::as_array)
-                    .cloned()
-                    .unwrap_or_default(),
+                assets: obj.get("assets").and_then(Value::as_array).cloned().unwrap_or_default(),
                 x: f32_of("x"),
                 y: f32_of("y"),
             }),
-            "hover" => Some(NodeEvent::Hover {
-                x: f32_of("x"),
-                y: f32_of("y"),
-            }),
+            "hover" => Some(NodeEvent::Hover { x: f32_of("x"), y: f32_of("y") }),
             _ => None,
         };
         parsed.unwrap_or_else(|| {
-            let data = obj
-                .iter()
-                .filter(|(k, _)| k.as_str() != "type")
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect();
+            let data = obj.iter().filter(|(k, _)| k.as_str() != "type").map(|(k, v)| (k.clone(), v.clone())).collect();
             NodeEvent::Other { kind, data }
         })
     }
@@ -552,89 +425,39 @@ fn to_value<T: Serialize>(v: &T) -> Value {
 pub enum Incoming {
     Hello(Hello),
     /// `ping` (answered with `pong` by the protocol thread).
-    Ping {
-        id: Option<String>,
-    },
+    Ping { id: Option<String> },
     /// `ui.event` for one node of one slot instance.
-    UiEvent {
-        instance: String,
-        node: String,
-        event: NodeEvent,
-    },
+    UiEvent { instance: String, node: String, event: NodeEvent },
     /// `resource.ack`: the host consumed `seq` of `rid`.
-    ResourceAck {
-        rid: String,
-        seq: u64,
-    },
+    ResourceAck { rid: String, seq: u64 },
     /// `res`: answer to a request this plugin sent.
-    Response {
-        id: String,
-        result: Option<Value>,
-        error: Option<ErrorBody>,
-    },
+    Response { id: String, result: Option<Value>, error: Option<ErrorBody> },
     /// `req`: a provider request from the host (`source.*`, `search.query`, ...).
-    Request {
-        id: String,
-        method: String,
-        params: Value,
-    },
+    Request { id: String, method: String, params: Value },
     /// `visibility` (alias `ui.visible`): an instance became visible or hidden.
-    Visibility {
-        instance: String,
-        visible: bool,
-    },
+    Visibility { instance: String, visible: bool },
     /// `focus`: the plugin's window gained or lost focus.
-    Focus {
-        has: bool,
-    },
+    Focus { has: bool },
     /// `resize`: an instance changed size.
-    Resize {
-        instance: String,
-        w: f32,
-        h: f32,
-        scale: f32,
-    },
+    Resize { instance: String, w: f32, h: f32, scale: f32 },
     /// `theme.changed`.
     ThemeChanged(Theme),
     /// `locale.changed`.
-    LocaleChanged {
-        locale: String,
-    },
+    LocaleChanged { locale: String },
     /// `selection.changed`.
-    SelectionChanged {
-        ids: Vec<String>,
-        kinds: Vec<String>,
-        paths: Vec<String>,
-    },
+    SelectionChanged { ids: Vec<String>, kinds: Vec<String>, paths: Vec<String> },
     /// `cancel {job}`.
-    Cancel {
-        job: String,
-    },
+    Cancel { job: String },
     /// `command`: a command, asset action, toolbar item or shortcut fired.
-    Command {
-        command: String,
-        args: Value,
-        context: Value,
-    },
+    Command { command: String, args: Value, context: Value },
     /// `drop`: files or assets were dropped on a `drop.target`.
-    Drop {
-        target: String,
-        paths: Vec<String>,
-        assets: Vec<Value>,
-    },
+    Drop { target: String, paths: Vec<String>, assets: Vec<Value> },
     /// `error`: the host rejected something the plugin sent (for example `canvas_too_large`).
-    Error {
-        code: String,
-        message: String,
-        ref_id: Option<String>,
-    },
+    Error { code: String, message: String, ref_id: Option<String> },
     /// `shutdown`: exit cleanly.
     Shutdown,
     /// Any `t` this SDK does not know (ignored by the SDK, kept for tooling).
-    Unknown {
-        t: String,
-        raw: Value,
-    },
+    Unknown { t: String, raw: Value },
 }
 
 fn str_field(obj: &Map<String, Value>, k: &str) -> String {
@@ -644,11 +467,7 @@ fn str_field(obj: &Map<String, Value>, k: &str) -> String {
 fn vec_str(obj: &Map<String, Value>, k: &str) -> Vec<String> {
     obj.get(k)
         .and_then(Value::as_array)
-        .map(|a| {
-            a.iter()
-                .filter_map(|v| v.as_str().map(String::from))
-                .collect()
-        })
+        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
         .unwrap_or_default()
 }
 
@@ -658,8 +477,7 @@ impl Incoming {
         if line.len() > MAX_LINE_BYTES {
             return Err(ProtocolError::TooLarge(line.len()));
         }
-        let value: Value =
-            serde_json::from_str(line).map_err(|e| ProtocolError::Malformed(e.to_string()))?;
+        let value: Value = serde_json::from_str(line).map_err(|e| ProtocolError::Malformed(e.to_string()))?;
         Incoming::from_value(value)
     }
 
@@ -669,11 +487,7 @@ impl Incoming {
             Value::Object(o) => o,
             _ => return Err(ProtocolError::Malformed("message is not an object".into())),
         };
-        let t = obj
-            .get("t")
-            .and_then(Value::as_str)
-            .ok_or_else(|| ProtocolError::Malformed("missing t".into()))?
-            .to_string();
+        let t = obj.get("t").and_then(Value::as_str).ok_or_else(|| ProtocolError::Malformed("missing t".into()))?.to_string();
         let id = obj.get("id").and_then(|v| match v {
             Value::String(s) => Some(s.clone()),
             Value::Number(n) => Some(n.to_string()),
@@ -681,9 +495,7 @@ impl Incoming {
         });
         let bad = |e: serde_json::Error| ProtocolError::Malformed(format!("{t}: {e}"));
         let msg = match t.as_str() {
-            "hello" => {
-                Incoming::Hello(serde_json::from_value(Value::Object(obj.clone())).map_err(bad)?)
-            }
+            "hello" => Incoming::Hello(serde_json::from_value(Value::Object(obj.clone())).map_err(bad)?),
             "ping" => Incoming::Ping { id },
             "ui.event" => Incoming::UiEvent {
                 instance: str_field(&obj, "instance"),
@@ -697,9 +509,7 @@ impl Incoming {
             "res" => Incoming::Response {
                 id: id.clone().unwrap_or_default(),
                 result: obj.get("result").cloned(),
-                error: obj
-                    .get("error")
-                    .and_then(|e| serde_json::from_value(e.clone()).ok()),
+                error: obj.get("error").and_then(|e| serde_json::from_value(e.clone()).ok()),
             },
             "req" => Incoming::Request {
                 id: id.clone().unwrap_or_default(),
@@ -710,30 +520,23 @@ impl Incoming {
                 instance: str_field(&obj, "instance"),
                 visible: obj.get("visible").and_then(Value::as_bool).unwrap_or(false),
             },
-            "focus" => Incoming::Focus {
-                has: obj.get("has").and_then(Value::as_bool).unwrap_or(false),
-            },
+            "focus" => Incoming::Focus { has: obj.get("has").and_then(Value::as_bool).unwrap_or(false) },
             "resize" => Incoming::Resize {
                 instance: str_field(&obj, "instance"),
                 w: obj.get("w").and_then(Value::as_f64).unwrap_or(0.0) as f32,
                 h: obj.get("h").and_then(Value::as_f64).unwrap_or(0.0) as f32,
                 scale: obj.get("scale").and_then(Value::as_f64).unwrap_or(1.0) as f32,
             },
-            "theme.changed" => Incoming::ThemeChanged(
-                serde_json::from_value(obj.get("theme").cloned().unwrap_or(Value::Null))
-                    .map_err(bad)?,
-            ),
-            "locale.changed" => Incoming::LocaleChanged {
-                locale: str_field(&obj, "locale"),
-            },
+            "theme.changed" => {
+                Incoming::ThemeChanged(serde_json::from_value(obj.get("theme").cloned().unwrap_or(Value::Null)).map_err(bad)?)
+            }
+            "locale.changed" => Incoming::LocaleChanged { locale: str_field(&obj, "locale") },
             "selection.changed" => Incoming::SelectionChanged {
                 ids: vec_str(&obj, "ids"),
                 kinds: vec_str(&obj, "kinds"),
                 paths: vec_str(&obj, "paths"),
             },
-            "cancel" => Incoming::Cancel {
-                job: str_field(&obj, "job"),
-            },
+            "cancel" => Incoming::Cancel { job: str_field(&obj, "job") },
             "command" => Incoming::Command {
                 command: str_field(&obj, "command"),
                 args: obj.get("args").cloned().unwrap_or(Value::Null),
@@ -742,11 +545,7 @@ impl Incoming {
             "drop" => Incoming::Drop {
                 target: str_field(&obj, "target"),
                 paths: vec_str(&obj, "paths"),
-                assets: obj
-                    .get("assets")
-                    .and_then(Value::as_array)
-                    .cloned()
-                    .unwrap_or_default(),
+                assets: obj.get("assets").and_then(Value::as_array).cloned().unwrap_or_default(),
             },
             "error" => Incoming::Error {
                 code: str_field(&obj, "code"),
@@ -754,10 +553,7 @@ impl Incoming {
                 ref_id: obj.get("ref").and_then(Value::as_str).map(String::from),
             },
             "shutdown" => Incoming::Shutdown,
-            _ => Incoming::Unknown {
-                t: t.clone(),
-                raw: Value::Object(obj),
-            },
+            _ => Incoming::Unknown { t: t.clone(), raw: Value::Object(obj) },
         };
         Ok(msg)
     }
@@ -785,11 +581,7 @@ impl Incoming {
                 }
                 "ping"
             }
-            Incoming::UiEvent {
-                instance,
-                node,
-                event,
-            } => {
+            Incoming::UiEvent { instance, node, event } => {
                 put("instance", Value::from(instance.as_str()));
                 put("node", Value::from(node.as_str()));
                 for (k, v) in event.to_fields() {
@@ -827,12 +619,7 @@ impl Incoming {
                 put("has", Value::from(*has));
                 "focus"
             }
-            Incoming::Resize {
-                instance,
-                w,
-                h,
-                scale,
-            } => {
+            Incoming::Resize { instance, w, h, scale } => {
                 put("instance", Value::from(instance.as_str()));
                 put("w", Value::from(*w));
                 put("h", Value::from(*h));
@@ -857,31 +644,19 @@ impl Incoming {
                 put("job", Value::from(job.as_str()));
                 "cancel"
             }
-            Incoming::Command {
-                command,
-                args,
-                context,
-            } => {
+            Incoming::Command { command, args, context } => {
                 put("command", Value::from(command.as_str()));
                 put("args", args.clone());
                 put("context", context.clone());
                 "command"
             }
-            Incoming::Drop {
-                target,
-                paths,
-                assets,
-            } => {
+            Incoming::Drop { target, paths, assets } => {
                 put("target", Value::from(target.as_str()));
                 put("paths", Value::from(paths.clone()));
                 put("assets", Value::Array(assets.clone()));
                 "drop"
             }
-            Incoming::Error {
-                code,
-                message,
-                ref_id,
-            } => {
+            Incoming::Error { code, message, ref_id } => {
                 put("code", Value::from(code.as_str()));
                 put("message", Value::from(message.as_str()));
                 if let Some(r) = ref_id {
@@ -908,11 +683,7 @@ impl Incoming {
 #[serde(tag = "t")]
 pub enum Outgoing {
     #[serde(rename = "ready")]
-    Ready {
-        plugin: PluginId,
-        protocol: u32,
-        contributions: Vec<Contribution>,
-    },
+    Ready { plugin: PluginId, protocol: u32, contributions: Vec<Contribution> },
     #[serde(rename = "contribute")]
     Contribute { contributions: Vec<Contribution> },
     #[serde(rename = "withdraw")]
@@ -924,32 +695,19 @@ pub enum Outgoing {
     #[serde(rename = "ui.focus")]
     UiFocus { instance: String, node: String },
     #[serde(rename = "ui.scroll_to")]
-    UiScrollTo {
-        instance: String,
-        node: String,
-        align: String,
-    },
+    UiScrollTo { instance: String, node: String, align: String },
     #[serde(rename = "ui.beep")]
     UiBeep {},
     #[serde(rename = "canvas.draw")]
     CanvasDraw(CanvasDraw),
     #[serde(rename = "list.rows")]
-    ListRows {
-        instance: String,
-        node: String,
-        start: u64,
-        rows: Vec<Node>,
-    },
+    ListRows { instance: String, node: String, start: u64, rows: Vec<Node> },
     #[serde(rename = "resource.put")]
     ResourcePut(ResourcePut),
     #[serde(rename = "resource.drop")]
     ResourceDrop { rid: String },
     #[serde(rename = "req")]
-    Request {
-        id: String,
-        method: String,
-        params: Value,
-    },
+    Request { id: String, method: String, params: Value },
     #[serde(rename = "res")]
     Response {
         id: String,
@@ -993,8 +751,7 @@ impl Outgoing {
 
     /// Serialize as one JSON line (without the trailing newline), enforcing [`MAX_LINE_BYTES`].
     pub fn to_line(&self) -> Result<String, ProtocolError> {
-        let line = serde_json::to_string(&self.to_value())
-            .map_err(|e| ProtocolError::Malformed(e.to_string()))?;
+        let line = serde_json::to_string(&self.to_value()).map_err(|e| ProtocolError::Malformed(e.to_string()))?;
         if line.len() > MAX_LINE_BYTES {
             return Err(ProtocolError::TooLarge(line.len()));
         }
@@ -1031,45 +788,19 @@ mod tests {
 
     #[test]
     fn parses_flat_ui_events() {
-        let click = Incoming::parse(
-            r#"{"v":2,"t":"ui.event","instance":"hello-ui/nav","node":"go","type":"click"}"#,
-        )
-        .unwrap();
+        let click = Incoming::parse(r#"{"v":2,"t":"ui.event","instance":"hello-ui/nav","node":"go","type":"click"}"#).unwrap();
         assert_eq!(
             click,
-            Incoming::UiEvent {
-                instance: "hello-ui/nav".into(),
-                node: "go".into(),
-                event: NodeEvent::Click
-            }
+            Incoming::UiEvent { instance: "hello-ui/nav".into(), node: "go".into(), event: NodeEvent::Click }
         );
-        let change = Incoming::parse(
-            r#"{"t":"ui.event","instance":"i","node":"name","type":"change","value":"ab","rev":3}"#,
-        )
-        .unwrap();
-        assert!(matches!(
-            change,
-            Incoming::UiEvent {
-                event: NodeEvent::Change { rev: 3, .. },
-                ..
-            }
-        ));
+        let change = Incoming::parse(r#"{"t":"ui.event","instance":"i","node":"name","type":"change","value":"ab","rev":3}"#).unwrap();
+        assert!(matches!(change, Incoming::UiEvent { event: NodeEvent::Change { rev: 3, .. }, .. }));
         let ptr = Incoming::parse(
             r#"{"t":"ui.event","instance":"i","node":"tl","type":"pointer","phase":"move","x":4.5,"y":2,"button":0,"buttons":1,"mods":{"shift":true},"clicks":0,"pointer_id":1,"coalesced":5}"#,
         )
         .unwrap();
         match ptr {
-            Incoming::UiEvent {
-                event:
-                    NodeEvent::Pointer {
-                        phase,
-                        x,
-                        coalesced,
-                        mods,
-                        ..
-                    },
-                ..
-            } => {
+            Incoming::UiEvent { event: NodeEvent::Pointer { phase, x, coalesced, mods, .. }, .. } => {
                 assert_eq!(phase, PointerPhase::Move);
                 assert_eq!(x, 4.5);
                 assert_eq!(coalesced, 5);
@@ -1078,30 +809,14 @@ mod tests {
             other => panic!("{other:?}"),
         }
         let list = Incoming::parse(r#"{"t":"ui.event","instance":"i","node":"rows","type":"list.window","first":10,"last":30,"overscan":5}"#).unwrap();
-        assert!(matches!(
-            list,
-            Incoming::UiEvent {
-                event: NodeEvent::ListWindow {
-                    first: 10,
-                    last: 30,
-                    overscan: 5
-                },
-                ..
-            }
-        ));
+        assert!(matches!(list, Incoming::UiEvent { event: NodeEvent::ListWindow { first: 10, last: 30, overscan: 5 }, .. }));
     }
 
     #[test]
     fn unknown_event_types_and_messages_are_kept_not_fatal() {
-        let ev = Incoming::parse(
-            r#"{"t":"ui.event","instance":"i","node":"n","type":"future_gesture","extra":1}"#,
-        )
-        .unwrap();
+        let ev = Incoming::parse(r#"{"t":"ui.event","instance":"i","node":"n","type":"future_gesture","extra":1}"#).unwrap();
         match ev {
-            Incoming::UiEvent {
-                event: NodeEvent::Other { kind, data },
-                ..
-            } => {
+            Incoming::UiEvent { event: NodeEvent::Other { kind, data }, .. } => {
                 assert_eq!(kind, "future_gesture");
                 assert_eq!(data["extra"], 1);
             }
@@ -1114,38 +829,15 @@ mod tests {
     #[test]
     fn parses_responses_requests_pings_and_acks() {
         let res = Incoming::parse(r#"{"t":"res","id":"7","result":{"ok":true}}"#).unwrap();
-        assert_eq!(
-            res,
-            Incoming::Response {
-                id: "7".into(),
-                result: Some(json!({"ok":true})),
-                error: None
-            }
-        );
-        let err = Incoming::parse(
-            r#"{"t":"res","id":"8","error":{"code":"permission_denied","message":"no"}}"#,
-        )
-        .unwrap();
-        assert!(
-            matches!(err, Incoming::Response { error: Some(ErrorBody { ref code, .. }), .. } if code == "permission_denied")
-        );
-        let req = Incoming::parse(
-            r#"{"t":"req","id":"r1","method":"source.list","params":{"source":"s"}}"#,
-        )
-        .unwrap();
+        assert_eq!(res, Incoming::Response { id: "7".into(), result: Some(json!({"ok":true})), error: None });
+        let err = Incoming::parse(r#"{"t":"res","id":"8","error":{"code":"permission_denied","message":"no"}}"#).unwrap();
+        assert!(matches!(err, Incoming::Response { error: Some(ErrorBody { ref code, .. }), .. } if code == "permission_denied"));
+        let req = Incoming::parse(r#"{"t":"req","id":"r1","method":"source.list","params":{"source":"s"}}"#).unwrap();
         assert!(matches!(req, Incoming::Request { ref method, .. } if method == "source.list"));
-        assert_eq!(
-            Incoming::parse(r#"{"t":"ping","id":"p"}"#).unwrap(),
-            Incoming::Ping {
-                id: Some("p".into())
-            }
-        );
+        assert_eq!(Incoming::parse(r#"{"t":"ping","id":"p"}"#).unwrap(), Incoming::Ping { id: Some("p".into()) });
         assert_eq!(
             Incoming::parse(r#"{"t":"resource.ack","rid":"thumb:1","seq":4}"#).unwrap(),
-            Incoming::ResourceAck {
-                rid: "thumb:1".into(),
-                seq: 4
-            }
+            Incoming::ResourceAck { rid: "thumb:1".into(), seq: 4 }
         );
         assert!(Incoming::parse("not json").is_err());
         assert!(Incoming::parse("[1,2]").is_err());
@@ -1154,20 +846,13 @@ mod tests {
     #[test]
     fn oversized_lines_are_rejected() {
         let big = format!(r#"{{"t":"ping","pad":"{}"}}"#, "x".repeat(MAX_LINE_BYTES));
-        assert!(matches!(
-            Incoming::parse(&big),
-            Err(ProtocolError::TooLarge(_))
-        ));
+        assert!(matches!(Incoming::parse(&big), Err(ProtocolError::TooLarge(_))));
     }
 
     #[test]
     fn outgoing_messages_carry_envelope_and_roundtrip() {
-        let scene = crate::scene::Node::column("root")
-            .child(crate::scene::Node::button("go", "Go").on(&["click"]));
-        let msg = Outgoing::UiSet {
-            instance: "hello-ui/main".into(),
-            scene,
-        };
+        let scene = crate::scene::Node::column("root").child(crate::scene::Node::button("go", "Go").on(&["click"]));
+        let msg = Outgoing::UiSet { instance: "hello-ui/main".into(), scene };
         let v = msg.to_value();
         assert_eq!(v["v"], 2);
         assert_eq!(v["t"], "ui.set");
@@ -1197,38 +882,14 @@ mod tests {
 
     #[test]
     fn outgoing_pong_and_req_shapes() {
-        assert_eq!(
-            Outgoing::Pong {
-                id: Some("p".into())
-            }
-            .to_value(),
-            json!({"v":2,"t":"pong","id":"p"})
-        );
-        let req = Outgoing::Request {
-            id: "7".into(),
-            method: "library.query".into(),
-            params: json!({"limit":5}),
-        };
-        assert_eq!(
-            req.to_value(),
-            json!({"v":2,"t":"req","id":"7","method":"library.query","params":{"limit":5}})
-        );
+        assert_eq!(Outgoing::Pong { id: Some("p".into()) }.to_value(), json!({"v":2,"t":"pong","id":"p"}));
+        let req = Outgoing::Request { id: "7".into(), method: "library.query".into(), params: json!({"limit":5}) };
+        assert_eq!(req.to_value(), json!({"v":2,"t":"req","id":"7","method":"library.query","params":{"limit":5}}));
     }
 
     #[test]
     fn incoming_serializes_for_the_mock_host() {
-        let ev = Incoming::UiEvent {
-            instance: "i".into(),
-            node: "tl".into(),
-            event: NodeEvent::Wheel {
-                dx: 0.0,
-                dy: -3.0,
-                x: 1.0,
-                y: 2.0,
-                mods: Mods::default(),
-                coalesced: 2,
-            },
-        };
+        let ev = Incoming::UiEvent { instance: "i".into(), node: "tl".into(), event: NodeEvent::Wheel { dx: 0.0, dy: -3.0, x: 1.0, y: 2.0, mods: Mods::default(), coalesced: 2 } };
         let v = ev.to_value();
         assert_eq!(v["t"], "ui.event");
         assert_eq!(v["type"], "wheel");

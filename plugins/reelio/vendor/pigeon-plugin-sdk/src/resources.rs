@@ -32,16 +32,11 @@ pub const DEFAULT_ACK_WAIT: Duration = Duration::from_secs(2);
 #[derive(Debug)]
 pub enum ResourceError {
     /// The host did not acknowledge an older frame of this id in time.
-    Busy {
-        rid: String,
-    },
+    Busy { rid: String },
     /// The host gave no session directory.
     NoSessionDir,
     /// The pixel buffer does not match `w * h * 4`.
-    BadSize {
-        expected: usize,
-        actual: usize,
-    },
+    BadSize { expected: usize, actual: usize },
     /// A bad resource id (empty, or longer than 256 bytes).
     BadRid(String),
     Io(io::Error),
@@ -51,15 +46,9 @@ pub enum ResourceError {
 impl fmt::Display for ResourceError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ResourceError::Busy { rid } => {
-                write!(f, "host has not released an older frame of {rid}")
-            }
-            ResourceError::NoSessionDir => {
-                write!(f, "the host did not provide a session directory")
-            }
-            ResourceError::BadSize { expected, actual } => {
-                write!(f, "pixel buffer is {actual} bytes, expected {expected}")
-            }
+            ResourceError::Busy { rid } => write!(f, "host has not released an older frame of {rid}"),
+            ResourceError::NoSessionDir => write!(f, "the host did not provide a session directory"),
+            ResourceError::BadSize { expected, actual } => write!(f, "pixel buffer is {actual} bytes, expected {expected}"),
             ResourceError::BadRid(r) => write!(f, "invalid resource id {r:?}"),
             ResourceError::Io(e) => write!(f, "cannot write resource file: {e}"),
             ResourceError::Service(e) => write!(f, "{e}"),
@@ -89,10 +78,7 @@ pub struct Resources {
 
 impl Resources {
     pub(crate) fn new(ctx: Ctx) -> Resources {
-        Resources {
-            ctx,
-            ack_wait: DEFAULT_ACK_WAIT,
-        }
+        Resources { ctx, ack_wait: DEFAULT_ACK_WAIT }
     }
 
     /// Change how long puts wait for the host to release a slot.
@@ -102,49 +88,18 @@ impl Resources {
     }
 
     /// Publish straight-alpha RGBA8 pixels (`w * h * 4` bytes, row stride `w * 4`). Returns the sequence number.
-    pub fn put_rgba(
-        &self,
-        rid: &str,
-        w: u32,
-        h: u32,
-        pixels: &[u8],
-        premultiplied: bool,
-    ) -> Result<u64, ResourceError> {
+    pub fn put_rgba(&self, rid: &str, w: u32, h: u32, pixels: &[u8], premultiplied: bool) -> Result<u64, ResourceError> {
         let expected = w as usize * h as usize * 4;
         if pixels.len() != expected {
-            return Err(ResourceError::BadSize {
-                expected,
-                actual: pixels.len(),
-            });
+            return Err(ResourceError::BadSize { expected, actual: pixels.len() });
         }
-        self.publish(
-            rid,
-            ResourceKind::Rgba,
-            "rgba",
-            pixels,
-            w,
-            h,
-            Some(w * 4),
-            premultiplied,
-        )
+        self.publish(rid, ResourceKind::Rgba, "rgba", pixels, w, h, Some(w * 4), premultiplied)
     }
 
     /// Publish an encoded image (`png`, `jpeg`, `webp` or `svg`). `w`/`h` are the decoded size (0 for svg).
-    pub fn put_encoded(
-        &self,
-        rid: &str,
-        kind: ResourceKind,
-        bytes: &[u8],
-        w: u32,
-        h: u32,
-    ) -> Result<u64, ResourceError> {
+    pub fn put_encoded(&self, rid: &str, kind: ResourceKind, bytes: &[u8], w: u32, h: u32) -> Result<u64, ResourceError> {
         let ext = match kind {
-            ResourceKind::Rgba => {
-                return Err(ResourceError::BadSize {
-                    expected: 0,
-                    actual: bytes.len(),
-                })
-            }
+            ResourceKind::Rgba => return Err(ResourceError::BadSize { expected: 0, actual: bytes.len() }),
             ResourceKind::Png => "png",
             ResourceKind::Jpeg => "jpg",
             ResourceKind::Webp => "webp",
@@ -166,17 +121,7 @@ impl Resources {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn publish(
-        &self,
-        rid: &str,
-        kind: ResourceKind,
-        ext: &str,
-        bytes: &[u8],
-        w: u32,
-        h: u32,
-        stride: Option<u32>,
-        premultiplied: bool,
-    ) -> Result<u64, ResourceError> {
+    fn publish(&self, rid: &str, kind: ResourceKind, ext: &str, bytes: &[u8], w: u32, h: u32, stride: Option<u32>, premultiplied: bool) -> Result<u64, ResourceError> {
         check_rid(rid)?;
         let dir = self.ctx.session_dir();
         if dir.as_os_str().is_empty() {
@@ -246,15 +191,7 @@ fn check_rid(rid: &str) -> Result<(), ResourceError> {
 }
 
 fn sanitize(rid: &str) -> String {
-    rid.chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect()
+    rid.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect()
 }
 
 #[cfg(test)]

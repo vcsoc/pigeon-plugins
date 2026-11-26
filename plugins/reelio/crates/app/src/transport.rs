@@ -14,7 +14,7 @@ use pigeon_plugin_sdk::{Contribution, DrawList, Node};
 use reelio_ui::scene;
 use reelio_ui::state::{Effect, Event, State};
 use serde_json::{json, Map, Value};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::sync::OnceLock;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
@@ -121,15 +121,16 @@ pub struct Pump {
     sent_structure: BTreeMap<String, Value>,
     sent_draws: BTreeMap<(String, String), Value>,
     revs: BTreeMap<(String, String), (Value, u64)>,
-    visible: BTreeSet<String>,
-    open_modals: BTreeSet<String>,
+    visible: BTreeMap<String, String>,
+    open_modals: BTreeMap<String, Option<String>>,
     frame: u64,
     last_cue_reveal: Option<(String, u64)>,
 }
 
 impl Pump {
     /// Push whatever changed to the host through the SDK.
-    pub fn render(&mut self, ctx: &Ctx, state: &State) {
+    pub fn render(&mut self, app: &Arc<App>, state: &State) {
+        let ctx = &app.ctx;
         let scenes = scene::all(state);
         for name in scenes
             .keys()
@@ -137,30 +138,63 @@ impl Pump {
             .cloned()
             .collect::<Vec<_>>()
         {
-            if self.open_modals.insert(name.clone()) {
-                let short = name.trim_start_matches("modal.").to_string();
+            if !self.open_modals.contains_key(&name) {
+                self.open_modals.insert(name.clone(), None);
+                let short = name.trim_start_matches("modal.").to_owned();
+                let preferred = format!("reelio/{short}");
+                let weak = Arc::downgrade(app);
                 ctx.call_async(
                     "window.open_modal",
-                    json!({"contribution": short, "instance": name, "props": {}}),
-                    |_, _| {},
+                    json!({"contribution":short,"instance":preferred,"props":{}}),
+                    move |ctx, result| {
+                        let Some(app) = weak.upgrade() else {
+                            return;
+                        };
+                        match result {
+                            Ok(value) => {
+                                let instance = value["instance"]
+                                    .as_str()
+                                    .map(qualified_instance)
+                                    .unwrap_or(preferred);
+                                let ctx = ctx.clone();
+                                update(&app, move |core| {
+                                    if let Some(wire) = core.pump.open_modals.get_mut(&name) {
+                                        *wire = Some(instance);
+                                    } else {
+                                        core_close_modal(&ctx, &instance);
+                                    }
+                                });
+                            }
+                            Err(e) => {
+                                ctx.log("warn", &format!("Could not open Reelio modal: {e}"));
+                                update(&app, move |core| dismiss_modal(core, &name));
+                            }
+                        }
+                    },
                 );
             }
         }
         let gone: Vec<String> = self
             .open_modals
-            .iter()
+            .keys()
             .filter(|m| !scenes.contains_key(*m))
             .cloned()
             .collect();
         for name in gone {
-            self.open_modals.remove(&name);
-            self.sent_structure.remove(&name);
-            ctx.call_async("window.close_modal", json!({"instance": name}), |_, _| {});
-        }
-        for (instance, mut scene) in scenes {
-            if !instance.starts_with("modal.") && !self.visible.contains(&instance) {
-                continue;
+            if let Some(Some(instance)) = self.open_modals.remove(&name) {
+                self.sent_structure.remove(&instance);
+                core_close_modal(ctx, &instance);
             }
+        }
+        for (name, mut scene) in scenes {
+            let Some(instance) = self
+                .visible
+                .get(&name)
+                .or_else(|| self.open_modals.get(&name).and_then(Option::as_ref))
+                .cloned()
+            else {
+                continue;
+            };
             stamp_revs(&mut scene, &instance, &mut self.revs);
             let (structure, draws) = split_canvas(&scene);
             if self.sent_structure.get(&instance) == Some(&structure) {
@@ -199,7 +233,11 @@ impl Pump {
                 }
             }
         }
-        if state.section == reelio_ui::state::Section::Subtitles && self.visible.contains("main") {
+        if let Some(instance) = self
+            .visible
+            .get("main")
+            .filter(|_| state.section == reelio_ui::state::Section::Subtitles)
+        {
             if let Some(reveal) = state
                 .studio
                 .as_ref()
@@ -207,10 +245,51 @@ impl Pump {
             {
                 if self.last_cue_reveal.as_ref() != Some(reveal) {
                     self.last_cue_reveal = Some(reveal.clone());
-                    let _ = ctx.scroll_to("main", format!("sub:select:{}", reveal.0), "nearest");
+                    let _ = ctx.scroll_to(instance, format!("sub:select:{}", reveal.0), "nearest");
                 }
             }
         }
+    }
+}
+
+fn qualified_instance(instance: &str) -> String {
+    if instance.starts_with("reelio/") {
+        instance.into()
+    } else {
+        format!("reelio/{instance}")
+    }
+}
+fn contribution_id(instance: &str) -> &str {
+    instance.strip_prefix("reelio/").unwrap_or(instance)
+}
+fn core_close_modal(ctx: &Ctx, instance: &str) {
+    ctx.call_async(
+        "window.close_modal",
+        json!({"instance":instance}),
+        |_, _| {},
+    );
+}
+fn dismiss_modal(core: &mut Core, name: &str) {
+    match name {
+        "modal.consent" => {
+            core.state.dialogs.engine_consent = None;
+            if let Some((_, decision)) = core.consent.take() {
+                let _ = decision.try_send(false);
+            }
+        }
+        "modal.settings" => core.state.dialogs.settings = false,
+        "modal.dependencies" => core.state.dialogs.dependencies = false,
+        "modal.about" => core.state.dialogs.about = false,
+        "modal.quit" => core.state.dialogs.quit_confirm = false,
+        "modal.export_review" => core.state.dialogs.export_review = None,
+        "modal.restore" => core.state.dialogs.restore_confirm = None,
+        "modal.download" => {
+            if let Some(id) = core.state.resources.front().map(|r| r.id.clone()) {
+                core.state
+                    .ui_action(&format!("resource:dismiss:{id}"), Value::Null);
+            }
+        }
+        _ => {}
     }
 }
 
@@ -299,8 +378,8 @@ fn update_boxed(app: &Arc<App>, f: Box<dyn FnOnce(&mut Core) + Send>) {
                             let _ = decision.try_send(approved);
                         }
                     }
-                    Effect::CloseWindow => app.ctx.log("info", "close requested by the user"),
-                    Effect::Seek { ms, fast } => send_player(app, Cmd::Seek { ms, exact: !fast }),
+                    Effect::CloseWindow => core.state.close_workspace(),
+                    Effect::Seek { ms, .. } => send_player(app, Cmd::Seek { ms }),
                     Effect::Transport {
                         playing,
                         from_ms,
@@ -331,8 +410,8 @@ fn update_boxed(app: &Arc<App>, f: Box<dyn FnOnce(&mut Core) + Send>) {
             images,
             ..
         } = &mut *core;
-        images.update(&app.ctx, state, pump.visible.contains("main"));
-        pump.render(&app.ctx, state);
+        images.update(&app.ctx, state, pump.visible.contains_key("main"));
+        pump.render(app, state);
         requests
     };
     for (id, request) in requests {
@@ -467,11 +546,17 @@ fn mods_json(mods: &pigeon_plugin_sdk::protocol::Mods) -> Value {
 pub fn handle(app: &Arc<App>, msg: Incoming) {
     match msg {
         Incoming::Visibility { instance, visible } => update(app, move |core| {
-            if visible {
-                core.pump.visible.insert(instance.clone());
+            let key = contribution_id(&instance).to_owned();
+            if visible && matches!(key.as_str(), "main" | "summary" | "project" | "prefs") {
+                core.pump.visible.insert(key, instance.clone());
                 core.pump.sent_structure.remove(&instance);
-            } else {
-                core.pump.visible.remove(&instance);
+            } else if !visible {
+                core.pump.visible.remove(&key);
+                if let Some(name) = core.pump.open_modals.iter().find_map(|(name, wire)| {
+                    (wire.as_ref() == Some(&instance)).then(|| name.clone())
+                }) {
+                    dismiss_modal(core, &name);
+                }
             }
         }),
         Incoming::UiEvent {
@@ -486,7 +571,7 @@ pub fn handle(app: &Arc<App>, msg: Incoming) {
                 overscan,
             } = event
             {
-                if node == "sub:list" && instance == "main" {
+                if node == "sub:list" && contribution_id(&instance) == "main" {
                     let core = app.lock();
                     let (start, rows) = reelio_ui::scene::cue_rows(
                         &core.state,
@@ -501,7 +586,19 @@ pub fn handle(app: &Arc<App>, msg: Incoming) {
                 }
                 return;
             }
-            if let Some(value) = ui_value(&event) {
+            let value = if node == "viewer.seek" {
+                match &event {
+                    NodeEvent::Submit { value, .. } | NodeEvent::Blur { value, .. }
+                        if value.is_number() =>
+                    {
+                        Some(json!({"ms":value,"final":true}))
+                    }
+                    _ => ui_value(&event),
+                }
+            } else {
+                ui_value(&event)
+            };
+            if let Some(value) = value {
                 update(app, move |core| {
                     core.state.dispatch(Event::Ui { node, value })
                 });
@@ -525,7 +622,9 @@ pub fn handle(app: &Arc<App>, msg: Incoming) {
             };
             update(app, move |core| core.state.dispatch(drop));
         }
-        Incoming::Resize { w, .. } => update(app, move |core| core.state.set_window(w as f64)),
+        Incoming::Resize { w, instance, .. } if contribution_id(&instance) == "main" => {
+            update(app, move |core| core.state.set_window(w as f64))
+        }
         Incoming::Focus { has: false } => update(app, |core| {
             for t in [&mut core.state.notice, &mut core.state.error]
                 .into_iter()
@@ -537,6 +636,28 @@ pub fn handle(app: &Arc<App>, msg: Incoming) {
             }
         }),
         _ => {}
+    }
+}
+
+pub fn load_layout(app: &Arc<App>) {
+    use reelio_ui::layout::*;
+    for key in [
+        WORKSPACE_LAYOUT_KEY,
+        POOL_WIDTH_KEY,
+        INSPECTOR_WIDTH_KEY,
+        VIEWER_HEIGHT_KEY,
+    ] {
+        let weak = Arc::downgrade(app);
+        app.ctx
+            .call_async("settings.get", json!({"key":key}), move |_, result| {
+                if let (Some(app), Ok(value)) = (weak.upgrade(), result) {
+                    if !value["value"].is_null() {
+                        update(&app, move |core| {
+                            core.state.restore_layout_setting(key, &value["value"])
+                        });
+                    }
+                }
+            });
     }
 }
 

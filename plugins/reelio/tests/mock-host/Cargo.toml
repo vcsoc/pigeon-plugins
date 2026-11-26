@@ -1,0 +1,18 @@
+[package]
+name = "reelio-mock-tests"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# Development-only sibling WP2 checkout; the plugin installation itself has no external paths.
+[workspace]
+
+[dependencies]
+pigeon-mock-host = { path = "../../../../../pigeon-plugins-sdk/sdk/rust/pigeon-mock-host" }
+pigeon-plugin-sdk = { path = "../../../../../pigeon-plugins-sdk/sdk/rust/pigeon-plugin-sdk" }
+serde_json = "1"
+tempfile = "3"
+
+# The recursive scene schema traverses every subtree once per matching schema branch.
+[profile.test.package.jsonschema]
+opt-level = 2

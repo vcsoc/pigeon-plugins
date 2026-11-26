@@ -8,20 +8,35 @@
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd -P)
 DATA=${PIGEON_PLUGIN_DATA:-$HERE/.data}
-BIN="$HERE/bin/reelio"
-if [ ! -x "$BIN" ] && [ "${1:-}" = "--plugin" ]; then
-  # Amendment 11: the host runs --setup first; --plugin before setup fails fast with JSON on stdout.
-  printf '{"ok":false,"error":"Reelio is not set up. Run: sh run --setup"}\n'
-  exit 1
-fi
-if [ ! -x "$BIN" ]; then
-  PATH="$PATH:$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-  export PATH
-  if ! command -v cargo >/dev/null 2>&1; then
-    printf '{"ok":false,"error":"reelio binary missing and cargo not found"}\n' >&2
-    exit 1
-  fi
-  CARGO_TARGET_DIR="$DATA/target" cargo build --release --quiet --manifest-path "$HERE/Cargo.toml" -p reelio-app >&2
-  BIN="$DATA/target/release/reelio"
-fi
-exec "$BIN" "$@"
+ARTIFACT="$HERE/bin/reelio"
+TARGET=${CARGO_TARGET_DIR:-$DATA/target}
+BIN="$ARTIFACT"
+[ -x "$BIN" ] || BIN="$TARGET/release/reelio"
+case "${1:-}" in
+  --setup)
+    if [ ! -x "$ARTIFACT" ]; then
+      PATH="$PATH:$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+      export PATH
+      if ! command -v cargo >/dev/null 2>&1; then
+        printf '{"ok":false,"error":"reelio binary missing and cargo not found"}\n'
+        exit 1
+      fi
+      CARGO_TARGET_DIR="$TARGET" cargo build --release --quiet --manifest-path "$HERE/Cargo.toml" -p reelio-app >&2
+    fi
+    mkdir -p "$DATA"
+    "$BIN" --setup
+    touch "$DATA/setup.ok"
+    ;;
+  --plugin)
+    if [ ! -f "$DATA/setup.ok" ] || [ ! -x "$BIN" ]; then
+      printf '{"ok":false,"error":"Reelio is not set up. Run: sh run --setup"}\n'
+      exit 1
+    fi
+    exec "$BIN" "$@"
+    ;;
+  --version|--uninstall)
+    if [ -x "$BIN" ]; then exec "$BIN" "$@"; fi
+    if [ "$1" = --uninstall ]; then printf '{"ok":true,"removed":[]}\n'; else printf '2.0.0\n'; fi
+    ;;
+  *) printf '{"ok":false,"error":"Unknown Reelio launcher mode"}\n'; exit 2 ;;
+esac

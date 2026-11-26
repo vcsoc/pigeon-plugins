@@ -3,6 +3,7 @@
   "name": "Reelio",
   "version": "2.0.0",
   "kind": "app",
+  "sdk": "rust",
   "category": "Media",
   "description": "Local media container editor: import video, audio and subtitles, edit tracks, trims, chapters, metadata, covers and subtitles, then export to a new MP4, M4V or MKV with verified output. Sources are never changed.",
   "author": "Chris Visser",
@@ -38,11 +39,11 @@
     "contributions": [
       {"slot": "sidebar.entry", "id": "nav", "title": "Reelio", "icon": "film", "order": 40, "opens": "main"},
       {"slot": "workspace.view", "id": "main", "title": "Reelio", "icon": "film"},
-      {"slot": "inspector.panel", "id": "summary", "title": "Poster / cover", "icon": "image", "order": 10, "applies_to": {"kinds": ["video", "audio", "subtitle"]}},
+      {"slot": "inspector.panel", "id": "summary", "title": "Poster / cover", "icon": "image", "order": 10},
       {"slot": "inspector.panel", "id": "project", "title": "Project tools", "icon": "sliders", "order": 20},
       {"slot": "asset.action", "id": "open-in-reelio", "title": "Open in Reelio", "icon": "film", "applies_to": {"kinds": ["video", "audio"], "min": 1}, "selection": "one", "group": "open"},
-      {"slot": "asset.action", "id": "add-to-reelio", "title": "Add to Reelio project", "icon": "plus", "applies_to": {"kinds": ["video", "audio", "subtitle", "image"], "min": 1}, "selection": "any", "group": "project"},
-      {"slot": "drop.target", "id": "cover-drop", "accepts": ["jpg", "jpeg", "png", "webp", "avif"], "where": "cover:preview"},
+      {"slot": "asset.action", "id": "add-to-reelio", "title": "Add to Reelio project", "icon": "plus", "applies_to": {"kinds": ["video", "audio", "document", "image"], "min": 1}, "selection": "any", "group": "project"},
+      {"slot": "drop.target", "id": "cover-drop", "accepts": ["files"], "where": "cover:preview"},
       {"slot": "preferences.page", "id": "prefs", "title": "Reelio", "icon": "film", "order": 50},
       {"slot": "modal", "id": "settings", "title": "Preferences", "size": "medium", "resizable": false, "modal": true},
       {"slot": "modal", "id": "about", "title": "About Reelio", "size": "small", "resizable": false, "modal": true},
@@ -65,14 +66,10 @@
       {"slot": "command", "id": "view.chapter_next", "title": "Next chapter", "shortcut": "Alt+Right"}
     ],
     "theme_override": {
-      "colors": {
-        "bg": "#18191b", "bg_panel": "#202123", "bg_raised": "#272a36", "bg_input": "#191b23",
-        "fg": "#e8eaf0", "fg_weak": "#8f95a6", "accent": "#5688ff", "accent_fg": "#b9ccff",
-        "danger": "#f16d7a", "warning": "#e6bd79", "success": "#8bd3ac", "border": "#2b2e35",
-        "hover": "#2b2e35", "selection": "#34394c", "focus_ring": "#5688ff"
-      },
-      "radius": 4,
-      "spacing": 4
+      "bg": "#18191b", "bg_panel": "#202123", "bg_raised": "#272a36", "bg_input": "#191b23",
+      "fg": "#e8eaf0", "fg_weak": "#8f95a6", "accent": "#5688ff", "accent_fg": "#b9ccff",
+      "danger": "#f16d7a", "warning": "#e6bd79", "success": "#8bd3ac", "border": "#2b2e35",
+      "hover": "#2b2e35", "selection": "#34394c", "focus_ring": "#5688ff"
     },
     "permissions": ["selection", "library.read", "library.write", "dialogs", "shell", "windows"]
   }

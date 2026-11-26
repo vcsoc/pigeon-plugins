@@ -100,12 +100,7 @@ pub struct Outbox {
 
 impl Outbox {
     pub fn new(capacity: usize) -> Outbox {
-        Outbox {
-            state: Mutex::new(OutState::default()),
-            not_empty: Condvar::new(),
-            not_full: Condvar::new(),
-            capacity: capacity.max(1),
-        }
+        Outbox { state: Mutex::new(OutState::default()), not_empty: Condvar::new(), not_full: Condvar::new(), capacity: capacity.max(1) }
     }
 
     /// Enqueue a control line. Never blocks. Returns false when the transport is closed.
@@ -176,10 +171,7 @@ impl Outbox {
 /// is closed or the writer fails (in which case the outbox is closed too).
 pub fn write_loop<W: Write>(outbox: &Outbox, mut out: W) {
     while let Some(line) = outbox.next() {
-        let ok = out
-            .write_all(line.as_bytes())
-            .and_then(|_| out.write_all(b"\n"))
-            .and_then(|_| out.flush());
+        let ok = out.write_all(line.as_bytes()).and_then(|_| out.write_all(b"\n")).and_then(|_| out.flush());
         if ok.is_err() {
             outbox.close();
             break;
@@ -209,10 +201,7 @@ mod tests {
         assert_eq!(read_line_bounded(&mut r, 100).unwrap(), "one");
         assert_eq!(read_line_bounded(&mut r, 100).unwrap(), "two");
         assert_eq!(read_line_bounded(&mut r, 100).unwrap(), "three");
-        assert!(matches!(
-            read_line_bounded(&mut r, 100),
-            Err(LineError::Eof)
-        ));
+        assert!(matches!(read_line_bounded(&mut r, 100), Err(LineError::Eof)));
     }
 
     #[test]
@@ -221,10 +210,7 @@ mod tests {
         data.push(b'\n');
         data.extend_from_slice(b"ok\n");
         let mut r = Cursor::new(data);
-        assert!(matches!(
-            read_line_bounded(&mut r, 10),
-            Err(LineError::TooLong(_))
-        ));
+        assert!(matches!(read_line_bounded(&mut r, 10), Err(LineError::TooLong(_))));
         assert_eq!(read_line_bounded(&mut r, 10).unwrap(), "ok");
     }
 

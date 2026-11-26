@@ -42,15 +42,12 @@ impl Color {
     /// Parse `#rrggbb[aa]` or a token name. Returns `None` for anything else.
     pub fn parse(text: &str) -> Option<Color> {
         if let Some(hex) = text.strip_prefix('#') {
-            let ok =
-                (hex.len() == 6 || hex.len() == 8) && hex.chars().all(|c| c.is_ascii_hexdigit());
+            let ok = (hex.len() == 6 || hex.len() == 8) && hex.chars().all(|c| c.is_ascii_hexdigit());
             return ok.then(|| Color(text.to_ascii_lowercase()));
         }
         let ok = !text.is_empty()
             && text.chars().next().is_some_and(|c| c.is_ascii_lowercase())
-            && text
-                .chars()
-                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_');
+            && text.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_');
         ok.then(|| Color(text.to_string()))
     }
 }
@@ -111,9 +108,7 @@ impl<'de> Deserialize<'de> for Size {
                     Err(serde::de::Error::custom("size object needs px or fill"))
                 }
             }
-            _ => Err(serde::de::Error::custom(
-                "size must be {px}, {fill} or \"auto\"",
-            )),
+            _ => Err(serde::de::Error::custom("size must be {px}, {fill} or \"auto\"")),
         }
     }
 }
@@ -132,12 +127,7 @@ pub struct Node {
 impl Node {
     /// A bare node of any kind. Prefer the typed constructors below for known kinds.
     pub fn new(id: impl Into<String>, kind: impl Into<String>) -> Node {
-        Node {
-            id: id.into(),
-            kind: kind.into(),
-            children: Vec::new(),
-            props: Map::new(),
-        }
+        Node { id: id.into(), kind: kind.into(), children: Vec::new(), props: Map::new() }
     }
 
     /// Set any prop (escape hatch; also how a plugin uses newer host props).
@@ -220,10 +210,7 @@ impl Node {
     }
     /// Screen-reader label and role (`accessibility`).
     pub fn accessible(self, label: &str, role: &str) -> Node {
-        self.set(
-            "accessibility",
-            serde_json::json!({ "label": label, "role": role }),
-        )
+        self.set("accessibility", serde_json::json!({ "label": label, "role": role }))
     }
     /// Stable hint used by the host for state restoration.
     pub fn id_hint(self, hint: &str) -> Node {
@@ -257,29 +244,18 @@ impl Node {
     }
     /// A split with two or more children. `sizes` are fractions (sum to 1).
     pub fn split(id: impl Into<String>, direction: &str, sizes: &[f32]) -> Node {
-        Node::new(id, "split")
-            .set("direction", direction)
-            .set("sizes", sizes.to_vec())
+        Node::new(id, "split").set("direction", direction).set("sizes", sizes.to_vec())
     }
     pub fn scroll(id: impl Into<String>, axis: &str) -> Node {
-        Node::new(id, "scroll")
-            .set("axis", axis)
-            .set("show_bars", true)
+        Node::new(id, "scroll").set("axis", axis).set("show_bars", true)
     }
     /// Tabs; children are selected by tab id (child id == tab id).
     pub fn tabs(id: impl Into<String>, tabs: &[(&str, &str)], active: &str) -> Node {
-        let tabs: Vec<Value> = tabs
-            .iter()
-            .map(|(id, label)| serde_json::json!({ "id": id, "label": label }))
-            .collect();
-        Node::new(id, "tabs")
-            .set("tabs", tabs)
-            .set("active", active)
+        let tabs: Vec<Value> = tabs.iter().map(|(id, label)| serde_json::json!({ "id": id, "label": label })).collect();
+        Node::new(id, "tabs").set("tabs", tabs).set("active", active)
     }
     pub fn collapsible(id: impl Into<String>, title: &str, open: bool) -> Node {
-        Node::new(id, "collapsible")
-            .set("title", title)
-            .set("open", open)
+        Node::new(id, "collapsible").set("title", title).set("open", open)
     }
     pub fn panel(id: impl Into<String>) -> Node {
         Node::new(id, "panel")
@@ -324,70 +300,42 @@ impl Node {
     /// Events the plugin wants: any of `click`, `double_click`, `context`, `change`, `submit`,
     /// `blur`, `scroll`, `list.window`, `pointer`, `wheel`, `key`, `drop`, `hover`.
     pub fn on(self, events: &[&str]) -> Node {
-        self.set(
-            "on",
-            events.iter().map(|e| Value::from(*e)).collect::<Vec<_>>(),
-        )
+        self.set("on", events.iter().map(|e| Value::from(*e)).collect::<Vec<_>>())
     }
 
     pub fn button(id: impl Into<String>, label: &str) -> Node {
         Node::new(id, "button").set("label", label)
     }
     pub fn icon_button(id: impl Into<String>, icon: &str, tooltip: &str) -> Node {
-        Node::new(id, "icon_button")
-            .set("icon", icon)
-            .set("tooltip", tooltip)
+        Node::new(id, "icon_button").set("icon", icon).set("tooltip", tooltip)
     }
     /// An image from a resource id. `fit`: contain, cover, fill or none.
     pub fn image(id: impl Into<String>, resource: &str, fit: &str) -> Node {
-        Node::new(id, "image")
-            .set("resource", resource)
-            .set("fit", fit)
+        Node::new(id, "image").set("resource", resource).set("fit", fit)
     }
     pub fn checkbox(id: impl Into<String>, label: &str, checked: bool) -> Node {
-        Node::new(id, "checkbox")
-            .set("label", label)
-            .set("value", checked)
+        Node::new(id, "checkbox").set("label", label).set("value", checked)
     }
     pub fn switch(id: impl Into<String>, label: &str, on: bool) -> Node {
         Node::new(id, "switch").set("label", label).set("value", on)
     }
     pub fn radio_group(id: impl Into<String>, options: &[(&str, &str)], value: &str) -> Node {
-        Node::new(id, "radio_group")
-            .set("options", options_value(options))
-            .set("value", value)
+        Node::new(id, "radio_group").set("options", options_value(options)).set("value", value)
     }
     pub fn segmented(id: impl Into<String>, options: &[(&str, &str)], value: &str) -> Node {
-        Node::new(id, "segmented")
-            .set("options", options_value(options))
-            .set("value", value)
+        Node::new(id, "segmented").set("options", options_value(options)).set("value", value)
     }
     /// A controlled text input. `rev` must increase whenever the plugin changes `value` itself.
     pub fn text_input(id: impl Into<String>, value: &str, rev: u64) -> Node {
-        Node::new(id, "text_input")
-            .set("value", value)
-            .set("rev", rev)
+        Node::new(id, "text_input").set("value", value).set("rev", rev)
     }
     pub fn number_input(id: impl Into<String>, value: f64, rev: u64) -> Node {
-        Node::new(id, "number_input")
-            .set("value", value)
-            .set("rev", rev)
+        Node::new(id, "number_input").set("value", value).set("rev", rev)
     }
     pub fn slider(id: impl Into<String>, value: f64, min: f64, max: f64, rev: u64) -> Node {
-        Node::new(id, "slider")
-            .set("value", value)
-            .set("min", min)
-            .set("max", max)
-            .set("rev", rev)
+        Node::new(id, "slider").set("value", value).set("min", min).set("max", max).set("rev", rev)
     }
-    pub fn range_slider(
-        id: impl Into<String>,
-        low: f64,
-        high: f64,
-        min: f64,
-        max: f64,
-        rev: u64,
-    ) -> Node {
+    pub fn range_slider(id: impl Into<String>, low: f64, high: f64, min: f64, max: f64, rev: u64) -> Node {
         Node::new(id, "range_slider")
             .set("value", vec![low, high])
             .set("min", min)
@@ -395,9 +343,7 @@ impl Node {
             .set("rev", rev)
     }
     pub fn select(id: impl Into<String>, options: &[(&str, &str)], value: &str) -> Node {
-        Node::new(id, "select")
-            .set("options", options_value(options))
-            .set("value", value)
+        Node::new(id, "select").set("options", options_value(options)).set("value", value)
     }
     pub fn color_picker(id: impl Into<String>, color: impl Into<Color>) -> Node {
         Node::new(id, "color_picker").set("value", color.into().0)
@@ -417,32 +363,18 @@ impl Node {
     }
     /// An anchored popup menu. `items` are built with [`MenuItem`].
     pub fn menu(id: impl Into<String>, items: Vec<MenuItem>) -> Node {
-        Node::new(id, "menu").set(
-            "items",
-            items
-                .into_iter()
-                .map(MenuItem::into_value)
-                .collect::<Vec<_>>(),
-        )
+        Node::new(id, "menu").set("items", items.into_iter().map(MenuItem::into_value).collect::<Vec<_>>())
     }
     /// Attach a context menu to any node: it opens on the `context` event.
     pub fn context_menu(id: impl Into<String>, items: Vec<MenuItem>) -> Node {
-        Node::new(id, "context_menu").set(
-            "items",
-            items
-                .into_iter()
-                .map(MenuItem::into_value)
-                .collect::<Vec<_>>(),
-        )
+        Node::new(id, "context_menu").set("items", items.into_iter().map(MenuItem::into_value).collect::<Vec<_>>())
     }
     pub fn tooltip_node(id: impl Into<String>, text: &str) -> Node {
         Node::new(id, "tooltip").set("text", text)
     }
     /// A virtualized table: `columns` are `{id,title,width}` values; rows are supplied in a window.
     pub fn table(id: impl Into<String>, columns: Value, count: u64) -> Node {
-        Node::new(id, "table")
-            .set("columns", columns)
-            .set("count", count)
+        Node::new(id, "table").set("columns", columns).set("count", count)
     }
     pub fn tree(id: impl Into<String>, nodes: Value) -> Node {
         Node::new(id, "tree").set("nodes", nodes)
@@ -450,25 +382,17 @@ impl Node {
     /// A virtualized list of `count` rows. Rows are sent with `list.rows` after a `list.window`
     /// event; `row_height` is a px number or `"variable"`.
     pub fn list(id: impl Into<String>, key: &str, count: u64, row_height: Value) -> Node {
-        Node::new(id, "list")
-            .set("key", key)
-            .set("count", count)
-            .set("row_height", row_height)
+        Node::new(id, "list").set("key", key).set("count", count).set("row_height", row_height)
     }
     /// A custom-drawn canvas. Attach the draw list with [`Node::draw`].
     pub fn canvas(id: impl Into<String>, width: Size, height: Size) -> Node {
         Node::new(id, "canvas").width(width).height(height)
     }
     pub fn rich_text(id: impl Into<String>, spans: Vec<Span>) -> Node {
-        Node::new(id, "rich_text").set(
-            "spans",
-            spans.into_iter().map(Span::into_value).collect::<Vec<_>>(),
-        )
+        Node::new(id, "rich_text").set("spans", spans.into_iter().map(Span::into_value).collect::<Vec<_>>())
     }
     pub fn code(id: impl Into<String>, text: &str, language: &str) -> Node {
-        Node::new(id, "code")
-            .set("text", text)
-            .set("language", language)
+        Node::new(id, "code").set("text", text).set("language", language)
     }
 
     /// Canvas: attach a full draw list (`{frame, clear, ops}`).
@@ -537,17 +461,11 @@ impl Node {
             return Err(ProtocolError::Limit(p));
         }
         if count > MAX_SCENE_NODES {
-            return Err(ProtocolError::Limit(format!(
-                "scene has {count} nodes (max {MAX_SCENE_NODES})"
-            )));
+            return Err(ProtocolError::Limit(format!("scene has {count} nodes (max {MAX_SCENE_NODES})")));
         }
-        let bytes = serde_json::to_vec(self)
-            .map(|v| v.len())
-            .unwrap_or(usize::MAX);
+        let bytes = serde_json::to_vec(self).map(|v| v.len()).unwrap_or(usize::MAX);
         if bytes > MAX_SCENE_BYTES {
-            return Err(ProtocolError::Limit(format!(
-                "scene is {bytes} bytes (max {MAX_SCENE_BYTES})"
-            )));
+            return Err(ProtocolError::Limit(format!("scene is {bytes} bytes (max {MAX_SCENE_BYTES})")));
         }
         Ok(())
     }
@@ -560,10 +478,7 @@ impl fmt::Display for Node {
 }
 
 fn options_value(options: &[(&str, &str)]) -> Vec<Value> {
-    options
-        .iter()
-        .map(|(v, l)| serde_json::json!({ "value": v, "label": l }))
-        .collect()
+    options.iter().map(|(v, l)| serde_json::json!({ "value": v, "label": l })).collect()
 }
 
 /// One entry of a `menu` / `context_menu`.
@@ -600,23 +515,9 @@ impl MenuItem {
     /// A submenu.
     pub fn submenu(id: &str, label: &str, children: Vec<MenuItem>) -> MenuItem {
         match MenuItem::item(id, label) {
-            MenuItem::Item {
-                id,
-                label,
-                icon,
-                shortcut,
-                enabled,
-                checked,
-                ..
-            } => MenuItem::Item {
-                id,
-                label,
-                icon,
-                shortcut,
-                enabled,
-                checked,
-                children,
-            },
+            MenuItem::Item { id, label, icon, shortcut, enabled, checked, .. } => {
+                MenuItem::Item { id, label, icon, shortcut, enabled, checked, children }
+            }
             other => other,
         }
     }
@@ -634,31 +535,10 @@ impl MenuItem {
     }
     fn map_item(self, f: impl FnOnce(&mut MenuItemFields)) -> MenuItem {
         match self {
-            MenuItem::Item {
-                id,
-                label,
-                icon,
-                shortcut,
-                enabled,
-                checked,
-                children,
-            } => {
-                let mut fields = MenuItemFields {
-                    icon,
-                    shortcut,
-                    enabled,
-                    checked,
-                };
+            MenuItem::Item { id, label, icon, shortcut, enabled, checked, children } => {
+                let mut fields = MenuItemFields { icon, shortcut, enabled, checked };
                 f(&mut fields);
-                MenuItem::Item {
-                    id,
-                    label,
-                    icon: fields.icon,
-                    shortcut: fields.shortcut,
-                    enabled: fields.enabled,
-                    checked: fields.checked,
-                    children,
-                }
+                MenuItem::Item { id, label, icon: fields.icon, shortcut: fields.shortcut, enabled: fields.enabled, checked: fields.checked, children }
             }
             MenuItem::Separator => MenuItem::Separator,
         }
@@ -666,15 +546,7 @@ impl MenuItem {
     fn into_value(self) -> Value {
         match self {
             MenuItem::Separator => serde_json::json!({ "separator": true }),
-            MenuItem::Item {
-                id,
-                label,
-                icon,
-                shortcut,
-                enabled,
-                checked,
-                children,
-            } => {
+            MenuItem::Item { id, label, icon, shortcut, enabled, checked, children } => {
                 let mut m = Map::new();
                 m.insert("id".into(), Value::from(id));
                 m.insert("label".into(), Value::from(label));
@@ -689,10 +561,7 @@ impl MenuItem {
                     m.insert("checked".into(), Value::from(c));
                 }
                 if !children.is_empty() {
-                    m.insert(
-                        "children".into(),
-                        Value::Array(children.into_iter().map(MenuItem::into_value).collect()),
-                    );
+                    m.insert("children".into(), Value::Array(children.into_iter().map(MenuItem::into_value).collect()));
                 }
                 Value::Object(m)
             }
@@ -717,18 +586,10 @@ pub struct Span {
 
 impl Span {
     pub fn plain(text: &str) -> Span {
-        Span {
-            text: text.into(),
-            style: None,
-            color: None,
-        }
+        Span { text: text.into(), style: None, color: None }
     }
     pub fn styled(text: &str, style: &str) -> Span {
-        Span {
-            text: text.into(),
-            style: Some(style.into()),
-            color: None,
-        }
+        Span { text: text.into(), style: Some(style.into()), color: None }
     }
     fn into_value(self) -> Value {
         let mut m = Map::new();
@@ -749,10 +610,7 @@ mod tests {
 
     #[test]
     fn builders_produce_protocol_shapes() {
-        let n = Node::column("root")
-            .gap(8.0)
-            .padding(12.0)
-            .child(Node::text("title", "Reelio").style("heading"));
+        let n = Node::column("root").gap(8.0).padding(12.0).child(Node::text("title", "Reelio").style("heading"));
         let v = serde_json::to_value(&n).unwrap();
         assert_eq!(v["id"], "root");
         assert_eq!(v["kind"], "column");
@@ -781,13 +639,9 @@ mod tests {
 
     #[test]
     fn validate_rejects_duplicate_ids_and_accepts_unique_tree() {
-        let ok = Node::column("root")
-            .child(Node::button("a", "A"))
-            .child(Node::button("b", "B"));
+        let ok = Node::column("root").child(Node::button("a", "A")).child(Node::button("b", "B"));
         assert!(ok.validate().is_ok());
-        let dup = Node::column("root")
-            .child(Node::button("a", "A"))
-            .child(Node::button("a", "B"));
+        let dup = Node::column("root").child(Node::button("a", "A")).child(Node::button("a", "B"));
         let err = dup.validate().unwrap_err();
         assert!(err.to_string().contains("duplicate node id a"));
     }
@@ -797,9 +651,7 @@ mod tests {
         let m = Node::menu(
             "m",
             vec![
-                MenuItem::item("open", "Open")
-                    .shortcut("Cmd+O")
-                    .icon("folder-open"),
+                MenuItem::item("open", "Open").shortcut("Cmd+O").icon("folder-open"),
                 MenuItem::separator(),
                 MenuItem::submenu("more", "More", vec![MenuItem::item("x", "X").checked(true)]),
             ],

@@ -42,12 +42,7 @@ fn one() -> u32 {
 impl AppliesTo {
     /// Applies to any number (at least one) of these media kinds.
     pub fn kinds(kinds: &[&str]) -> AppliesTo {
-        AppliesTo {
-            kinds: kinds.iter().map(|k| k.to_string()).collect(),
-            min: 1,
-            max: None,
-            ext: vec![],
-        }
+        AppliesTo { kinds: kinds.iter().map(|k| k.to_string()).collect(), min: 1, max: None, ext: vec![] }
     }
     /// Restrict to file extensions (without dots).
     pub fn with_ext(mut self, ext: &[&str]) -> AppliesTo {
@@ -74,11 +69,7 @@ pub struct Contribution {
 impl Contribution {
     /// A contribution of any slot; add props with [`Contribution::prop`].
     pub fn new(slot: &str, id: &str) -> Contribution {
-        Contribution {
-            slot: slot.into(),
-            id: id.into(),
-            props: Map::new(),
-        }
+        Contribution { slot: slot.into(), id: id.into(), props: Map::new() }
     }
 
     /// Set any prop.
@@ -105,74 +96,38 @@ impl Contribution {
 
     /// `sidebar.section`: a collapsible section in the left navigation.
     pub fn sidebar_section(id: &str, title: &str, icon: &str, order: i64) -> Contribution {
-        Contribution::new("sidebar.section", id)
-            .title(title)
-            .icon(icon)
-            .order(order)
+        Contribution::new("sidebar.section", id).title(title).icon(icon).order(order)
     }
     /// `sidebar.entry`: a navigation row that opens a `workspace.view`.
     pub fn sidebar_entry(id: &str, title: &str, icon: &str, opens: &str) -> Contribution {
-        Contribution::new("sidebar.entry", id)
-            .title(title)
-            .icon(icon)
-            .prop("opens", opens)
-            .order(0)
+        Contribution::new("sidebar.entry", id).title(title).icon(icon).prop("opens", opens).order(0)
     }
     /// `toolbar.item`: a button, menu or group in the top toolbar.
     pub fn toolbar_item(id: &str, group: &str, order: i64) -> Contribution {
-        Contribution::new("toolbar.item", id)
-            .prop("group", group)
-            .order(order)
+        Contribution::new("toolbar.item", id).prop("group", group).order(order)
     }
     /// `workspace.view`: the central area while active.
     pub fn workspace_view(id: &str, title: &str, icon: &str) -> Contribution {
-        Contribution::new("workspace.view", id)
-            .title(title)
-            .icon(icon)
+        Contribution::new("workspace.view", id).title(title).icon(icon)
     }
     /// `inspector.panel`: a tab in the right inspector.
-    pub fn inspector_panel(
-        id: &str,
-        title: &str,
-        icon: &str,
-        order: i64,
-        applies_to: AppliesTo,
-    ) -> Contribution {
-        Contribution::new("inspector.panel", id)
-            .title(title)
-            .icon(icon)
-            .order(order)
-            .applies_to(applies_to)
+    pub fn inspector_panel(id: &str, title: &str, icon: &str, order: i64, applies_to: AppliesTo) -> Contribution {
+        Contribution::new("inspector.panel", id).title(title).icon(icon).order(order).applies_to(applies_to)
     }
     /// `preferences.page`: a page in Preferences.
     pub fn preferences_page(id: &str, title: &str, icon: &str, order: i64) -> Contribution {
-        Contribution::new("preferences.page", id)
-            .title(title)
-            .icon(icon)
-            .order(order)
+        Contribution::new("preferences.page", id).title(title).icon(icon).order(order)
     }
     /// `modal`: a dialog the plugin opens with `window.open_modal`.
     pub fn modal(id: &str, title: &str, size: &str, modal: bool) -> Contribution {
-        Contribution::new("modal", id)
-            .title(title)
-            .prop("size", size)
-            .prop("modal", modal)
-            .prop("resizable", true)
+        Contribution::new("modal", id).title(title).prop("size", size).prop("modal", modal).prop("resizable", true)
     }
     /// `statusbar.item`: `align` is `left` or `right`.
     pub fn statusbar_item(id: &str, align: &str, order: i64) -> Contribution {
-        Contribution::new("statusbar.item", id)
-            .prop("align", align)
-            .order(order)
+        Contribution::new("statusbar.item", id).prop("align", align).order(order)
     }
     /// `asset.action`: an entry in asset menus. `selection` is `one`, `many` or `any`.
-    pub fn asset_action(
-        id: &str,
-        title: &str,
-        icon: &str,
-        applies_to: AppliesTo,
-        selection: &str,
-    ) -> Contribution {
+    pub fn asset_action(id: &str, title: &str, icon: &str, applies_to: AppliesTo, selection: &str) -> Contribution {
         Contribution::new("asset.action", id)
             .title(title)
             .icon(icon)
@@ -189,28 +144,15 @@ impl Contribution {
     }
     /// `drop.target`: accepts files or assets dropped on a named region.
     pub fn drop_target(id: &str, accepts: &[&str], region: &str) -> Contribution {
-        Contribution::new("drop.target", id)
-            .prop("accepts", accepts)
-            .prop("where", region)
+        Contribution::new("drop.target", id).prop("accepts", accepts).prop("where", region)
     }
     /// `library.source`: assets shown in the navigation tree and browse grid.
-    pub fn library_source(
-        id: &str,
-        title: &str,
-        icon: &str,
-        capabilities: &[&str],
-    ) -> Contribution {
-        Contribution::new("library.source", id)
-            .title(title)
-            .icon(icon)
-            .prop("capabilities", capabilities)
+    pub fn library_source(id: &str, title: &str, icon: &str, capabilities: &[&str]) -> Contribution {
+        Contribution::new("library.source", id).title(title).icon(icon).prop("capabilities", capabilities)
     }
     /// `search.provider`: an extra search mode in the search bar.
     pub fn search_provider(id: &str, title: &str, icon: &str, mode_id: &str) -> Contribution {
-        Contribution::new("search.provider", id)
-            .title(title)
-            .icon(icon)
-            .prop("mode_id", mode_id)
+        Contribution::new("search.provider", id).title(title).icon(icon).prop("mode_id", mode_id)
     }
 
     /// Whether `slot` is one of the section 4 slot ids.
@@ -227,21 +169,12 @@ mod tests {
     fn sidebar_entry_matches_manifest_shape() {
         let c = Contribution::sidebar_entry("nav", "Reelio", "film", "main");
         let v = serde_json::to_value(&c).unwrap();
-        assert_eq!(
-            v,
-            serde_json::json!({"slot":"sidebar.entry","id":"nav","title":"Reelio","icon":"film","opens":"main","order":0})
-        );
+        assert_eq!(v, serde_json::json!({"slot":"sidebar.entry","id":"nav","title":"Reelio","icon":"film","opens":"main","order":0}));
     }
 
     #[test]
     fn asset_action_applies_to_serializes_null_max() {
-        let c = Contribution::asset_action(
-            "enh",
-            "Enlarge",
-            "arrows-out",
-            AppliesTo::kinds(&["image"]),
-            "one",
-        );
+        let c = Contribution::asset_action("enh", "Enlarge", "arrows-out", AppliesTo::kinds(&["image"]), "one");
         let v = serde_json::to_value(&c).unwrap();
         assert_eq!(v["applies_to"]["max"], Value::Null);
         assert_eq!(v["applies_to"]["kinds"][0], "image");

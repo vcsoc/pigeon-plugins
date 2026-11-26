@@ -30,6 +30,7 @@ fn run_plugin() -> Result<(), String> {
         };
     let app = transport::App::new(plugin.ctx(), engine);
     consent::forward(&app, consent_rx);
+    transport::load_layout(&app);
     transport::attach_player(&app);
     if let Some(events) = events {
         transport::forward_engine_events(&app, events);

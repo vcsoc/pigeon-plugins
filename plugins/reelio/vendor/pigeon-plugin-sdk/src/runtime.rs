@@ -70,11 +70,7 @@ pub struct PluginSpec {
 
 impl PluginSpec {
     pub fn new(id: &str, version: &str) -> PluginSpec {
-        PluginSpec {
-            id: id.into(),
-            version: version.into(),
-            contributions: Vec::new(),
-        }
+        PluginSpec { id: id.into(), version: version.into(), contributions: Vec::new() }
     }
 
     /// Add one contribution.
@@ -219,20 +215,13 @@ impl Plugin {
     {
         let first = read_line_bounded(&mut input, MAX_LINE_BYTES).map_err(|e| match e {
             LineError::Eof => StartError::Protocol("host closed stdin before hello".into()),
-            LineError::TooLong(n) => {
-                StartError::Protocol(format!("hello is too large ({n} bytes)"))
-            }
+            LineError::TooLong(n) => StartError::Protocol(format!("hello is too large ({n} bytes)")),
             LineError::Io(e) => StartError::Io(e),
         })?;
-        let hello =
-            match Incoming::parse(&first).map_err(|e| StartError::Protocol(e.to_string()))? {
-                Incoming::Hello(h) => h,
-                other => {
-                    return Err(StartError::Protocol(format!(
-                        "expected hello, got {other:?}"
-                    )))
-                }
-            };
+        let hello = match Incoming::parse(&first).map_err(|e| StartError::Protocol(e.to_string()))? {
+            Incoming::Hello(h) => h,
+            other => return Err(StartError::Protocol(format!("expected hello, got {other:?}"))),
+        };
         if hello.protocol.min > PROTOCOL_VERSION || hello.protocol.max < PROTOCOL_VERSION {
             return Err(StartError::Protocol(format!(
                 "host speaks protocol {}-{}, this plugin speaks {PROTOCOL_VERSION}",
@@ -251,10 +240,7 @@ impl Plugin {
             features: hello.features.clone(),
         };
         let shared = Arc::new(Shared {
-            plugin: PluginId {
-                id: spec.id.clone(),
-                version: spec.version.clone(),
-            },
+            plugin: PluginId { id: spec.id.clone(), version: spec.version.clone() },
             outbox: Outbox::new(HOST_QUEUE_CAPACITY),
             pending: Mutex::new(HashMap::new()),
             next_id: AtomicU64::new(1),
@@ -269,33 +255,17 @@ impl Plugin {
             closed: AtomicBool::new(false),
         });
         let w_shared = Arc::clone(&shared);
-        let writer = thread::Builder::new()
-            .name("pigeon-writer".into())
-            .spawn(move || {
-                write_loop(&w_shared.outbox, output);
-            })?;
-        let ready = Outgoing::Ready {
-            plugin: shared.plugin.clone(),
-            protocol: PROTOCOL_VERSION,
-            contributions: spec.contributions,
-        };
-        let line = ready
-            .to_line()
-            .map_err(|e| StartError::Protocol(e.to_string()))?;
+        let writer = thread::Builder::new().name("pigeon-writer".into()).spawn(move || {
+            write_loop(&w_shared.outbox, output);
+        })?;
+        let ready = Outgoing::Ready { plugin: shared.plugin.clone(), protocol: PROTOCOL_VERSION, contributions: spec.contributions };
+        let line = ready.to_line().map_err(|e| StartError::Protocol(e.to_string()))?;
         shared.outbox.send(line);
         let r_shared = Arc::clone(&shared);
-        let reader = thread::Builder::new()
-            .name("pigeon-reader".into())
-            .spawn(move || {
-                reader_loop(&r_shared, input);
-            })?;
-        Ok(Plugin {
-            shared,
-            inbound: rx,
-            hello,
-            _reader: reader,
-            _writer: writer,
-        })
+        let reader = thread::Builder::new().name("pigeon-reader".into()).spawn(move || {
+            reader_loop(&r_shared, input);
+        })?;
+        Ok(Plugin { shared, inbound: rx, hello, _reader: reader, _writer: writer })
     }
 
     /// The host's `hello` as received at startup.
@@ -305,9 +275,7 @@ impl Plugin {
 
     /// A handle for worker threads and for sending replies.
     pub fn ctx(&self) -> Ctx {
-        Ctx {
-            shared: Arc::clone(&self.shared),
-        }
+        Ctx { shared: Arc::clone(&self.shared) }
     }
 
     /// Run the app loop until `shutdown` or end of input. The handler is called on this thread,
@@ -360,18 +328,8 @@ fn coalesce(items: Vec<Item>) -> Vec<Item> {
 }
 
 fn merge_into(last: &mut Item, next: &Item) -> bool {
-    let (
-        Item::Event(Incoming::UiEvent {
-            instance: li,
-            node: ln,
-            event: le,
-        }),
-        Item::Event(Incoming::UiEvent {
-            instance: ni,
-            node: nn,
-            event: ne,
-        }),
-    ) = (last, next)
+    let (Item::Event(Incoming::UiEvent { instance: li, node: ln, event: le }),
+         Item::Event(Incoming::UiEvent { instance: ni, node: nn, event: ne })) = (last, next)
     else {
         return false;
     };
@@ -380,22 +338,8 @@ fn merge_into(last: &mut Item, next: &Item) -> bool {
     }
     match (le, ne) {
         (
-            NodeEvent::Pointer {
-                phase: PointerPhase::Move,
-                x,
-                y,
-                buttons,
-                coalesced,
-                ..
-            },
-            NodeEvent::Pointer {
-                phase: PointerPhase::Move,
-                x: nx,
-                y: ny,
-                buttons: nb,
-                coalesced: nc,
-                ..
-            },
+            NodeEvent::Pointer { phase: PointerPhase::Move, x, y, buttons, coalesced, .. },
+            NodeEvent::Pointer { phase: PointerPhase::Move, x: nx, y: ny, buttons: nb, coalesced: nc, .. },
         ) => {
             *x = *nx;
             *y = *ny;
@@ -404,22 +348,8 @@ fn merge_into(last: &mut Item, next: &Item) -> bool {
             true
         }
         (
-            NodeEvent::Wheel {
-                dx,
-                dy,
-                x,
-                y,
-                mods,
-                coalesced,
-            },
-            NodeEvent::Wheel {
-                dx: ndx,
-                dy: ndy,
-                x: nx,
-                y: ny,
-                mods: nm,
-                coalesced: nc,
-            },
+            NodeEvent::Wheel { dx, dy, x, y, mods, coalesced },
+            NodeEvent::Wheel { dx: ndx, dy: ndy, x: nx, y: ny, mods: nm, coalesced: nc },
         ) => {
             *dx += *ndx;
             *dy += *ndy;
@@ -445,9 +375,7 @@ fn reader_loop<R: BufRead>(shared: &Arc<Shared>, mut input: R) {
                     Err(e) => eprintln!("pigeon-plugin-sdk: ignoring host line: {e}"),
                 }
             }
-            Err(LineError::TooLong(n)) => {
-                eprintln!("pigeon-plugin-sdk: ignoring oversized host line ({n} bytes)")
-            }
+            Err(LineError::TooLong(n)) => eprintln!("pigeon-plugin-sdk: ignoring oversized host line ({n} bytes)"),
             Err(LineError::Eof) | Err(LineError::Io(_)) => break,
         }
     }
@@ -460,9 +388,7 @@ fn reader_loop<R: BufRead>(shared: &Arc<Shared>, mut input: R) {
                 let _ = tx.send(Err(ServiceError::Closed));
             }
             Pending::Callback(cb) => {
-                let _ = shared
-                    .inbound
-                    .send(Item::Reply(cb, Err(ServiceError::Closed)));
+                let _ = shared.inbound.send(Item::Reply(cb, Err(ServiceError::Closed)));
             }
         }
     }
@@ -519,14 +445,8 @@ fn dispatch(shared: &Arc<Shared>, msg: Incoming) {
 /// list windows. Presses, releases, keys, edits and clicks are never dropped.
 fn is_coalescible(event: &NodeEvent) -> bool {
     match event {
-        NodeEvent::Pointer { phase, .. } => matches!(
-            phase,
-            PointerPhase::Move | PointerPhase::Enter | PointerPhase::Leave
-        ),
-        NodeEvent::Wheel { .. }
-        | NodeEvent::Hover { .. }
-        | NodeEvent::ListWindow { .. }
-        | NodeEvent::Scroll { .. } => true,
+        NodeEvent::Pointer { phase, .. } => matches!(phase, PointerPhase::Move | PointerPhase::Enter | PointerPhase::Leave),
+        NodeEvent::Wheel { .. } | NodeEvent::Hover { .. } | NodeEvent::ListWindow { .. } | NodeEvent::Scroll { .. } => true,
         NodeEvent::Key { .. } => false,
         _ => false,
     }
@@ -579,9 +499,7 @@ impl Ctx {
 
     /// Send any message. Blocks only if the normal outbound queue is full.
     pub fn send(&self, msg: &Outgoing) -> Result<(), ServiceError> {
-        let line = msg
-            .to_line()
-            .map_err(|e| ServiceError::Protocol(e.to_string()))?;
+        let line = msg.to_line().map_err(|e| ServiceError::Protocol(e.to_string()))?;
         if self.shared.outbox.send(line) {
             Ok(())
         } else {
@@ -602,37 +520,18 @@ impl Ctx {
 
     /// Replace the scene of one slot instance. Validates the scene first (unique ids, limits).
     pub fn set_scene(&self, instance: impl Into<String>, scene: Node) -> Result<(), ServiceError> {
-        scene
-            .validate()
-            .map_err(|e| ServiceError::Protocol(e.to_string()))?;
-        self.send(&Outgoing::UiSet {
-            instance: instance.into(),
-            scene,
-        })
+        scene.validate().map_err(|e| ServiceError::Protocol(e.to_string()))?;
+        self.send(&Outgoing::UiSet { instance: instance.into(), scene })
     }
 
     /// Apply patch operations to the current scene (requires feature `scene.patch`).
-    pub fn patch(
-        &self,
-        instance: impl Into<String>,
-        ops: Vec<PatchOp>,
-    ) -> Result<(), ServiceError> {
-        self.send(&Outgoing::UiPatch {
-            instance: instance.into(),
-            ops,
-        })
+    pub fn patch(&self, instance: impl Into<String>, ops: Vec<PatchOp>) -> Result<(), ServiceError> {
+        self.send(&Outgoing::UiPatch { instance: instance.into(), ops })
     }
 
     /// Fast path: replace one canvas' draw list without resending the scene.
-    pub fn canvas_draw(
-        &self,
-        instance: impl Into<String>,
-        node: impl Into<String>,
-        frame: u64,
-        list: DrawList,
-    ) -> Result<(), ServiceError> {
-        list.validate()
-            .map_err(|e| ServiceError::Protocol(e.to_string()))?;
+    pub fn canvas_draw(&self, instance: impl Into<String>, node: impl Into<String>, frame: u64, list: DrawList) -> Result<(), ServiceError> {
+        list.validate().map_err(|e| ServiceError::Protocol(e.to_string()))?;
         self.send(&Outgoing::CanvasDraw(crate::protocol::CanvasDraw {
             instance: instance.into(),
             node: node.into(),
@@ -643,47 +542,19 @@ impl Ctx {
     }
 
     /// Answer a `list.window` event with the rows `start..start+rows.len()`.
-    pub fn list_rows(
-        &self,
-        instance: impl Into<String>,
-        node: impl Into<String>,
-        start: u64,
-        rows: Vec<Node>,
-    ) -> Result<(), ServiceError> {
+    pub fn list_rows(&self, instance: impl Into<String>, node: impl Into<String>, start: u64, rows: Vec<Node>) -> Result<(), ServiceError> {
         for row in &rows {
-            row.validate()
-                .map_err(|e| ServiceError::Protocol(e.to_string()))?;
+            row.validate().map_err(|e| ServiceError::Protocol(e.to_string()))?;
         }
-        self.send(&Outgoing::ListRows {
-            instance: instance.into(),
-            node: node.into(),
-            start,
-            rows,
-        })
+        self.send(&Outgoing::ListRows { instance: instance.into(), node: node.into(), start, rows })
     }
 
-    pub fn focus(
-        &self,
-        instance: impl Into<String>,
-        node: impl Into<String>,
-    ) -> Result<(), ServiceError> {
-        self.send(&Outgoing::UiFocus {
-            instance: instance.into(),
-            node: node.into(),
-        })
+    pub fn focus(&self, instance: impl Into<String>, node: impl Into<String>) -> Result<(), ServiceError> {
+        self.send(&Outgoing::UiFocus { instance: instance.into(), node: node.into() })
     }
 
-    pub fn scroll_to(
-        &self,
-        instance: impl Into<String>,
-        node: impl Into<String>,
-        align: &str,
-    ) -> Result<(), ServiceError> {
-        self.send(&Outgoing::UiScrollTo {
-            instance: instance.into(),
-            node: node.into(),
-            align: align.into(),
-        })
+    pub fn scroll_to(&self, instance: impl Into<String>, node: impl Into<String>, align: &str) -> Result<(), ServiceError> {
+        self.send(&Outgoing::UiScrollTo { instance: instance.into(), node: node.into(), align: align.into() })
     }
 
     pub fn beep(&self) -> Result<(), ServiceError> {
@@ -701,13 +572,7 @@ impl Ctx {
     }
 
     /// Tell the host a library source changed (`invalidate`, `insert` or `remove`).
-    pub fn source_changed(
-        &self,
-        source: &str,
-        kind: &str,
-        node: Option<&str>,
-        ids: Option<Vec<String>>,
-    ) -> Result<(), ServiceError> {
+    pub fn source_changed(&self, source: &str, kind: &str, node: Option<&str>, ids: Option<Vec<String>>) -> Result<(), ServiceError> {
         self.send(&Outgoing::SourceChanged {
             source: source.into(),
             kind: kind.into(),
@@ -718,21 +583,14 @@ impl Ctx {
 
     /// Progress of a `search.provider` (indexing and similar).
     pub fn search_status(&self, mode_id: &str, status: Value) -> Result<(), ServiceError> {
-        self.send(&Outgoing::SearchStatus {
-            mode_id: mode_id.into(),
-            status,
-        })
+        self.send(&Outgoing::SearchStatus { mode_id: mode_id.into(), status })
     }
 
     // ---- replies to host requests ----
 
     /// Answer a provider request from the host (`req`) with a result.
     pub fn answer(&self, id: &str, result: Value) -> Result<(), ServiceError> {
-        self.send(&Outgoing::Response {
-            id: id.into(),
-            result: Some(result),
-            error: None,
-        })
+        self.send(&Outgoing::Response { id: id.into(), result: Some(result), error: None })
     }
 
     /// Answer a provider request from the host with an error.
@@ -740,10 +598,7 @@ impl Ctx {
         self.send(&Outgoing::Response {
             id: id.into(),
             result: None,
-            error: Some(ErrorBody {
-                code: code.into(),
-                message: message.into(),
-            }),
+            error: Some(ErrorBody { code: code.into(), message: message.into() }),
         })
     }
 
@@ -787,32 +642,20 @@ impl Ctx {
     }
 
     fn register(&self, pending: Pending) -> String {
-        let id = self
-            .shared
-            .next_id
-            .fetch_add(1, Ordering::SeqCst)
-            .to_string();
+        let id = self.shared.next_id.fetch_add(1, Ordering::SeqCst).to_string();
         lock(&self.shared.pending).insert(id.clone(), pending);
         id
     }
 
     fn send_request(&self, id: &str, method: &str, params: Value) -> Result<(), ServiceError> {
-        let msg = Outgoing::Request {
-            id: id.into(),
-            method: method.into(),
-            params,
-        };
+        let msg = Outgoing::Request { id: id.into(), method: method.into(), params };
         self.send(&msg)
     }
 
     /// Fire-and-forget log line for the host's diagnostics.
     pub fn log(&self, level: &str, message: &str) {
         eprintln!("[{}] {message}", level);
-        let _ = self.call_async(
-            "log",
-            serde_json::json!({ "level": level, "message": message }),
-            |_, _| {},
-        );
+        let _ = self.call_async("log", serde_json::json!({ "level": level, "message": message }), |_, _| {});
     }
 
     /// `settings.get`: the value stored for `key` (plugin-private, persisted by the host).
@@ -823,68 +666,33 @@ impl Ctx {
 
     /// `settings.set`.
     pub fn settings_set(&self, key: &str, value: Value) -> Result<(), ServiceError> {
-        self.call(
-            "settings.set",
-            serde_json::json!({ "key": key, "value": value }),
-        )
-        .map(|_| ())
+        self.call("settings.set", serde_json::json!({ "key": key, "value": value })).map(|_| ())
     }
 
     /// `notify.toast`.
     pub fn toast(&self, level: &str, text: &str) -> Result<(), ServiceError> {
-        self.call(
-            "notify.toast",
-            serde_json::json!({ "level": level, "text": text }),
-        )
-        .map(|_| ())
+        self.call("notify.toast", serde_json::json!({ "level": level, "text": text })).map(|_| ())
     }
 
     /// `progress.start`: returns the job id shown in the footer.
     pub fn progress_start(&self, title: &str, cancellable: bool) -> Result<String, ServiceError> {
-        let r = self.call(
-            "progress.start",
-            serde_json::json!({ "title": title, "cancellable": cancellable }),
-        )?;
-        Ok(r.get("job")
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_string())
+        let r = self.call("progress.start", serde_json::json!({ "title": title, "cancellable": cancellable }))?;
+        Ok(r.get("job").and_then(Value::as_str).unwrap_or_default().to_string())
     }
 
     /// `progress.update`; `value` is 0..=1, or None for indeterminate.
-    pub fn progress_update(
-        &self,
-        job: &str,
-        value: Option<f64>,
-        message: Option<&str>,
-    ) -> Result<(), ServiceError> {
-        self.call(
-            "progress.update",
-            serde_json::json!({ "job": job, "value": value, "message": message }),
-        )
-        .map(|_| ())
+    pub fn progress_update(&self, job: &str, value: Option<f64>, message: Option<&str>) -> Result<(), ServiceError> {
+        self.call("progress.update", serde_json::json!({ "job": job, "value": value, "message": message })).map(|_| ())
     }
 
     /// `progress.end`.
-    pub fn progress_end(
-        &self,
-        job: &str,
-        ok: bool,
-        message: Option<&str>,
-    ) -> Result<(), ServiceError> {
-        self.call(
-            "progress.end",
-            serde_json::json!({ "job": job, "ok": ok, "message": message }),
-        )
-        .map(|_| ())
+    pub fn progress_end(&self, job: &str, ok: bool, message: Option<&str>) -> Result<(), ServiceError> {
+        self.call("progress.end", serde_json::json!({ "job": job, "ok": ok, "message": message })).map(|_| ())
     }
 
     /// `library.query` with a filter object (see methods.schema.json).
     pub fn library_query(&self, filter: Value, limit: u32) -> Reply {
-        self.call(
-            "library.query",
-            serde_json::json!({ "filter": filter, "limit": limit }),
-        )
+        self.call("library.query", serde_json::json!({ "filter": filter, "limit": limit }))
     }
 
     /// `selection.get`.
@@ -894,36 +702,18 @@ impl Ctx {
 
     /// `shell.open_url` (https, http or mailto only).
     pub fn open_url(&self, url: &str) -> Result<(), ServiceError> {
-        self.call("shell.open_url", serde_json::json!({ "url": url }))
-            .map(|_| ())
+        self.call("shell.open_url", serde_json::json!({ "url": url })).map(|_| ())
     }
 
     /// `dialog.open_file`: the chosen paths, empty when cancelled.
-    pub fn open_file_dialog(
-        &self,
-        title: &str,
-        multiple: bool,
-    ) -> Result<Vec<String>, ServiceError> {
-        let r = self.call(
-            "dialog.open_file",
-            serde_json::json!({ "title": title, "multiple": multiple }),
-        )?;
-        Ok(r.get("paths")
-            .and_then(Value::as_array)
-            .map(|a| {
-                a.iter()
-                    .filter_map(|v| v.as_str().map(String::from))
-                    .collect()
-            })
-            .unwrap_or_default())
+    pub fn open_file_dialog(&self, title: &str, multiple: bool) -> Result<Vec<String>, ServiceError> {
+        let r = self.call("dialog.open_file", serde_json::json!({ "title": title, "multiple": multiple }))?;
+        Ok(r.get("paths").and_then(Value::as_array).map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default())
     }
 
     /// `window.open_modal`: open one of this plugin's `modal` contributions.
     pub fn open_modal(&self, contribution: &str, props: Value) -> Reply {
-        self.call(
-            "window.open_modal",
-            serde_json::json!({ "contribution": contribution, "props": props }),
-        )
+        self.call("window.open_modal", serde_json::json!({ "contribution": contribution, "props": props }))
     }
 
     /// Resource writer (images, video frames). See [`crate::resources`].
@@ -933,10 +723,7 @@ impl Ctx {
 
     /// Current theme color token or None.
     pub fn theme_color(&self, token: &str) -> Option<String> {
-        lock(&self.shared.state)
-            .theme
-            .color(token)
-            .map(String::from)
+        lock(&self.shared.state).theme.color(token).map(String::from)
     }
 
     /// Directory of the plugin's private data (`PIGEON_PLUGIN_DATA`), if the host set one.
@@ -947,11 +734,7 @@ impl Ctx {
 
 impl fmt::Debug for Ctx {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "Ctx({}@{})",
-            self.shared.plugin.id, self.shared.plugin.version
-        )
+        write!(f, "Ctx({}@{})", self.shared.plugin.id, self.shared.plugin.version)
     }
 }
 

@@ -294,6 +294,8 @@ pub struct State {
     pub pool_width: f64,
     pub inspector_width: f64,
     pub viewer_height: Option<f64>,
+    pub divider_drag: Option<(String, f64, f64)>,
+    pub workspace_closed: bool,
     pub timeline_view: View,
     pub reveal: Option<(f64, u64)>,
     pub preview: PreviewState,
@@ -349,6 +351,8 @@ impl State {
             pool_width: 280.0,
             inspector_width: 440.0,
             viewer_height: None,
+            divider_drag: None,
+            workspace_closed: false,
             timeline_view: View::default(),
             reveal: None,
             preview: PreviewState::default(),
@@ -1209,6 +1213,39 @@ impl State {
     }
 
     fn ui(&mut self, node: &str, value: Value) {
+        if node == "workspace:reopen" {
+            self.workspace_closed = false;
+            self.refresh_preview();
+            return;
+        }
+        if self.workspace_closed {
+            return;
+        }
+        if let Some(divider) = node.strip_prefix("divider:") {
+            self.resize_layout(divider, &value);
+            return;
+        }
+        for prefix in [
+            "pool.",
+            "timeline.",
+            "lane.",
+            "track.",
+            "chapter.",
+            "settings.",
+        ] {
+            if let Some(action) = node.strip_prefix(prefix) {
+                if prefix == "lane." && action.starts_with("canvas:") {
+                    break;
+                }
+                let control = if node == "pool.dropbox" {
+                    "pool:add".into()
+                } else {
+                    format!("{}:{action}", prefix.trim_end_matches('.'))
+                };
+                self.ui(&control, value);
+                return;
+            }
+        }
         if let Some(control) = node.strip_prefix("viewer.") {
             if control == "name" {
                 self.ui("name", value);
@@ -1636,6 +1673,97 @@ impl State {
             }
             _ => {}
         }
+    }
+
+    pub fn restore_layout_setting(&mut self, key: &str, value: &Value) {
+        let number = value.as_f64().or_else(|| value.as_str()?.parse().ok());
+        match key {
+            layout::WORKSPACE_LAYOUT_KEY => {
+                self.layout = layout::parse_workspace_layout(value.as_str())
+            }
+            layout::POOL_WIDTH_KEY => {
+                self.pool_width = layout::clamp_pool_width(number, Some(self.window_width))
+            }
+            layout::INSPECTOR_WIDTH_KEY => {
+                self.inspector_width = layout::clamp_inspector_width(number)
+            }
+            layout::VIEWER_HEIGHT_KEY => {
+                self.viewer_height = layout::clamp_viewer_height(number, None)
+            }
+            _ => {}
+        }
+    }
+
+    fn resize_layout(&mut self, divider: &str, value: &Value) {
+        let (field, default, key, coord) = match divider {
+            "pool" => (self.pool_width, 280., layout::POOL_WIDTH_KEY, "x"),
+            "inspector" => (self.inspector_width, 440., layout::INSPECTOR_WIDTH_KEY, "x"),
+            "viewer" => (
+                self.viewer_height.unwrap_or(380.),
+                380.,
+                layout::VIEWER_HEIGHT_KEY,
+                "y",
+            ),
+            _ => return,
+        };
+        let p = value[coord].as_f64().unwrap_or(0.);
+        let mut reset = value["type"] == "double_click";
+        let mut target = field;
+        if value["type"] == "pointer" {
+            match value["phase"].as_str() {
+                Some("down") => {
+                    self.divider_drag = Some((divider.into(), p, field));
+                    return;
+                }
+                Some("up") => {
+                    let Some((name, start, before)) = self.divider_drag.take() else {
+                        return;
+                    };
+                    if name != divider {
+                        return;
+                    }
+                    target = before + (p - start) * if divider == "inspector" { -1. } else { 1. };
+                }
+                Some("cancel") => {
+                    self.divider_drag = None;
+                    return;
+                }
+                _ => return,
+            }
+        } else if value["type"] == "key" && value["phase"] == "down" {
+            let step = layout::divider_step(value["mods"]["shift"] == true);
+            match value["key"].as_str() {
+                Some("Home") => reset = true,
+                Some("Escape") => {
+                    self.divider_drag = None;
+                    return;
+                }
+                Some("ArrowLeft" | "Left") if coord == "x" => {
+                    target += if divider == "inspector" { step } else { -step }
+                }
+                Some("ArrowRight" | "Right") if coord == "x" => {
+                    target += if divider == "inspector" { -step } else { step }
+                }
+                Some("ArrowUp" | "Up") if coord == "y" => target -= step,
+                Some("ArrowDown" | "Down") if coord == "y" => target += step,
+                _ => return,
+            }
+        } else if !reset {
+            return;
+        }
+        if reset {
+            target = default;
+        }
+        self.restore_layout_setting(key, &json!(target));
+        self.persist(key, target.to_string());
+    }
+
+    pub fn close_workspace(&mut self) {
+        self.transport(false);
+        self.activate_project(empty_project());
+        self.studio = None;
+        self.workspace_closed = true;
+        self.notice = None;
     }
 
     fn persist_layout(&mut self) {
@@ -2369,7 +2497,10 @@ impl State {
             "chapter_next" => self.seek_chapter(1),
             "chapter_prev" => self.seek_chapter(-1),
             "seek" => {
-                let ms = value.as_f64().unwrap_or(0.0);
+                let ms = value
+                    .as_f64()
+                    .or_else(|| value["ms"].as_f64())
+                    .unwrap_or(self.media_time);
                 self.seek_media(
                     ms,
                     value.get("final").and_then(Value::as_bool).unwrap_or(false),
@@ -2574,7 +2705,7 @@ impl State {
     /// Current window size used for responsive clamps (pool/inspector/viewer).
     pub fn set_window(&mut self, width: f64) {
         self.window_width = width;
-        self.pool_width = layout::clamp_pool_width(Some(self.pool_width), Some(width));
+        // Keep the persisted width; the view clamps it to the current workspace.
     }
 
     /// Cover asset (for the C lane) when one exists.

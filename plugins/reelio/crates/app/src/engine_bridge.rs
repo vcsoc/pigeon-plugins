@@ -73,12 +73,19 @@ impl PluginHost {
             .map(|(name, exts)| json!({"name": name, "extensions": exts}))
             .collect();
         let params = json!({
-            "title": request.title,
-            "directory": request.directory.as_ref().map(|d| d.to_string_lossy().into_owned()),
-            "file_name": request.file_name,
             "filters": filters,
             "multiple": request.multiple,
         });
+        let mut params = params;
+        if let Some(title) = &request.title {
+            params["title"] = json!(title);
+        }
+        if let Some(path) = &request.directory {
+            params["directory"] = json!(path);
+        }
+        if let Some(name) = &request.file_name {
+            params["file_name"] = json!(name);
+        }
         ctx.call(method, params).map_err(|e| e.to_string())
     }
 
@@ -92,7 +99,13 @@ impl PluginHost {
                     .map(PathBuf::from)
                     .collect()
             })
-            .unwrap_or_default()
+            .unwrap_or_else(|| {
+                value["path"]
+                    .as_str()
+                    .map(PathBuf::from)
+                    .into_iter()
+                    .collect()
+            })
     }
 }
 
