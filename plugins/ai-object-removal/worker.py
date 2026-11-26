@@ -45,6 +45,7 @@ def remove_object(request):
     inputs = session.get_inputs()
     if len(inputs) != 2 or sum('mask' in i.name.lower() for i in inputs) != 1:
         raise rt.PluginError('unexpected LaMa input contract')
+    rt.progress(request, 0.5, 'Inpainting the masked area')
     feed = {i.name: mask_tensor if 'mask' in i.name.lower() else image_tensor for i in inputs}
     prediction = session.run(None, feed)[0][0]
     if not np.isfinite(prediction).all():
@@ -69,4 +70,7 @@ def self_test(tmp):
 
 
 if __name__ == '__main__':
+    if '--plugin' in sys.argv[1:]:          # protocol v2: the UI process (ui.py) drives this file
+        import ui
+        sys.exit(ui.main())
     rt.main({'remove_object': remove_object}, self_test=self_test)

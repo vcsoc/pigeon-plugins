@@ -28,10 +28,13 @@ def remove_background(request):
     options.intra_op_num_threads = max(1, os.cpu_count() or 1)
     session = ort.InferenceSession(rt.resolve_model(request, MODEL, single=True), sess_options=options,
                                    providers=['CPUExecutionProvider'])
+    rt.progress(request, 0.2, 'Preparing the image')
     array = np.asarray(image.convert('RGB').resize((320, 320), Image.Resampling.LANCZOS), dtype=np.float32)
     array /= max(float(array.max()), 1.0)
     array = (array - np.array([.485, .456, .406], dtype=np.float32)) / np.array([.229, .224, .225], dtype=np.float32)
+    rt.progress(request, 0.5, 'Finding the foreground')
     prediction = session.run(None, {session.get_inputs()[0].name: array.transpose(2, 0, 1)[None]})[0][0, 0]
+    rt.progress(request, 0.9, 'Writing the cut-out')
     low, high = float(prediction.min()), float(prediction.max())
     if not np.isfinite(prediction).all() or high - low < 1e-6:
         raise rt.PluginError('no clear foreground found')
@@ -52,4 +55,7 @@ def self_test(tmp):
 
 
 if __name__ == '__main__':
+    if '--plugin' in sys.argv[1:]:          # protocol v2: the UI process (ui.py) drives this file
+        import ui
+        sys.exit(ui.main())
     rt.main({'remove_background': remove_background}, self_test=self_test)

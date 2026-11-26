@@ -9,6 +9,9 @@
 #   run --health [--verify]  report readiness as JSON (dependencies, models, device)
 #   run --self-test          run the plugin on a synthetic image and check the output
 #   run --version
+#   run --plugin             protocol v2: the plugin's UI process (JSON Lines on stdin/stdout). Needs the
+#                            prepared environment: the host runs --setup first; otherwise a JSON error
+#   run --uninstall          optional cleanup before Pigeon deletes the plugin (nothing outside this folder)
 #   run                      read one JSON request on stdin, write one JSON reply on stdout
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd -P)
@@ -32,6 +35,22 @@ find_python() {
   done
   return 1
 }
+
+if [ "${1:-}" = "--uninstall" ]; then
+  # Nothing outside this folder is kept (state is in .data, which Pigeon deletes after this).
+  printf '{"version":1,"ok":true}\n'
+  exit 0
+fi
+
+if [ "${1:-}" = "--plugin" ]; then
+  # Protocol v2 UI process. The host runs --setup first (amendment 11); refuse to start unprepared so
+  # the failure is a JSON error the host can show, not a crash.
+  if [ ! -x "$VENV/bin/python" ]; then
+    fail "plugin is not set up: run it once with --setup"
+  fi
+  cd "$HERE"
+  exec "$VENV/bin/python" "$HERE/worker.py" --plugin
+fi
 
 if [ "${1:-}" = "--setup" ]; then
   mkdir -p "$DATA"

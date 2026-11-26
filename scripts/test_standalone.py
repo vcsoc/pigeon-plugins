@@ -4,7 +4,7 @@
 For every plugin (or the ones named on the command line) this copies the plugin folder to a clean
 temporary directory and, with a cleared environment (PATH=/usr/bin:/bin only) and an unrelated
 working directory, runs:  --setup, --health, the host's `health` probe, --self-test, a real request
-on --image, and a deliberately bad request (which must fail cleanly with a JSON error).
+on --image, a deliberately bad request, and a real v2 UI session driven by a mock host.
 
   python3 scripts/test_standalone.py [--image photo.jpg] [--seed DIR] [plugin-id ...]
 
@@ -106,12 +106,92 @@ def run(args, plugin, stdin=None, env_extra=None, timeout=3600):
     return p.returncode, reply, time.time() - started, p.stderr
 
 
+def bounded_command(command, cwd, env=None, timeout=420):
+    p = subprocess.Popen(command, cwd=cwd, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                         start_new_session=True)
+    try:
+        out, err = p.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        import signal
+        os.killpg(p.pid, signal.SIGKILL)
+        p.communicate(timeout=10)
+        return False, "", f"timed out after {timeout}s"
+    return p.returncode == 0, out, err
+
+
+def bounded_case(plugin, *args):
+    command = [sys.executable, str(Path(__file__).resolve()), *map(str, args)]
+    good, out, err = bounded_command(command, plugin)
+    return good, json.loads(out) if good else {"error": err[-1600:]}
+
+
+def sdk_cases(binary, plugin, pid, out_dir):
+    """The SDK starts one fresh data directory per case; reuse setup from this copied plugin."""
+    launcher = plugin / "run"
+    real = plugin / "run.actual"
+    launcher.rename(real)
+    launcher.write_text('''#!/bin/sh
+set -eu
+HERE=$(cd "$(dirname "$0")" && pwd -P)
+if [ "$#" -gt 0 ] && [ "$1" = --setup ] && [ "${PIGEON_PLUGIN_DATA:-}" != "$HERE/.data" ]; then
+  : "${PIGEON_PLUGIN_DATA:?missing mock data dir}"
+  for component in venv models; do
+    if [ -e "$HERE/.data/$component" ]; then
+      ln -s "$HERE/.data/$component" "$PIGEON_PLUGIN_DATA/$component"
+    fi
+  done
+  exec sh "$HERE/run.actual" --health
+fi
+exec sh "$HERE/run.actual" "$@"
+''')
+    launcher.chmod(0o755)
+    try:
+        png = out_dir / f"{pid}.png"
+        instance = f"{pid}/" + ("index" if pid == "semantic-search" else "panel")
+        for name, args in (("SDK conformance", ("conformance", plugin)),
+                           ("SDK render", ("render", plugin, "--instance", instance, "--size", "420x680", "-o", png))):
+            started = time.monotonic()
+            good, out, err = bounded_command([str(binary), *map(str, args)], plugin, timeout=90)
+            if name == "SDK render":
+                good = good and png.is_file() and png.stat().st_size > 0
+            yield name, good, time.monotonic() - started, {"output": (out + err)[-1600:].strip()}
+    finally:
+        real.replace(launcher)
+
+
 def main():
+    if len(sys.argv) == 6 and sys.argv[1] == "--internal-case":
+        _, _, case, pid, seed, scratch = sys.argv
+        if case == "engine":
+            good, info = serve_test(Path.cwd(), {"PIGEON_PLUGIN_SEED": seed} if seed else {}, Path(scratch))
+            if not good:
+                sys.exit(json.dumps(info))
+        else:
+            from ui_cases import run_case
+            info = {"checks": run_case(pid, str(Path.cwd()), seed, scratch)}
+        print(json.dumps(info))
+        return
     ap = argparse.ArgumentParser()
-    ap.add_argument("plugins", nargs="*")
+    ap.add_argument("plugins", nargs="*", metavar="plugin-id")
     ap.add_argument("--image")
     ap.add_argument("--seed")
+    ap.add_argument("--pigeon-mock", type=Path, default=shutil.which("pigeon-mock"),
+                    help="also run SDK conformance and render using this binary (default: find it on PATH)")
+    ap.add_argument("--renders", type=Path, help="retain SDK scene PNGs here")
+    ap.add_argument("--prepared", type=Path,
+                    help="reuse models and venv from each DIR/<plugin-id>/.data; skip download/setup")
     args = ap.parse_args()
+    if unknown := set(args.plugins) - REQUESTS.keys():
+        ap.error(f"unknown plugin(s): {', '.join(sorted(unknown))}")
+    mock = args.pigeon_mock.resolve() if args.pigeon_mock else None
+    if mock and not mock.is_file():
+        ap.error(f"missing pigeon-mock binary: {mock}")
+    renders = args.renders.resolve() if args.renders else None
+    if renders:
+        if not mock:
+            ap.error("--renders requires pigeon-mock")
+        renders.mkdir(parents=True, exist_ok=True)
+        renders = Path(tempfile.mkdtemp(prefix="run-", dir=renders))
     from PIL import Image, ImageDraw
 
     ids = args.plugins or sorted(REQUESTS)
@@ -134,16 +214,26 @@ def main():
         env = {"PIGEON_PLUGIN_SEED": args.seed} if args.seed else {}
         steps = []
 
-        def step(name, args_, stdin=None, expect_ok=True):
-            code, reply, seconds, err = run(args_, plugin, stdin, env)
+        def step(name, args_, stdin=None, expect_ok=True, timeout=3600):
+            code, reply, seconds, err = run(args_, plugin, stdin, env, timeout=timeout)
             good = (code == 0 and reply.get("ok") is True) if expect_ok else (code != 0 and reply.get("ok") is False and "error" in reply)
             steps.append((name, good, seconds, reply if not good else {k: v for k, v in reply.items() if k in ("output_size", "device", "working_scale", "error")}))
             if not good and err:
                 print(f"--- {pid} {name} stderr (tail)\n{err[-800:]}", file=sys.stderr)
             return good, reply
 
-        step("setup", ["--setup"])
-        step("health", ["--health", "--verify"])
+        step("v2 launch before setup", ["--plugin"], expect_ok=False, timeout=5)
+        if args.prepared:
+            data = plugin / ".data"
+            data.mkdir()
+            source = args.prepared.resolve() / pid / ".data"
+            for name in ("venv", "models"):
+                if (source / name).exists():
+                    (data / name).symlink_to(source / name, target_is_directory=True)
+            step("health", ["--health"])
+        else:
+            step("setup", ["--setup"])
+            step("health", ["--health", "--verify"])
         step("host health probe", [], json.dumps({"version": 1, "operation": "health"}))
         step("self-test", ["--self-test"])
         output = scratch / "output.png"
@@ -155,11 +245,17 @@ def main():
         if pid == "semantic-search":
             started = time.time()
             try:
-                good, info = serve_test(plugin, env, scratch)
+                good, info = bounded_case(plugin, "--internal-case", "engine", pid, args.seed or "", scratch)
             except Exception as error:      # report, keep going
                 good, info = False, {"error": str(error)[:300]}
             steps.append(("engine: index + search", good, time.time() - started, info))
         step("bad request fails cleanly", [], json.dumps({"version": 1, "operation": "nonsense"}), expect_ok=False)
+        started = time.monotonic()
+        good, info = bounded_case(plugin, "--internal-case", "ui", pid, args.seed or "", scratch / "ui")
+        steps.append(("v2 mock host", good, time.monotonic() - started, info))
+        step("uninstall hook", ["--uninstall"])
+        if mock:
+            steps.extend(sdk_cases(mock, plugin, pid, renders or scratch))
         results.append((pid, steps))
         failed |= not all(s[1] for s in steps)
         shutil.rmtree(work, ignore_errors=True)

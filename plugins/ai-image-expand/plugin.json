@@ -1,9 +1,12 @@
 {
   "id": "ai-image-expand",
   "name": "AI Image Expand",
-  "version": "1.1.1",
+  "version": "2.0.0",
   "category": "Image editing",
-  "kind": "editor-worker",
+  "kind": "app",
+  "provides": [
+    "ops"
+  ],
   "description": "Enlarge the canvas and the model paints in the new border (outpainting). Uses MI-GAN, a 28 MB inpainting model, so it is fast on CPU. Your original pixels are never altered. The result must be accepted before it is saved as a derivative.",
   "author": "Pigeon",
   "licence": "MIT",
@@ -15,7 +18,7 @@
     "runtime": "python3",
     "python": ">=3.10,<3.14",
     "entry": "run",
-    "protocol": 1,
+    "protocol": 2,
     "standalone": true,
     "requires": [
       "numpy",
@@ -27,9 +30,12 @@
       "setup": "run --setup",
       "health": "run --health [--verify]",
       "selfTest": "run --self-test",
-      "request": "run  (JSON on stdin)"
+      "request": "run  (JSON on stdin)",
+      "plugin": "run --plugin",
+      "uninstall": "run --uninstall"
     }
   },
+  "sdk": "python",
   "files": [
     {
       "path": "plugin.json"
@@ -43,6 +49,12 @@
     },
     {
       "path": "worker.py"
+    },
+    {
+      "path": "ui.py"
+    },
+    {
+      "path": "ui_support.py"
     },
     {
       "path": "requirements.txt"
@@ -67,5 +79,53 @@
     "huggingface.co",
     "pypi.org"
   ],
-  "privacy": "Setup downloads the Python packages and model files once. Images and prompts are processed locally and never sent anywhere."
+  "privacy": "Setup downloads the Python packages and model files once. Images and prompts are processed locally and never sent anywhere.",
+  "ui": {
+    "protocol": 2,
+    "activation": "visible",
+    "contributions": [
+      {
+        "slot": "inspector.panel",
+        "id": "panel",
+        "title": "AI Image Expand",
+        "icon": "frame-corners",
+        "order": 63,
+        "applies_to": {
+          "kinds": [
+            "image"
+          ],
+          "min": 1,
+          "max": 1
+        }
+      },
+      {
+        "slot": "asset.action",
+        "id": "open",
+        "title": "Expand canvas with AI…",
+        "icon": "frame-corners",
+        "applies_to": {
+          "kinds": [
+            "image"
+          ],
+          "min": 1,
+          "max": 1
+        },
+        "selection": "one",
+        "group": "AI"
+      },
+      {
+        "slot": "modal",
+        "id": "tool",
+        "title": "AI Image Expand",
+        "size": "large",
+        "resizable": true,
+        "modal": false
+      }
+    ],
+    "permissions": [
+      "selection",
+      "library.write",
+      "windows"
+    ]
+  }
 }

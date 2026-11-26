@@ -88,6 +88,9 @@ def self_test(tmp):
 
 
 if __name__ == '__main__':
+    if '--plugin' in sys.argv[1:]:          # protocol v2: the UI process (ui.py) drives this file
+        import ui
+        sys.exit(ui.main())
     if '--serve' in sys.argv[1:] and len(sys.argv) > sys.argv.index('--serve') + 1:
         serve(sys.argv[sys.argv.index('--serve') + 1])
     else:

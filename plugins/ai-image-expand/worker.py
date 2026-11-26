@@ -74,6 +74,9 @@ def expand(request):
     if not migan and not (len(names) == 2 and sum('mask' in n.lower() for n in names) == 1):
         raise rt.PluginError('unexpected model input contract')
 
+    total_rows = max(1, left + right + top + bottom)
+    done_rows = 0
+
     def infer(tile, tile_known):
         if migan:
             out = session.run(None, {
@@ -134,6 +137,8 @@ def expand(request):
                 weight[:, x - a0:x - a0 + tw] += w[None, :, None]
             arr[y0:cur + redo, a0:b0] = np.clip(acc / weight + 0.5, 0, 255).astype(np.uint8)
             kmask[y0:cur + redo, a0:b0] = True
+            done_rows += d
+            rt.progress(request, done_rows / total_rows, f'Painting the {side} edge')
             cur = y0
 
     generated = Image.fromarray(canvas)
@@ -157,4 +162,7 @@ def self_test(tmp):
 
 
 if __name__ == '__main__':
+    if '--plugin' in sys.argv[1:]:          # protocol v2: the UI process (ui.py) drives this file
+        import ui
+        sys.exit(ui.main())
     rt.main({'expand': expand}, self_test=self_test)
