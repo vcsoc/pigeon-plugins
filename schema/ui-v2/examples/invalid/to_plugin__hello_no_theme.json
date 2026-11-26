@@ -1,0 +1,16 @@
+{
+  "v": 2,
+  "t": "hello",
+  "host": {
+    "name": "Pigeon",
+    "version": "0.4.1"
+  },
+  "protocol": {
+    "min": 2,
+    "max": 2
+  },
+  "locale": "en",
+  "scale": 2.0,
+  "session_dir": "/tmp/s",
+  "features": []
+}

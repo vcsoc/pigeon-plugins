@@ -1,0 +1,21 @@
+{
+  "v": 2,
+  "t": "ui.event",
+  "instance": "hello-ui/main",
+  "node": "tl",
+  "type": "pointer",
+  "phase": "down",
+  "x": 120.5,
+  "y": 30,
+  "button": 0,
+  "buttons": 1,
+  "mods": {
+    "shift": false,
+    "ctrl": false,
+    "alt": false,
+    "meta": false
+  },
+  "clicks": 1,
+  "pointer_id": 1,
+  "coalesced": 1
+}

@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pigeon.app/schema/ui-v2/common.schema.json",
+  "title": "Pigeon UI protocol v2: shared definitions",
+  "description": "Building blocks used by the other ui-v2 schemas. Objects are open (additionalProperties allowed) so that newer hosts and plugins stay compatible; the schemas pin only what this version defines.",
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "color": {
+      "description": "#rrggbb, #rrggbbaa, or a theme token name.",
+      "type": "string",
+      "pattern": "^(#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?|[a-z][a-z0-9_]*)$"
+    },
+    "size": {
+      "description": "A layout length: {px}, {fill: weight} or \"auto\".",
+      "oneOf": [
+        { "type": "object", "required": ["px"], "properties": { "px": { "type": "number", "minimum": 0 } } },
+        { "type": "object", "required": ["fill"], "properties": { "fill": { "type": "number", "exclusiveMinimum": 0 } } },
+        { "const": "auto" }
+      ]
+    },
+    "rect": {
+      "type": "object",
+      "required": ["x", "y", "w", "h"],
+      "properties": {
+        "x": { "type": "number" }, "y": { "type": "number" },
+        "w": { "type": "number", "minimum": 0 }, "h": { "type": "number", "minimum": 0 }
+      }
+    },
+    "icon": {
+      "description": "A built-in icon name from icons.json (checked by the mock host; not an enum so that the host can add icons).",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "applies_to": {
+      "type": "object",
+      "properties": {
+        "kinds": { "type": "array", "items": { "enum": ["image", "video", "audio", "document"] } },
+        "min": { "type": "integer", "minimum": 0 },
+        "max": { "type": ["integer", "null"], "minimum": 0 },
+        "ext": { "type": "array", "items": { "type": "string", "pattern": "^[a-z0-9]+$" } }
+      }
+    },
+    "mods": {
+      "type": "object",
+      "properties": {
+        "shift": { "type": "boolean" }, "ctrl": { "type": "boolean" },
+        "alt": { "type": "boolean" }, "meta": { "type": "boolean" }
+      }
+    },
+    "theme": {
+      "type": "object",
+      "properties": {
+        "mode": { "enum": ["dark", "light"] },
+        "scale": { "type": "number", "exclusiveMinimum": 0 },
+        "font": {
+          "type": "object",
+          "properties": { "ui": { "type": "string" }, "mono": { "type": "string" } }
+        },
+        "colors": { "type": "object", "additionalProperties": { "type": "string" } },
+        "radius": { "type": "number", "minimum": 0 },
+        "spacing": { "type": "number", "minimum": 0 }
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "message": { "type": "string" }
+      }
+    },
+    "plugin_id": {
+      "type": "object",
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "instance": {
+      "description": "Slot instance: <plugin id>/<contribution id>, optionally with #<instance> for repeatable slots.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*/[^/\\s]+$"
+    },
+    "node_path": {
+      "description": "Node id, or ids joined with / for nested addressing.",
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

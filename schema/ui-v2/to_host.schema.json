@@ -1,0 +1,190 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pigeon.app/schema/ui-v2/to_host.schema.json",
+  "title": "Pigeon UI protocol v2: plugin to host messages",
+  "description": "Every message a plugin writes to stdout. Validate one JSON line against the root oneOf. Unknown fields are allowed; unknown `t` values are not errors for hosts (they are ignored) but are rejected by the mock host's strict mode.",
+  "oneOf": [
+    { "$ref": "#/$defs/ready" },
+    { "$ref": "#/$defs/contribute" },
+    { "$ref": "#/$defs/withdraw" },
+    { "$ref": "#/$defs/ui_set" },
+    { "$ref": "#/$defs/ui_patch" },
+    { "$ref": "#/$defs/ui_focus" },
+    { "$ref": "#/$defs/ui_scroll_to" },
+    { "$ref": "#/$defs/ui_beep" },
+    { "$ref": "#/$defs/canvas_draw" },
+    { "$ref": "#/$defs/list_rows" },
+    { "$ref": "#/$defs/resource_put" },
+    { "$ref": "#/$defs/resource_drop" },
+    { "$ref": "#/$defs/req" },
+    { "$ref": "#/$defs/res" },
+    { "$ref": "#/$defs/pong" },
+    { "$ref": "#/$defs/source_changed" },
+    { "$ref": "#/$defs/search_status" }
+  ],
+  "$defs": {
+    "envelope": {
+      "type": "object",
+      "required": ["v", "t"],
+      "properties": { "v": { "const": 2 }, "t": { "type": "string" }, "id": { "type": ["string", "integer"] } }
+    },
+    "ready": {
+      "description": "First message after hello, within 10 s.",
+      "allOf": [{ "$ref": "#/$defs/envelope" }, {
+        "type": "object",
+        "required": ["t", "plugin", "protocol", "contributions"],
+        "properties": {
+          "t": { "const": "ready" },
+          "plugin": { "$ref": "common.schema.json#/$defs/plugin_id" },
+          "protocol": { "const": 2 },
+          "contributions": { "type": "array", "items": { "$ref": "contribution.schema.json" } }
+        }
+      }]
+    },
+    "contribute": {
+      "allOf": [{ "$ref": "#/$defs/envelope" }, {
+        "type": "object", "required": ["t", "contributions"],
+        "properties": { "t": { "const": "contribute" }, "contributions": { "type": "array", "items": { "$ref": "contribution.schema.json" } } }
+      }]
+    },
+    "withdraw": {
+      "allOf": [{ "$ref": "#/$defs/envelope" }, {
+        "type": "object", "required": ["t", "ids"],
+        "properties": { "t": { "const": "withdraw" }, "ids": { "type": "array", "items": { "type": "string" } } }
+      }]
+    },
+    "ui_set": {
+      "description": "Replace the whole scene of one slot instance (4 MiB and 50,000 nodes max).",
+      "allOf": [{ "$ref": "#/$defs/envelope" }, {
+        "type": "object", "required": ["t", "instance", "scene"],
+        "properties": {
+          "t": { "const": "ui.set" },
+          "instance": { "$ref": "common.schema.json#/$defs/instance" },
+          "scene": { "$ref": "scene.schema.json" }
+        }
+      }]
+    },
+    "ui_patch": {
+      "allOf": [{ "$ref": "#/$defs/envelope" }, {
+        "type": "object", "required": ["t", "instance", "ops"],
+        "properties": {
+          "t": { "const": "ui.patch" },
+          "instance": { "$ref": "common.schema.json#/$defs/instance" },
+          "ops": {
+            "type": "array",
+            "items": {
+              "type": "object", "required": ["op", "path"],
+              "properties": {
+                "op": { "enum": ["set", "insert", "remove", "move"] },
+                "path": { "$ref": "common.schema.json#/$defs/node_path" },
+                "value": {}, "index": { "type": "integer", "minimum": 0 },
+                "node": { "$ref": "scene.schema.json" }
+              }
+            }
+          }
+        }
+      }]
+    },
+    "ui_focus": {
+      "allOf": [{ "$ref": "#/$defs/envelope" }, {
+        "type": "object", "required": ["t", "instance", "node"],
+        "properties": { "t": { "const": "ui.focus" }, "instance": { "$ref": "common.schema.json#/$defs/instance" }, "node": { "type": "string" } }
+      }]
+    },
+    "ui_scroll_to": {
+      "allOf": [{ "$ref": "#/$defs/envelope" }, {
+        "type": "object", "required": ["t", "instance", "node"],
+        "properties": {
+          "t": { "const": "ui.scroll_to" }, "instance": { "$ref": "common.schema.json#/$defs/instance" },
+          "node": { "type": "string" }, "align": { "enum": ["start", "center", "end", "nearest"] }
+        }
+      }]
+    },
+    "ui_beep": {
+      "allOf": [{ "$ref": "#/$defs/envelope" }, { "type": "object", "properties": { "t": { "const": "ui.beep" } }, "required": ["t"] }]
+    },
+    "canvas_draw": {
+      "description": "Fast path: replace one canvas' draw list without resending the scene.",
+      "allOf": [{ "$ref": "#/$defs/envelope" }, {
+        "type": "object", "required": ["t", "instance", "node", "frame", "ops"],
+        "properties": {
+          "t": { "const": "canvas.draw" },
+          "instance": { "$ref": "common.schema.json#/$defs/instance" },
+          "node": { "type": "string" },
+          "frame": { "type": "integer", "minimum": 0 },
+          "ops": { "type": "array", "maxItems": 20000, "items": { "$ref": "draw.schema.json#/$defs/op" } },
+          "region": { "$ref": "common.schema.json#/$defs/rect" }
+        }
+      }]
+    },
+    "list_rows": {
+      "description": "Answer to a list.window event.",
+      "allOf": [{ "$ref": "#/$defs/envelope" }, {
+        "type": "object", "required": ["t", "instance", "node", "start", "rows"],
+        "properties": {
+          "t": { "const": "list.rows" }, "instance": { "$ref": "common.schema.json#/$defs/instance" },
+          "node": { "type": "string" }, "start": { "type": "integer", "minimum": 0 },
+          "rows": { "type": "array", "items": { "$ref": "scene.schema.json" } }
+        }
+      }]
+    },
+    "resource_put": {
+      "allOf": [{ "$ref": "#/$defs/envelope" }, {
+        "type": "object", "required": ["t", "rid", "kind", "file", "w", "h", "seq"],
+        "properties": {
+          "t": { "const": "resource.put" },
+          "rid": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "kind": { "enum": ["rgba", "png", "jpeg", "webp", "svg"] },
+          "file": { "type": "string", "minLength": 1 },
+          "w": { "type": "integer", "minimum": 0 }, "h": { "type": "integer", "minimum": 0 },
+          "stride": { "type": "integer", "minimum": 0 },
+          "seq": { "type": "integer", "minimum": 0 },
+          "premultiplied": { "type": "boolean" }
+        }
+      }]
+    },
+    "resource_drop": {
+      "allOf": [{ "$ref": "#/$defs/envelope" }, {
+        "type": "object", "required": ["t", "rid"], "properties": { "t": { "const": "resource.drop" }, "rid": { "type": "string" } }
+      }]
+    },
+    "req": {
+      "description": "Host service request. params are validated by methods.schema.json#/$defs/<method>.params.",
+      "allOf": [{ "$ref": "#/$defs/envelope" }, {
+        "type": "object", "required": ["t", "id", "method"],
+        "properties": {
+          "t": { "const": "req" }, "id": { "type": "string", "minLength": 1 },
+          "method": { "type": "string", "pattern": "^[a-z_]+(\\.[a-z_]+)+$" },
+          "params": { "type": "object" }
+        }
+      }]
+    },
+    "res": {
+      "description": "Answer to a req from the host (a provider request). Exactly one of result or error.",
+      "allOf": [{ "$ref": "#/$defs/envelope" }, {
+        "type": "object", "required": ["t", "id"],
+        "properties": { "t": { "const": "res" }, "id": { "type": "string" }, "result": {}, "error": { "$ref": "common.schema.json#/$defs/error" } },
+        "oneOf": [{ "required": ["result"] }, { "required": ["error"] }]
+      }]
+    },
+    "pong": {
+      "allOf": [{ "$ref": "#/$defs/envelope" }, { "type": "object", "properties": { "t": { "const": "pong" } }, "required": ["t"] }]
+    },
+    "source_changed": {
+      "allOf": [{ "$ref": "#/$defs/envelope" }, {
+        "type": "object", "required": ["t", "source", "kind"],
+        "properties": {
+          "t": { "const": "source.changed" }, "source": { "type": "string" },
+          "kind": { "enum": ["invalidate", "insert", "remove"] },
+          "node": { "type": "string" }, "ids": { "type": "array", "items": { "type": "string" } }
+        }
+      }]
+    },
+    "search_status": {
+      "allOf": [{ "$ref": "#/$defs/envelope" }, {
+        "type": "object", "required": ["t", "mode_id", "status"],
+        "properties": { "t": { "const": "search.status" }, "mode_id": { "type": "string" }, "status": { "type": "object" } }
+      }]
+    }
+  }
+}

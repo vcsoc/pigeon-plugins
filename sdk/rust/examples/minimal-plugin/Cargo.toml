@@ -1,0 +1,11 @@
+[package]
+name = "minimal-plugin"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# This plugin is its own workspace root: it builds from its own folder alone.
+[workspace]
+
+[dependencies]
+pigeon-plugin-sdk = { path = "vendor/pigeon-plugin-sdk" }

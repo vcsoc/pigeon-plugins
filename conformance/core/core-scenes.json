@@ -1,0 +1,5 @@
+{
+  "id": "core-scenes",
+  "title": "Declared scene slots accept host events and emit valid scenes and resources",
+  "steps": [ { "ready": { "min_contributions": 0 } }, { "probe_slots": {} }, { "probe_resources": {} } ]
+}

@@ -1,0 +1,10 @@
+{
+  "v": 2,
+  "t": "contribute",
+  "contributions": [
+    {
+      "slot": "sidebar.menu",
+      "id": "x"
+    }
+  ]
+}

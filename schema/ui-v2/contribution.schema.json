@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pigeon.app/schema/ui-v2/contribution.schema.json",
+  "title": "Pigeon UI protocol v2: slot contribution",
+  "description": "A placeholder a plugin declares (ready.contributions, contribute, or the manifest ui.contributions). Slot-specific props are checked by the if/then list.",
+  "type": "object",
+  "required": ["slot", "id"],
+  "properties": {
+    "slot": { "enum": ["sidebar.section", "sidebar.entry", "toolbar.item", "workspace.view", "inspector.panel", "preferences.page", "modal", "statusbar.item", "asset.action", "library.source", "search.provider", "drop.target", "command"] },
+    "id": { "type": "string", "pattern": "^[^/\\s]+$", "minLength": 1, "maxLength": 128 },
+    "title": { "type": "string" },
+    "icon": { "$ref": "common.schema.json#/$defs/icon" },
+    "order": { "type": "integer" },
+    "badge": { "type": "string" },
+    "applies_to": { "$ref": "common.schema.json#/$defs/applies_to" },
+    "shortcut": { "type": "string" }
+  },
+  "allOf": [
+    { "if": { "properties": { "slot": { "const": "sidebar.entry" } } }, "then": { "required": ["title", "icon", "opens"], "properties": { "opens": { "type": "string" } } } },
+    { "if": { "properties": { "slot": { "const": "sidebar.section" } } }, "then": { "required": ["title", "icon"] } },
+    { "if": { "properties": { "slot": { "const": "toolbar.item" } } }, "then": { "required": ["group"], "properties": { "group": { "type": "string" } } } },
+    { "if": { "properties": { "slot": { "const": "workspace.view" } } }, "then": { "required": ["title"], "properties": { "toolbar": { "type": "boolean" } } } },
+    { "if": { "properties": { "slot": { "const": "inspector.panel" } } }, "then": { "required": ["title", "icon"] } },
+    { "if": { "properties": { "slot": { "const": "preferences.page" } } }, "then": { "required": ["title", "icon"] } },
+    { "if": { "properties": { "slot": { "const": "modal" } } }, "then": { "required": ["title"], "properties": { "size": { "enum": ["small", "medium", "large", "fullscreen"] }, "modal": { "type": "boolean" }, "resizable": { "type": "boolean" } } } },
+    { "if": { "properties": { "slot": { "const": "statusbar.item" } } }, "then": { "properties": { "align": { "enum": ["left", "right"] } } } },
+    { "if": { "properties": { "slot": { "const": "asset.action" } } }, "then": { "required": ["title", "icon", "applies_to", "selection"], "properties": { "selection": { "enum": ["one", "many", "any"] }, "group": { "type": "string" } } } },
+    { "if": { "properties": { "slot": { "const": "command" } } }, "then": { "required": ["title"] } },
+    { "if": { "properties": { "slot": { "const": "drop.target" } } }, "then": { "required": ["accepts", "where"], "properties": { "accepts": { "type": "array", "items": { "enum": ["files", "assets"] } }, "where": { "type": "string" } } } },
+    { "if": { "properties": { "slot": { "const": "library.source" } } }, "then": { "required": ["title", "icon", "capabilities"], "properties": { "root": { "type": "object" }, "capabilities": { "type": "array", "items": { "enum": ["browse", "search", "upload", "download", "metadata_write", "tags", "delete", "albums", "live"] } } } } },
+    { "if": { "properties": { "slot": { "const": "search.provider" } } }, "then": { "required": ["title", "icon", "mode_id"] } }
+  ]
+}

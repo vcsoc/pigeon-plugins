@@ -1,0 +1,272 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pigeon.app/schema/ui-v2/scene.schema.json",
+  "title": "Pigeon UI protocol v2: scene node",
+  "description": "A scene is one root node. Every node has a stable id, a kind and kind-specific props. Children are in `children` (layout kinds). Kind-specific rules are applied by the if/then list in `node`.",
+  "$ref": "#/$defs/node",
+  "$defs": {
+    "node": {
+      "type": "object",
+      "required": ["id", "kind"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/id" },
+        "kind": { "enum": ["row", "column", "stack", "grid", "wrap", "split", "scroll", "tabs", "collapsible", "panel", "spacer", "divider",
+                           "text", "icon", "image", "button", "icon_button", "checkbox", "switch", "radio_group", "segmented",
+                           "text_input", "number_input", "slider", "range_slider", "select", "color_picker", "progress", "spinner",
+                           "badge", "pill", "menu", "context_menu", "tooltip", "table", "tree", "list", "canvas", "rich_text", "code"] },
+        "children": { "type": "array", "items": { "$ref": "#/$defs/node" } },
+        "width": { "$ref": "common.schema.json#/$defs/size" },
+        "height": { "$ref": "common.schema.json#/$defs/size" },
+        "min_width": { "type": "number", "minimum": 0 },
+        "min_height": { "type": "number", "minimum": 0 },
+        "max_width": { "type": "number", "minimum": 0 },
+        "max_height": { "type": "number", "minimum": 0 },
+        "padding": { "type": "number", "minimum": 0 },
+        "margin": { "type": "number", "minimum": 0 },
+        "gap": { "type": "number", "minimum": 0 },
+        "align": { "enum": ["start", "center", "end", "stretch", "left", "right"] },
+        "justify": { "enum": ["start", "center", "end", "space_between", "space_around"] },
+        "visible": { "type": "boolean" },
+        "enabled": { "type": "boolean" },
+        "tooltip": { "type": "string" },
+        "id_hint": { "type": "string" },
+        "bg": { "$ref": "common.schema.json#/$defs/color" },
+        "fg": { "$ref": "common.schema.json#/$defs/color" },
+        "border": { "$ref": "common.schema.json#/$defs/color" },
+        "radius": { "type": "number", "minimum": 0 },
+        "accessibility": {
+          "type": "object",
+          "properties": { "label": { "type": "string" }, "role": { "type": "string" } }
+        },
+        "on": {
+          "type": "array",
+          "items": { "enum": ["click", "double_click", "context", "change", "submit", "blur", "scroll", "list.window", "pointer", "wheel", "key", "drop", "hover"] },
+          "uniqueItems": true
+        }
+      },
+      "allOf": [
+        { "if": { "properties": { "kind": { "const": "row" } } }, "then": { "$ref": "#/$defs/layout" } },
+        { "if": { "properties": { "kind": { "const": "column" } } }, "then": { "$ref": "#/$defs/layout" } },
+        { "if": { "properties": { "kind": { "const": "stack" } } }, "then": { "$ref": "#/$defs/layout" } },
+        { "if": { "properties": { "kind": { "const": "wrap" } } }, "then": { "$ref": "#/$defs/layout" } },
+        { "if": { "properties": { "kind": { "const": "panel" } } }, "then": { "$ref": "#/$defs/layout" } },
+        { "if": { "properties": { "kind": { "const": "collapsible" } } }, "then": { "$ref": "#/$defs/collapsible" } },
+        { "if": { "properties": { "kind": { "const": "grid" } } }, "then": { "$ref": "#/$defs/grid" } },
+        { "if": { "properties": { "kind": { "const": "split" } } }, "then": { "$ref": "#/$defs/split" } },
+        { "if": { "properties": { "kind": { "const": "scroll" } } }, "then": { "$ref": "#/$defs/scroll" } },
+        { "if": { "properties": { "kind": { "const": "tabs" } } }, "then": { "$ref": "#/$defs/tabs" } },
+        { "if": { "properties": { "kind": { "const": "text" } } }, "then": { "$ref": "#/$defs/text" } },
+        { "if": { "properties": { "kind": { "const": "button" } } }, "then": { "$ref": "#/$defs/button" } },
+        { "if": { "properties": { "kind": { "const": "text_input" } } }, "then": { "$ref": "#/$defs/text_input" } },
+        { "if": { "properties": { "kind": { "const": "number_input" } } }, "then": { "$ref": "#/$defs/controlled" } },
+        { "if": { "properties": { "kind": { "const": "slider" } } }, "then": { "$ref": "#/$defs/controlled" } },
+        { "if": { "properties": { "kind": { "const": "range_slider" } } }, "then": { "$ref": "#/$defs/controlled" } },
+        { "if": { "properties": { "kind": { "const": "select" } } }, "then": { "$ref": "#/$defs/select" } },
+        { "if": { "properties": { "kind": { "const": "menu" } } }, "then": { "$ref": "#/$defs/menu" } },
+        { "if": { "properties": { "kind": { "const": "context_menu" } } }, "then": { "$ref": "#/$defs/menu" } },
+        { "if": { "properties": { "kind": { "const": "list" } } }, "then": { "$ref": "#/$defs/list" } },
+        { "if": { "properties": { "kind": { "const": "canvas" } } }, "then": { "$ref": "draw.schema.json#/$defs/canvas_node" } },
+        { "if": { "properties": { "kind": { "const": "image" } } }, "then": { "$ref": "#/$defs/image" } },
+        { "if": { "properties": { "kind": { "const": "progress" } } }, "then": { "$ref": "#/$defs/progress" } },
+        { "if": { "properties": { "kind": { "const": "rich_text" } } }, "then": { "$ref": "#/$defs/rich_text" } },
+        { "if": { "properties": { "kind": { "const": "table" } } }, "then": { "$ref": "#/$defs/table" } },
+        { "if": { "properties": { "kind": { "const": "tree" } } }, "then": { "$ref": "#/$defs/tree" } }
+      ]
+    },
+    "layout": {
+      "type": "object",
+      "properties": {
+        "children": { "type": "array", "items": { "$ref": "#/$defs/node" } }
+      }
+    },
+    "collapsible": {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "open": { "type": "boolean" },
+        "children": { "type": "array", "items": { "$ref": "#/$defs/node" } }
+      }
+    },
+    "grid": {
+      "type": "object",
+      "properties": {
+        "columns": { "type": "integer", "minimum": 1 },
+        "min_cell": { "type": "number", "minimum": 1 },
+        "children": { "type": "array", "items": { "$ref": "#/$defs/node" } }
+      },
+      "oneOf": [{ "required": ["columns"] }, { "required": ["min_cell"] }]
+    },
+    "split": {
+      "type": "object",
+      "required": ["direction", "sizes", "children"],
+      "properties": {
+        "direction": { "enum": ["horizontal", "vertical"] },
+        "sizes": { "type": "array", "items": { "type": "number", "minimum": 0 } },
+        "min": { "type": "number", "minimum": 0 },
+        "persist_key": { "type": "string" },
+        "children": { "type": "array", "minItems": 2, "items": { "$ref": "#/$defs/node" } }
+      }
+    },
+    "scroll": {
+      "type": "object",
+      "properties": {
+        "axis": { "enum": ["vertical", "horizontal", "both"] },
+        "show_bars": { "type": "boolean" },
+        "scroll_to": { "type": "number", "minimum": 0 },
+        "children": { "type": "array", "items": { "$ref": "#/$defs/node" } }
+      }
+    },
+    "tabs": {
+      "type": "object",
+      "required": ["tabs", "active"],
+      "properties": {
+        "tabs": {
+          "type": "array",
+          "items": {
+            "type": "object", "required": ["id", "label"],
+            "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "icon": { "$ref": "common.schema.json#/$defs/icon" } }
+          }
+        },
+        "active": { "type": "string" },
+        "children": { "type": "array", "items": { "$ref": "#/$defs/node" } }
+      }
+    },
+    "text": {
+      "type": "object",
+      "required": ["text"],
+      "properties": {
+        "text": { "type": "string" },
+        "style": { "enum": ["heading", "title", "body", "caption", "code", "mono"] },
+        "wrap": { "type": "boolean" },
+        "selectable": { "type": "boolean" },
+        "align": { "enum": ["left", "center", "right"] },
+        "color": { "$ref": "common.schema.json#/$defs/color" },
+        "spans": {
+          "type": "array",
+          "items": {
+            "type": "object", "required": ["text"],
+            "properties": { "text": { "type": "string" }, "style": { "type": "string" }, "color": { "$ref": "common.schema.json#/$defs/color" } }
+          }
+        }
+      }
+    },
+    "button": {
+      "type": "object",
+      "required": ["label"],
+      "properties": {
+        "label": { "type": "string" },
+        "icon": { "$ref": "common.schema.json#/$defs/icon" },
+        "variant": { "enum": ["default", "primary", "danger", "ghost", "link"] },
+        "toggled": { "type": "boolean" },
+        "shortcut": { "type": "string" }
+      }
+    },
+    "image": {
+      "type": "object",
+      "required": ["resource"],
+      "properties": {
+        "resource": { "type": "string", "minLength": 1 },
+        "fit": { "enum": ["contain", "cover", "fill", "none"] }
+      }
+    },
+    "controlled": {
+      "type": "object",
+      "required": ["value", "rev"],
+      "properties": {
+        "value": {},
+        "rev": { "type": "integer", "minimum": 0 },
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "step": { "type": "number", "exclusiveMinimum": 0 },
+        "precision": { "type": "integer", "minimum": 0 },
+        "unit": { "type": "string" }
+      }
+    },
+    "text_input": {
+      "type": "object",
+      "required": ["value", "rev"],
+      "properties": {
+        "value": { "type": "string" },
+        "rev": { "type": "integer", "minimum": 0 },
+        "placeholder": { "type": "string" },
+        "multiline": { "type": "boolean" },
+        "password": { "type": "boolean" },
+        "monospace": { "type": "boolean" },
+        "max_len": { "type": "integer", "minimum": 0 },
+        "commit": { "enum": ["change", "submit", "blur"] }
+      }
+    },
+    "select": {
+      "type": "object",
+      "required": ["options", "value"],
+      "properties": {
+        "options": { "type": "array", "items": { "type": "object", "required": ["value", "label"] } },
+        "value": { "type": "string" },
+        "searchable": { "type": "boolean" }
+      }
+    },
+    "progress": {
+      "type": "object",
+      "properties": { "value": { "type": ["number", "null"], "minimum": 0, "maximum": 1 } }
+    },
+    "menu": {
+      "type": "object",
+      "required": ["items"],
+      "properties": {
+        "items": { "type": "array", "items": { "$ref": "#/$defs/menu_item" } }
+      }
+    },
+    "menu_item": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "icon": { "$ref": "common.schema.json#/$defs/icon" },
+        "shortcut": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "checked": { "type": "boolean" },
+        "separator": { "type": "boolean" },
+        "children": { "type": "array", "items": { "$ref": "#/$defs/menu_item" } }
+      }
+    },
+    "list": {
+      "type": "object",
+      "required": ["key", "count"],
+      "properties": {
+        "key": { "type": "string" },
+        "count": { "type": "integer", "minimum": 0 },
+        "row_height": { "oneOf": [{ "type": "number", "exclusiveMinimum": 0 }, { "const": "variable" }] },
+        "window": {
+          "type": "object",
+          "properties": {
+            "start": { "type": "integer", "minimum": 0 },
+            "rows": { "type": "array", "items": { "$ref": "#/$defs/node" } }
+          }
+        }
+      }
+    },
+    "table": {
+      "type": "object",
+      "required": ["columns", "count"],
+      "properties": {
+        "columns": { "type": "array", "items": { "type": "object", "required": ["id", "title"] } },
+        "count": { "type": "integer", "minimum": 0 },
+        "sort": { "type": "object" }
+      }
+    },
+    "tree": {
+      "type": "object",
+      "required": ["nodes"],
+      "properties": {
+        "nodes": { "type": "array" }
+      }
+    },
+    "rich_text": {
+      "type": "object",
+      "required": ["spans"],
+      "properties": {
+        "spans": { "type": "array", "items": { "type": "object", "required": ["text"] } }
+      }
+    }
+  }
+}

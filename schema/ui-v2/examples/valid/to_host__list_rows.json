@@ -1,0 +1,20 @@
+{
+  "v": 2,
+  "t": "list.rows",
+  "instance": "hello-ui/main",
+  "node": "rows",
+  "start": 10,
+  "rows": [
+    {
+      "id": "row-10",
+      "kind": "row",
+      "children": [
+        {
+          "id": "row-10-t",
+          "kind": "text",
+          "text": "Clip 10"
+        }
+      ]
+    }
+  ]
+}

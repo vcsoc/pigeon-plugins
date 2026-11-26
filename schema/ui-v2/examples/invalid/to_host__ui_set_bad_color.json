@@ -1,0 +1,11 @@
+{
+  "v": 2,
+  "t": "ui.set",
+  "instance": "a/b",
+  "scene": {
+    "id": "root",
+    "kind": "text",
+    "text": "x",
+    "fg": "#12345"
+  }
+}

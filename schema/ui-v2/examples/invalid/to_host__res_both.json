@@ -1,0 +1,10 @@
+{
+  "v": 2,
+  "t": "res",
+  "id": "1",
+  "result": {},
+  "error": {
+    "code": "x",
+    "message": "y"
+  }
+}

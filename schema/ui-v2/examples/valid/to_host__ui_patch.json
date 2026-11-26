@@ -1,0 +1,31 @@
+{
+  "v": 2,
+  "t": "ui.patch",
+  "instance": "hello-ui/main",
+  "ops": [
+    {
+      "op": "set",
+      "path": "title/text",
+      "value": "Hello"
+    },
+    {
+      "op": "insert",
+      "path": "buttons",
+      "index": 0,
+      "node": {
+        "id": "new",
+        "kind": "button",
+        "label": "New"
+      }
+    },
+    {
+      "op": "remove",
+      "path": "buttons/go"
+    },
+    {
+      "op": "move",
+      "path": "buttons/new",
+      "index": 2
+    }
+  ]
+}

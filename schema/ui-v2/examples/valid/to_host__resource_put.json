@@ -1,0 +1,12 @@
+{
+  "v": 2,
+  "t": "resource.put",
+  "rid": "thumb:42",
+  "kind": "rgba",
+  "file": "/tmp/s/thumb-42-0.rgba",
+  "w": 640,
+  "h": 360,
+  "stride": 2560,
+  "seq": 7,
+  "premultiplied": false
+}

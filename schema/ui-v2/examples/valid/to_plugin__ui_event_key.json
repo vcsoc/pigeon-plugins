@@ -1,0 +1,13 @@
+{
+  "v": 2,
+  "t": "ui.event",
+  "instance": "hello-ui/main",
+  "node": "tl",
+  "type": "key",
+  "phase": "down",
+  "key": "ArrowLeft",
+  "code": "ArrowLeft",
+  "text": "",
+  "mods": {},
+  "repeat": false
+}

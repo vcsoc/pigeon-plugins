@@ -1,0 +1,9 @@
+{
+  "id": "core-limits",
+  "title": "An oversized host line is discarded without losing the stream",
+  "steps": [
+    { "ready": { "min_contributions": 0 } },
+    { "raw": "{\"v\":2,\"t\":\"future.mock-probe\",\"extra\":true}" },
+    { "limits": { "timeout_ms": 2000 } }
+  ]
+}

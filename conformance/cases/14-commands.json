@@ -1,0 +1,53 @@
+{
+  "id": "14-commands",
+  "title": "Commands and asset actions arrive as command messages",
+  "steps": [
+    {
+      "ready": {}
+    },
+    {
+      "send": {
+        "v": 2,
+        "t": "command",
+        "command": "say",
+        "args": {},
+        "context": {}
+      }
+    },
+    {
+      "expect_toast": {
+        "text_contains": "Hello, world"
+      }
+    },
+    {
+      "send": {
+        "v": 2,
+        "t": "command",
+        "command": "count",
+        "args": {},
+        "context": {"ids": ["hello-1", "hello-2"]}
+      }
+    },
+    {
+      "expect_toast": {
+        "text_contains": "2 asset(s) selected"
+      }
+    },
+    {
+      "send": {
+        "v": 2,
+        "t": "drop",
+        "target": "drop-zone",
+        "paths": [
+          "/tmp/a.mp4"
+        ],
+        "assets": []
+      }
+    },
+    {
+      "expect_toast": {
+        "text_contains": "Dropped 1 item(s) on drop-zone"
+      }
+    }
+  ]
+}

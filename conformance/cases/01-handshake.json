@@ -1,0 +1,36 @@
+{
+  "id": "01-handshake",
+  "title": "Handshake: ready with contributions for every slot, then ping",
+  "steps": [
+    {
+      "ready": {
+        "min_contributions": 13
+      }
+    },
+    {
+      "slots": [
+        "sidebar.section",
+        "sidebar.entry",
+        "toolbar.item",
+        "workspace.view",
+        "inspector.panel",
+        "preferences.page",
+        "modal",
+        "statusbar.item",
+        "asset.action",
+        "library.source",
+        "search.provider",
+        "drop.target",
+        "command"
+      ]
+    },
+    {
+      "ping": {
+        "within_ms": 1000
+      }
+    },
+    {
+      "expect_no_violations": true
+    }
+  ]
+}

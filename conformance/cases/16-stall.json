@@ -1,0 +1,17 @@
+{
+  "id": "16-stall",
+  "title": "A stalled plugin (SIGSTOP for 2 s) answers no ping while stopped and answers after resume",
+  "steps": [
+    {
+      "ready": {}
+    },
+    {
+      "stall": {
+        "ms": 2000
+      }
+    },
+    {
+      "expect_no_violations": true
+    }
+  ]
+}

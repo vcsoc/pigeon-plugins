@@ -1,0 +1,14 @@
+{
+  "id": "19-frame-budget",
+  "title": "Frame budget: 20 fps while a plugin stalls for 10 s (host-side property)",
+  "steps": [
+    {
+      "ready": {}
+    },
+    {
+      "frame_budget": {
+        "stall_ms": 10000
+      }
+    }
+  ]
+}

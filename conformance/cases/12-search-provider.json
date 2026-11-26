@@ -1,0 +1,24 @@
+{
+  "id": "12-search-provider",
+  "title": "search.provider answers search.query with results and status",
+  "steps": [
+    {
+      "ready": {}
+    },
+    {
+      "provider": {
+        "method": "search.query",
+        "params": {
+          "mode_id": "hello-search",
+          "query": "video",
+          "limit": 10
+        },
+        "expect": {
+          "status": {
+            "indexed": 240
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "v": 2,
+  "t": "source.changed",
+  "source": "cloud",
+  "kind": "invalidate",
+  "node": "album-1"
+}

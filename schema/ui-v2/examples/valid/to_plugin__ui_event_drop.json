@@ -1,0 +1,13 @@
+{
+  "v": 2,
+  "t": "ui.event",
+  "instance": "hello-ui/main",
+  "node": "tl",
+  "type": "drop",
+  "paths": [
+    "/Users/me/a.mp4"
+  ],
+  "assets": [],
+  "x": 3,
+  "y": 4
+}

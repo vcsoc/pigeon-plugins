@@ -1,0 +1,7 @@
+{
+  "v": 2,
+  "t": "ui.scroll_to",
+  "instance": "hello-ui/main",
+  "node": "rows",
+  "align": "center"
+}

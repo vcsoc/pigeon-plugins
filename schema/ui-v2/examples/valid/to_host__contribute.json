@@ -1,0 +1,14 @@
+{
+  "v": 2,
+  "t": "contribute",
+  "contributions": [
+    {
+      "slot": "sidebar.entry",
+      "id": "nav2",
+      "title": "Two",
+      "icon": "film",
+      "opens": "main",
+      "order": 0
+    }
+  ]
+}

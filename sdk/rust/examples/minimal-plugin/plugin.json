@@ -1,0 +1,17 @@
+{
+  "id": "minimal-rust",
+  "name": "Minimal Rust plugin",
+  "version": "0.1.0",
+  "kind": "app",
+  "sdk": "rust",
+  "description": "Reference for a native Rust plugin that vendors the SDK. Used by the SDK tests.",
+  "ui": {
+    "protocol": 2,
+    "activation": "visible",
+    "contributions": [
+      { "slot": "workspace.view", "id": "main", "title": "Minimal", "icon": "sparkle" }
+    ],
+    "permissions": []
+  },
+  "worker": { "runtime": "native", "entry": "run", "protocol": 2, "standalone": true }
+}

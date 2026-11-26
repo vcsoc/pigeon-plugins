@@ -1,0 +1,38 @@
+{
+  "id": "07-list-window",
+  "title": "Virtualized list: the host asks for a window, the plugin answers list.rows",
+  "steps": [
+    {
+      "ready": {}
+    },
+    {
+      "show": "hello-ui/main"
+    },
+    {
+      "wait_node": {
+        "instance": "hello-ui/main",
+        "node": "rows"
+      }
+    },
+    {
+      "event": {
+        "instance": "hello-ui/main",
+        "node": "rows",
+        "type": "list.window",
+        "first": 100,
+        "last": 130,
+        "overscan": 5
+      }
+    },
+    {
+      "expect_list_rows": {
+        "instance": "hello-ui/main",
+        "node": "rows",
+        "min": 36
+      }
+    },
+    {
+      "expect_no_violations": true
+    }
+  ]
+}

@@ -1,0 +1,134 @@
+{
+  "v": 2,
+  "t": "ready",
+  "id": "1",
+  "plugin": {
+    "id": "hello-ui",
+    "version": "1.0.0"
+  },
+  "protocol": 2,
+  "contributions": [
+    {
+      "slot": "sidebar.section",
+      "id": "sec",
+      "title": "Reelio",
+      "icon": "film",
+      "order": 10
+    },
+    {
+      "slot": "sidebar.entry",
+      "id": "nav",
+      "title": "Reelio",
+      "icon": "film",
+      "opens": "main",
+      "order": 0
+    },
+    {
+      "slot": "toolbar.item",
+      "id": "tb",
+      "group": "ai",
+      "order": 2
+    },
+    {
+      "slot": "workspace.view",
+      "id": "main",
+      "title": "Reelio",
+      "icon": "film",
+      "toolbar": true
+    },
+    {
+      "slot": "inspector.panel",
+      "id": "insp",
+      "title": "Info",
+      "icon": "info",
+      "order": 1,
+      "applies_to": {
+        "kinds": [
+          "video"
+        ],
+        "min": 1,
+        "max": null,
+        "ext": []
+      }
+    },
+    {
+      "slot": "preferences.page",
+      "id": "prefs",
+      "title": "Reelio",
+      "icon": "gear",
+      "order": 3
+    },
+    {
+      "slot": "modal",
+      "id": "export",
+      "title": "Export",
+      "size": "large",
+      "modal": true,
+      "resizable": true
+    },
+    {
+      "slot": "statusbar.item",
+      "id": "sb",
+      "align": "right",
+      "order": 1
+    },
+    {
+      "slot": "asset.action",
+      "id": "open",
+      "title": "Open in Reelio",
+      "icon": "film",
+      "applies_to": {
+        "kinds": [
+          "video",
+          "audio"
+        ],
+        "min": 1,
+        "max": 1,
+        "ext": [
+          "mkv"
+        ]
+      },
+      "selection": "one",
+      "group": "open",
+      "shortcut": "Cmd+Shift+R"
+    },
+    {
+      "slot": "library.source",
+      "id": "src",
+      "title": "Cloud",
+      "icon": "cloud",
+      "root": {
+        "id": "root",
+        "title": "Cloud"
+      },
+      "capabilities": [
+        "browse",
+        "search",
+        "upload",
+        "download"
+      ]
+    },
+    {
+      "slot": "search.provider",
+      "id": "sem",
+      "title": "Semantic",
+      "icon": "sparkle",
+      "mode_id": "semantic"
+    },
+    {
+      "slot": "drop.target",
+      "id": "dz",
+      "accepts": [
+        "files",
+        "assets"
+      ],
+      "where": "workspace"
+    },
+    {
+      "slot": "command",
+      "id": "cmd",
+      "title": "Show hello",
+      "shortcut": "Cmd+Alt+H"
+    }
+  ]
+}

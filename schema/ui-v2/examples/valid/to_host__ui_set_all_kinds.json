@@ -1,0 +1,420 @@
+{
+  "v": 2,
+  "t": "ui.set",
+  "instance": "reelio/main",
+  "scene": {
+    "id": "root",
+    "kind": "column",
+    "gap": 8,
+    "padding": 12,
+    "children": [
+      {
+        "id": "title",
+        "kind": "text",
+        "text": "Reelio",
+        "style": "heading"
+      },
+      {
+        "id": "buttons",
+        "kind": "row",
+        "gap": 6,
+        "children": [
+          {
+            "id": "go",
+            "kind": "button",
+            "label": "Open media",
+            "variant": "primary",
+            "icon": "folder-open",
+            "on": [
+              "click"
+            ]
+          },
+          {
+            "id": "refresh",
+            "kind": "icon_button",
+            "icon": "arrows-clockwise",
+            "tooltip": "Refresh"
+          },
+          {
+            "id": "count",
+            "kind": "badge",
+            "text": "3"
+          },
+          {
+            "id": "tag",
+            "kind": "pill",
+            "text": "beta"
+          }
+        ]
+      },
+      {
+        "id": "ic",
+        "kind": "icon",
+        "icon": "film"
+      },
+      {
+        "id": "thumb",
+        "kind": "image",
+        "resource": "thumb:42",
+        "fit": "cover"
+      },
+      {
+        "id": "cb",
+        "kind": "checkbox",
+        "label": "Auto-save",
+        "value": true
+      },
+      {
+        "id": "sw",
+        "kind": "switch",
+        "label": "Dark",
+        "value": false
+      },
+      {
+        "id": "rg",
+        "kind": "radio_group",
+        "options": [
+          {
+            "value": "a",
+            "label": "A"
+          },
+          {
+            "value": "b",
+            "label": "B"
+          }
+        ],
+        "value": "a"
+      },
+      {
+        "id": "seg",
+        "kind": "segmented",
+        "options": [
+          {
+            "value": "x",
+            "label": "X"
+          },
+          {
+            "value": "y",
+            "label": "Y"
+          }
+        ],
+        "value": "x"
+      },
+      {
+        "id": "name",
+        "kind": "text_input",
+        "value": "Clip",
+        "rev": 2,
+        "placeholder": "Name",
+        "commit": "submit"
+      },
+      {
+        "id": "n",
+        "kind": "number_input",
+        "value": 12.5,
+        "rev": 1
+      },
+      {
+        "id": "vol",
+        "kind": "slider",
+        "value": 0.4,
+        "min": 0,
+        "max": 1,
+        "rev": 3
+      },
+      {
+        "id": "r",
+        "kind": "range_slider",
+        "value": [
+          1,
+          4
+        ],
+        "min": 0,
+        "max": 10,
+        "rev": 1
+      },
+      {
+        "id": "sel",
+        "kind": "select",
+        "options": [
+          {
+            "value": "mp4",
+            "label": "MP4"
+          },
+          {
+            "value": "mkv",
+            "label": "MKV"
+          }
+        ],
+        "value": "mp4"
+      },
+      {
+        "id": "col",
+        "kind": "color_picker",
+        "value": "#3b82f6"
+      },
+      {
+        "id": "bar",
+        "kind": "progress",
+        "value": 0.5
+      },
+      {
+        "id": "busy",
+        "kind": "progress",
+        "value": null
+      },
+      {
+        "id": "spin",
+        "kind": "spinner"
+      },
+      {
+        "id": "m",
+        "kind": "menu",
+        "items": [
+          {
+            "id": "open",
+            "label": "Open",
+            "enabled": true,
+            "shortcut": "Cmd+O"
+          },
+          {
+            "separator": true
+          },
+          {
+            "id": "more",
+            "label": "More",
+            "enabled": true,
+            "children": [
+              {
+                "id": "x",
+                "label": "X",
+                "enabled": true,
+                "checked": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "cm",
+        "kind": "context_menu",
+        "items": [
+          {
+            "id": "rename",
+            "label": "Rename",
+            "enabled": true
+          }
+        ]
+      },
+      {
+        "id": "tip",
+        "kind": "tooltip",
+        "text": "Hint"
+      },
+      {
+        "id": "tbl",
+        "kind": "table",
+        "columns": [
+          {
+            "id": "name",
+            "title": "Name",
+            "width": 200
+          }
+        ],
+        "count": 2
+      },
+      {
+        "id": "tree",
+        "kind": "tree",
+        "nodes": [
+          {
+            "id": "root",
+            "title": "Root",
+            "children": true
+          }
+        ]
+      },
+      {
+        "id": "rows",
+        "kind": "list",
+        "key": "rows",
+        "count": 1000,
+        "row_height": 24
+      },
+      {
+        "id": "rt",
+        "kind": "rich_text",
+        "spans": [
+          {
+            "text": "Read "
+          },
+          {
+            "text": "docs",
+            "style": "link"
+          }
+        ]
+      },
+      {
+        "id": "code",
+        "kind": "code",
+        "text": "print(1)",
+        "language": "python"
+      },
+      {
+        "id": "tl",
+        "kind": "canvas",
+        "width": {
+          "fill": 1
+        },
+        "height": {
+          "px": 120
+        },
+        "interactive": {
+          "pointer": true,
+          "wheel": true,
+          "keys": true,
+          "drop": true,
+          "focusable": true,
+          "coalesce": "move"
+        },
+        "cursor": "crosshair",
+        "draw": {
+          "frame": 1,
+          "ops": [
+            {
+              "op": "rect",
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 20,
+              "fill": "accent",
+              "radius": 4
+            },
+            {
+              "op": "text",
+              "x": 4,
+              "y": 4,
+              "text": "clip",
+              "size": 11
+            }
+          ],
+          "clear": "bg_input"
+        }
+      },
+      {
+        "id": "sp",
+        "kind": "split",
+        "direction": "horizontal",
+        "sizes": [
+          0.3,
+          0.7
+        ],
+        "children": [
+          {
+            "id": "left",
+            "kind": "panel"
+          },
+          {
+            "id": "right",
+            "kind": "panel"
+          }
+        ]
+      },
+      {
+        "id": "sc",
+        "kind": "scroll",
+        "axis": "vertical",
+        "show_bars": true,
+        "children": [
+          {
+            "id": "gap",
+            "kind": "spacer"
+          },
+          {
+            "id": "div",
+            "kind": "divider"
+          }
+        ]
+      },
+      {
+        "id": "tabs",
+        "kind": "tabs",
+        "tabs": [
+          {
+            "id": "a",
+            "label": "A"
+          },
+          {
+            "id": "b",
+            "label": "B"
+          }
+        ],
+        "active": "a",
+        "children": [
+          {
+            "id": "ta",
+            "kind": "text",
+            "text": "Tab A"
+          },
+          {
+            "id": "tb",
+            "kind": "text",
+            "text": "Tab B"
+          }
+        ]
+      },
+      {
+        "id": "col2",
+        "kind": "collapsible",
+        "title": "Advanced",
+        "open": true,
+        "children": [
+          {
+            "id": "g",
+            "kind": "grid",
+            "columns": 3,
+            "children": [
+              {
+                "id": "g1",
+                "kind": "text",
+                "text": "1"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "g2",
+        "kind": "grid",
+        "min_cell": 120,
+        "children": [
+          {
+            "id": "g2a",
+            "kind": "text",
+            "text": "x"
+          }
+        ]
+      },
+      {
+        "id": "wr",
+        "kind": "wrap",
+        "children": [
+          {
+            "id": "s2",
+            "kind": "spinner"
+          }
+        ]
+      },
+      {
+        "id": "st",
+        "kind": "stack",
+        "children": [
+          {
+            "id": "pn",
+            "kind": "panel"
+          }
+        ]
+      }
+    ]
+  }
+}

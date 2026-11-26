@@ -1,0 +1,8 @@
+{
+  "v": 2,
+  "t": "ui.event",
+  "instance": "a/b",
+  "node": "n",
+  "type": "change",
+  "value": "x"
+}

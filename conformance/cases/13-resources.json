@@ -1,0 +1,38 @@
+{
+  "id": "13-resources",
+  "title": "Resources: frames published through the ack-gated file ring",
+  "steps": [
+    {
+      "ready": {}
+    },
+    {
+      "show": "hello-ui/main"
+    },
+    {
+      "wait_node": {
+        "instance": "hello-ui/main",
+        "node": "thumb-gen"
+      }
+    },
+    {
+      "event": {
+        "instance": "hello-ui/main",
+        "node": "thumb-gen",
+        "type": "click"
+      }
+    },
+    {
+      "expect_resource": {
+        "rid": "hello:frame",
+        "kind": "rgba",
+        "min_seq": 7,
+        "timeout_ms": 5000
+      }
+    },
+    {
+      "expect_toast": {
+        "text_contains": "Published 6 frames"
+      }
+    }
+  ]
+}

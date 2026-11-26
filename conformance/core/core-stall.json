@@ -1,0 +1,5 @@
+{
+  "id": "core-stall",
+  "title": "Host detects stopped plugin transport, then receives a pong after resume",
+  "steps": [ { "ready": { "min_contributions": 0 } }, { "stall": { "ms": 100 } } ]
+}

@@ -1,0 +1,76 @@
+{
+  "id": "05-controlled-input",
+  "title": "Controlled input: host edits with a current rev are adopted, stale revs are ignored, plugin reset bumps rev",
+  "steps": [
+    {
+      "ready": {}
+    },
+    {
+      "show": "hello-ui/main"
+    },
+    {
+      "wait_node": {
+        "instance": "hello-ui/main",
+        "node": "name"
+      }
+    },
+    {
+      "event": {
+        "instance": "hello-ui/main",
+        "node": "name",
+        "type": "change",
+        "value": "Scene A",
+        "rev": 1
+      }
+    },
+    {
+      "expect_node": {
+        "instance": "hello-ui/main",
+        "node": "name",
+        "props": {
+          "value": "Scene A"
+        }
+      }
+    },
+    {
+      "event": {
+        "instance": "hello-ui/main",
+        "node": "name",
+        "type": "change",
+        "value": "stale",
+        "rev": 0
+      }
+    },
+    {
+      "ping": {
+        "within_ms": 1000
+      }
+    },
+    {
+      "expect_node": {
+        "instance": "hello-ui/main",
+        "node": "name",
+        "props": {
+          "value": "Scene A"
+        }
+      }
+    },
+    {
+      "event": {
+        "instance": "hello-ui/main",
+        "node": "reset-name",
+        "type": "click"
+      }
+    },
+    {
+      "expect_node": {
+        "instance": "hello-ui/main",
+        "node": "name",
+        "props": {
+          "value": "Clip 01",
+          "rev": 2
+        }
+      }
+    }
+  ]
+}

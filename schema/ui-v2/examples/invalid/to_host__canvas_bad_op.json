@@ -1,0 +1,13 @@
+{
+  "v": 2,
+  "t": "canvas.draw",
+  "instance": "a/b",
+  "node": "c",
+  "frame": 1,
+  "ops": [
+    {
+      "op": "rect",
+      "x": 1
+    }
+  ]
+}

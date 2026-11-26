@@ -1,0 +1,5 @@
+{
+  "id": "core-crash",
+  "title": "Host observes the exit of a killed plugin",
+  "steps": [ { "ready": { "min_contributions": 0 } }, { "crash": true } ]
+}

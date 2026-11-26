@@ -1,0 +1,223 @@
+{
+  "v": 2,
+  "t": "canvas.draw",
+  "instance": "hello-ui/main",
+  "node": "tl",
+  "frame": 13,
+  "ops": [
+    {
+      "op": "rect",
+      "x": 0,
+      "y": 0,
+      "w": 640,
+      "h": 360,
+      "fill": "#1b1d22",
+      "stroke": "#2a2d34",
+      "stroke_w": 1,
+      "radius": 6
+    },
+    {
+      "op": "line",
+      "x1": 0,
+      "y1": 180,
+      "x2": 640,
+      "y2": 180,
+      "stroke": "fg_weak",
+      "stroke_w": 1
+    },
+    {
+      "op": "polyline",
+      "pts": [
+        [
+          0,
+          0
+        ],
+        [
+          10,
+          5
+        ],
+        [
+          20,
+          0
+        ]
+      ],
+      "stroke": "accent",
+      "stroke_w": 2
+    },
+    {
+      "op": "polygon",
+      "pts": [
+        [
+          0,
+          0
+        ],
+        [
+          10,
+          0
+        ],
+        [
+          5,
+          9
+        ]
+      ],
+      "fill": "danger"
+    },
+    {
+      "op": "path",
+      "cmds": [
+        [
+          "M",
+          0,
+          0
+        ],
+        [
+          "L",
+          10,
+          10
+        ],
+        [
+          "Q",
+          20,
+          0,
+          30,
+          10
+        ],
+        [
+          "C",
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        [
+          "Z"
+        ]
+      ],
+      "fill": "warning"
+    },
+    {
+      "op": "circle",
+      "cx": 50,
+      "cy": 50,
+      "r": 10,
+      "fill": "accent",
+      "stroke": "fg",
+      "stroke_w": 2
+    },
+    {
+      "op": "ellipse",
+      "cx": 90,
+      "cy": 50,
+      "rx": 20,
+      "ry": 10,
+      "stroke": "fg"
+    },
+    {
+      "op": "arc",
+      "cx": 120,
+      "cy": 50,
+      "r": 20,
+      "start": 0,
+      "end": 3.14,
+      "stroke": "accent",
+      "stroke_w": 3
+    },
+    {
+      "op": "text",
+      "x": 10,
+      "y": 10,
+      "text": "00:12:03",
+      "size": 12,
+      "weight": 600,
+      "color": "fg",
+      "align": "left",
+      "baseline": "top",
+      "max_w": 200,
+      "font": "mono"
+    },
+    {
+      "op": "image",
+      "rid": "thumb:42",
+      "dst": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 36
+      },
+      "src": {
+        "x": 0,
+        "y": 0,
+        "w": 640,
+        "h": 360
+      },
+      "tint": "#ffffff",
+      "opacity": 0.8
+    },
+    {
+      "op": "clip",
+      "x": 0,
+      "y": 0,
+      "w": 100,
+      "h": 100
+    },
+    {
+      "op": "unclip"
+    },
+    {
+      "op": "translate",
+      "x": 5,
+      "y": 5
+    },
+    {
+      "op": "scale",
+      "x": 2,
+      "y": 2
+    },
+    {
+      "op": "save"
+    },
+    {
+      "op": "shadow",
+      "dx": 0,
+      "dy": 2,
+      "blur": 6,
+      "color": "#00000066"
+    },
+    {
+      "op": "rect",
+      "x": 0,
+      "y": 0,
+      "w": 10,
+      "h": 10,
+      "fill": "accent"
+    },
+    {
+      "op": "restore"
+    },
+    {
+      "op": "gradient",
+      "x0": 0,
+      "y0": 0,
+      "x1": 0,
+      "y1": 100,
+      "stops": [
+        [
+          0,
+          "#ffffff"
+        ],
+        [
+          1,
+          "#000000"
+        ]
+      ]
+    }
+  ],
+  "region": {
+    "x": 0,
+    "y": 0,
+    "w": 640,
+    "h": 180
+  }
+}

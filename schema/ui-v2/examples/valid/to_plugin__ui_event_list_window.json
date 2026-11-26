@@ -1,0 +1,10 @@
+{
+  "v": 2,
+  "t": "ui.event",
+  "instance": "hello-ui/main",
+  "node": "rows",
+  "type": "list.window",
+  "first": 0,
+  "last": 24,
+  "overscan": 8
+}

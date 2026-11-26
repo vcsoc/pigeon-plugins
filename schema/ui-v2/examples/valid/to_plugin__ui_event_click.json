@@ -1,0 +1,7 @@
+{
+  "v": 2,
+  "t": "ui.event",
+  "instance": "hello-ui/main",
+  "node": "go",
+  "type": "click"
+}

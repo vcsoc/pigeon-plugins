@@ -1,0 +1,15 @@
+{
+  "v": 2,
+  "t": "ui.event",
+  "instance": "hello-ui/main",
+  "node": "tl",
+  "type": "wheel",
+  "dx": 0,
+  "dy": -3,
+  "x": 10,
+  "y": 20,
+  "mods": {
+    "ctrl": true
+  },
+  "coalesced": 4
+}

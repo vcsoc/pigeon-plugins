@@ -1,0 +1,59 @@
+#!/bin/sh
+# Pigeon plugin launcher. Self-contained: needs only this folder (state lives in ./.data, or in
+# $PIGEON_PLUGIN_DATA). The same file is shipped in every plugin; edit shared/run, then run
+# scripts/sync_runtime.py.
+#
+#   run --setup [--verify]   create a private Python environment, install requirements.txt
+#                            (requirements-cuda.txt when an NVIDIA GPU is present), then download
+#                            and verify the plugin's models
+#   run --health [--verify]  report readiness as JSON (dependencies, models, device)
+#   run --self-test          run the plugin on a synthetic image and check the output
+#   run --version
+#   run                      read one JSON request on stdin, write one JSON reply on stdout
+set -eu
+HERE=$(cd "$(dirname "$0")" && pwd -P)
+DATA=${PIGEON_PLUGIN_DATA:-$HERE/.data}
+VENV=$DATA/venv
+# The host may start us with a minimal PATH; add the usual interpreter locations.
+PATH="$PATH:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+export PATH PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1 PIP_DISABLE_PIP_VERSION_CHECK=1
+export PIGEON_PLUGIN_DATA="$DATA"
+PY_MIN=10   # Python 3.10 ... 3.13 (onnxruntime publishes no wheels for newer interpreters yet)
+PY_MAX=13
+
+fail() { printf '{"version":1,"ok":false,"error":"%s"}\n' "$1"; exit 1; }
+
+find_python() {
+  for candidate in python3.12 python3.11 python3.13 python3.10 python3; do
+    path=$(command -v "$candidate" 2>/dev/null) || continue
+    if "$path" -c "import sys; sys.exit(0 if sys.version_info[0] == 3 and $PY_MIN <= sys.version_info[1] <= $PY_MAX else 1)" 2>/dev/null; then
+      echo "$path"; return 0
+    fi
+  done
+  return 1
+}
+
+if [ "${1:-}" = "--setup" ]; then
+  mkdir -p "$DATA"
+  PY=$(find_python) || fail "Python 3.$PY_MIN-3.$PY_MAX is required but was not found"
+  if [ ! -x "$VENV/bin/python" ]; then
+    "$PY" -m venv "$VENV" >&2 || fail "cannot create the plugin's Python environment"
+  fi
+  REQ=requirements.txt
+  if [ -f "$HERE/requirements-cuda.txt" ] && command -v nvidia-smi >/dev/null 2>&1; then
+    REQ=requirements-cuda.txt
+    "$VENV/bin/python" -m pip uninstall -y -q onnxruntime >&2 2>/dev/null || true
+  fi
+  echo "installing $REQ" >&2
+  "$VENV/bin/python" -m pip install -q -r "$HERE/$REQ" >&2 || fail "installing Python dependencies failed"
+  exec "$VENV/bin/python" "$HERE/worker.py" "$@"
+fi
+
+if [ ! -x "$VENV/bin/python" ]; then
+  # --health must still answer, so the host can tell the user what to do.
+  if [ "${1:-}" = "--health" ]; then
+    printf '{"version":1,"ok":false,"ready":false,"error":"not set up: run the plugin with --setup"}\n'; exit 1
+  fi
+  fail "plugin is not set up: run it once with --setup"
+fi
+exec "$VENV/bin/python" "$HERE/worker.py" "$@"

@@ -1,0 +1,21 @@
+{
+  "id": "20-slot-scenes",
+  "title": "Every visual slot returns a scene",
+  "steps": [
+    { "ready": {} },
+    { "show": "hello-ui/main" },
+    { "wait_node": { "instance": "hello-ui/main", "node": "tabs" } },
+    { "show": "hello-ui/hello-section" },
+    { "wait_node": { "instance": "hello-ui/hello-section", "node": "section-open" } },
+    { "show": "hello-ui/tb" },
+    { "wait_node": { "instance": "hello-ui/tb", "node": "toolbar-hello" } },
+    { "show": "hello-ui/info" },
+    { "wait_node": { "instance": "hello-ui/info", "node": "info-title" } },
+    { "show": "hello-ui/prefs" },
+    { "wait_node": { "instance": "hello-ui/prefs", "node": "prefs-title" } },
+    { "show": "hello-ui/about" },
+    { "wait_node": { "instance": "hello-ui/about", "node": "about-title" } },
+    { "show": "hello-ui/status" },
+    { "wait_node": { "instance": "hello-ui/status", "node": "status-text" } }
+  ]
+}
